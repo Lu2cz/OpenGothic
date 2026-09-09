@@ -8,7 +8,7 @@ Workspace and user-facing evidence: `/Users/lu2/Documents/Codex/2026-09-09/https
 
 ## Current investigation: ship bars
 
-Status: building an automated collision reproduction. No collision fix yet. Candidate object `SHIP_TRAPDOOR`, mover id 1795, visual `OC_LOB_GATE_BIG.3DS`. World data enables dynamic collision; compiled mesh has four collidable triangles. Need to distinguish missing/misplaced physics from character collision handling and prove the route blocks closed and clears after opening. Dialogue exits are next.
+Status: the normal-forward-input failure is fixed and the tested build is installed. Relevant object `SHIP_TRAPDOOR`, mover id 1795, visual `OC_LOB_GATE_BIG.3DS`. World data enables dynamic collision; compiled mesh has four collidable triangles. The checks below establish blocked passage while closed and successful passage after opening. Dialogue exits are next.
 
 # Archolos: first performance milestone
 
@@ -51,7 +51,7 @@ GOG explicitly supplies a [Polish Voice-Over Pack](https://www.gog.com/en/game/t
 
 Next acceptance milestone: progress through the opening without bypassing its barriers, exit both voluntary and NPC-triggered conversations, and reload a save with quest state intact. The user has set the ship barrier as first priority and dialogue exits as second. Then address shared script compatibility for XP/recipe/log updates, journal scrolling, and broader progression checks. Continue local-only commits.
 
-The ship gate is present in the installed world with dynamic collision enabled. Its mesh material also permits collision. This rules out simply missing gate data, but its in-engine collision failure still needs an automated reproduction. No gate fix has been applied.
+The ship gate is present in the installed world with dynamic collision enabled. Its mesh material also permits collision. This rules out simply missing gate data, and the in-engine failure has now been reproduced and fixed in movement handling. The movement fix and its validation are recorded below.
 
 Recipe generation, XP notifications and journal scrolling remain unresolved. The user has now confirmed that loading restores quest progression and inventory. This validates their tested save; broader save coverage remains future work.
 
@@ -62,3 +62,30 @@ Detailed machine-readable evidence is in `archolos-performance-milestone.json`. 
 Post-installation smoke test: the saved ship scene loaded and completed 180 frames at 55.02 FPS, then exited normally. No archive-loading errors occurred and the original save hash was unchanged. This checks loading and rendering with the voice pack installed; it does not verify audible dialogue.
 
 Launcher update: automatic loading of slot 1 is disabled. The same launch command opens the main menu; manual saves remain in `work/playable`, and reopening the launcher does not reset them.
+
+## Ship-bar fix, 9 September 2026
+
+**Implemented and installed locally.** Normal forward input previously walked through `SHIP_TRAPDOOR` onto the deck. Automated direct collision queries correctly detected the gate, so the mesh and mover collision were not missing.
+
+The movement code kept horizontal progress when its upward ground adjustment failed against the bars. It could gradually sink the character into the stairs and eventually snap onto the gate. Rolling back to the displayed position alone did not solve it: sub-two-centimetre movement offsets may update the displayed position without updating physics, so a later rollback could place the collider inside the obstacle. The final change in `game/game/movealgo.cpp` rolls failed or incomplete upward adjustments back to the physics position captured before movement. The existing small-movement optimization remains intact.
+
+Verification:
+- The automated forward-input checker fails against the pre-fix run (`work/frame-profile-0-xg31gqx1/terminal.log`): the player reaches the deck through the closed gate.
+- With the fix, 600 submitted frames of forward input remain below the closed gate (`work/gate-final-closed/terminal.log`, gate frame 0, idle; final feet height -1648.16).
+- The normal mover trigger opens the gate to frame 2, idle; forward input reaches the deck (`work/gate-final-open/terminal.log`, 600 submitted frames). The player may subsequently turn or leave the deck while input remains held; the check tests successful passage, not the final location after wandering.
+- Both game processes exit normally and the source save hash remains unchanged. Screenshots show the earlier deck access and the corrected blocked position.
+- A shorter corrected run retained 60.05 FPS. The longer correctness runs overlapped heavy unrelated machine activity; their 19.64/30.37 FPS results are not a controlled performance comparison.
+
+Scope: this verifies forward movement at the ship stairs and opening via the engine's normal trigger. It does not establish all collision edge cases or completion of the captain's full quest script. Dialogue exits remain the next gameplay blocker.
+
+Evidence in workspace `outputs`: `archolos-ship-bars-fix.json`, `archolos-ship-bars-fix.patch`, and before/after PNGs. The normal launcher uses the tested executable; its previous version is backed up at `work/Gothic2Notr-before-ship-bars`. Proprietary assets and saves remain outside Git.
+
+### Re-running the integration checks
+
+From the workspace directory, run the following with a new output directory for each invocation. Set `--state open` for the complementary open-gate check. The runner copies the original pre-quest save, sets opt-in profiling/input probes, enforces a timeout, checks the trace and verifies that the source save is unchanged. It does not require UI automation permissions.
+
+```sh
+rtk proxy python3 /Users/lu2/projects/OpenGothic-v092/tests/run_archolos_gate.py --executable work/ArcholosProfile.app/Contents/MacOS/Gothic2Notr --game work/archolos-game --save work/playtest/save_slot_1.sav --output work/gate-next-closed --state closed
+```
+
+`tests/check_archolos_gate.py` can also check an existing trace. The probe in `mainwindow.cpp` drives the real `PlayerControl` forward action for 600 submitted frames; `movetrigger.cpp` prepares the starting position and reports gate state. These diagnostics are opt-in and separate from the movement fix. The normal launcher clears `OPENGOTHIC_PROFILE`, opens the main menu and stores manual saves persistently in `work/playable`.

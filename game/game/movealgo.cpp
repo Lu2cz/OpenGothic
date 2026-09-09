@@ -185,7 +185,8 @@ bool MoveAlgo::implTick(uint64_t dt, MvFlags moveFlg) {
   const bool dive  = (state==Dive);
   const bool grav  = (state==InAir || state==Falling || state==JumpUp);
   const auto bs    = npc.bodyStateMasked();
-  const auto pos0  = npc.position();
+  // Roll back to a collision-tested position, excluding unchecked visual sub-steps.
+  const auto pos0  = npc.physic.position();
   const auto dp    = (!grav && state!=Slide) ? npcMoveSpeed(dt,moveFlg) : npcFallSpeed(dt);
   const bool walk  = bool(npc.walkMode() & WalkBit::WM_Walk) && (state==Run);
 
@@ -470,9 +471,11 @@ bool MoveAlgo::implTick(uint64_t dt, MvFlags moveFlg) {
       return true;
       }
     if(ground>=pos.y) {
-      // inside ground
-      // npc.setPosition(adjPos);
-      npc.tryMove(Tempest::Vec3(0,-dY,0));
+      // Undo forward movement when a ceiling prevents stepping onto the ground.
+      if(!npc.tryMove(Tempest::Vec3(0,-dY,0)) || npc.position().y+eps<ground) {
+        npc.setPosition(pos0);
+        return false;
+        }
       return true;
       }
     }

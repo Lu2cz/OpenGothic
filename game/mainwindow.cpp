@@ -1224,10 +1224,17 @@ void MainWindow::render(){
     const double profileEntry = profileEnabled ? profileNow() : 0;
     const bool profileReady = profileEnabled && Gothic::inst().world()!=nullptr &&
                               Gothic::inst().checkLoading()==Gothic::LoadState::Idle;
-    if(profileReady && loadedAt==0)
+    if(profileReady && loadedAt==0) {
+      if(std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_GATE_PROBE"))=="open")
+        Gothic::inst().world()->execTriggerEvent(TriggerEvent("SHIP_TRAPDOOR", "", TriggerEvent::T_Trigger));
       loadedAt = profileEntry;
+      }
     const bool sampling = profileReady && profileEntry-loadedAt>=10000;
     if(sampling && profileAt==0) {
+      if(std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr)
+        Gothic::inst().world()->execTriggerEvent(TriggerEvent("SHIP_TRAPDOOR", "ARCHOLOS_GATE_PROBE", TriggerEvent::T_Trigger));
+      if(std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr)
+        player.onKeyPressed(KeyCodec::Forward,Event::K_W,KeyCodec::Mapping(0));
       profileAt = profileEntry;
       Log::i("[ARCHOLOS_BEGIN] width=",swapchain.w()," height=",swapchain.h(),
              " scale=",Gothic::inst().settingsGetI("INTERNAL","vidResIndex"));
@@ -1323,7 +1330,11 @@ void MainWindow::render(){
       benchmark.push(t-time);
     time = t;
     profileStamp(6);
-    if(sampling && ++profileFrames==180) {
+    if(sampling && std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr && profileFrames%30==0) {
+      const auto p=Gothic::inst().player()->position();
+      Log::i("[GATE_INPUT] frame=",profileFrames," pos=",p.x,",",p.y,",",p.z," collision=",Gothic::inst().player()->hasCollision());
+      }
+    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,

@@ -1,6 +1,8 @@
 #include "movetrigger.h"
 
 #include <Tempest/Log>
+#include <cstdlib>
+#include "world/objects/npc.h"
 
 #include "graphics/mesh/animmath.h"
 #include "game/serialize.h"
@@ -147,6 +149,28 @@ void MoveTrigger::moveEvent() {
   }
 
 void MoveTrigger::onTrigger(const TriggerEvent& e) {
+  // Local integration probe: position the player at the foot of the ship stairs.
+  if(e.emitter=="ARCHOLOS_GATE_PROBE" && std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr) {
+    auto mat = transform();
+    if(frame!=0) {
+      auto inv=mkMatrix(moverKeyFrames[frame]);
+      inv.inverse();
+      mat.mul(inv);
+      mat.mul(mkMatrix(moverKeyFrames[0]));
+      }
+    auto start=Vec3(100,300,-6), forward=Vec3(100,400,-6);
+    mat.project(start);
+    mat.project(forward);
+    const auto floor=world.physic()->ray(start-Vec3(0,20,0),start-Vec3(0,800,0));
+    auto* pl=world.player();
+    if(pl!=nullptr && floor.hasCol) {
+      pl->setPosition(Vec3(start.x,floor.v.y,start.z));
+      pl->setDirection(forward-start);
+      Log::i("[GATE_INPUT] start=",start.x,",",floor.v.y,",",start.z," floor=1");
+      Log::i("[GATE_STATE] frame=",frame," state=",int(state));
+      }
+    return;
+    }
   if(moverKeyFrames.size()<2 || keyframes[0].ticks==0)
     return;
 
