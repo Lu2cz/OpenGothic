@@ -1218,6 +1218,9 @@ void MainWindow::render(){
     static const bool profileEnabled = std::getenv("OPENGOTHIC_PROFILE")!=nullptr;
     static double loadedAt=0, profileAt=0, profileMs[7]={};
     static uint32_t profileFrames=0, profileSkipped=0;
+    static Npc* dialogProbeNpc=nullptr;
+    static unsigned dialogProbeRounds=0;
+    static bool dialogProbePending=false;
     const auto profileNow = [] {
       return std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
       };
@@ -1225,19 +1228,62 @@ void MainWindow::render(){
     const bool profileReady = profileEnabled && Gothic::inst().world()!=nullptr &&
                               Gothic::inst().checkLoading()==Gothic::LoadState::Idle;
     if(profileReady && loadedAt==0) {
+
       if(std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_GATE_PROBE"))=="open")
         Gothic::inst().world()->execTriggerEvent(TriggerEvent("SHIP_TRAPDOOR", "", TriggerEvent::T_Trigger));
       loadedAt = profileEntry;
       }
     const bool sampling = profileReady && profileEntry-loadedAt>=10000;
     if(sampling && profileAt==0) {
+      if(std::getenv("OPENGOTHIC_DIALOG_PROBE")!=nullptr && std::getenv("OPENGOTHIC_DIALOG_XP")!=nullptr) {
+        auto& vm = Gothic::inst().world()->script().getVm();
+        const int before = Gothic::inst().player()->handle().exp;
+        Log::i("[DIALOG_PROBE] begin XP award");
+        vm.call_function("B_GIVEPLAYERXP",50);
+        Log::i("[DIALOG_PROBE] XP delta=",Gothic::inst().player()->handle().exp-before);
+        }
       if(std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr)
         Gothic::inst().world()->execTriggerEvent(TriggerEvent("SHIP_TRAPDOOR", "ARCHOLOS_GATE_PROBE", TriggerEvent::T_Trigger));
       if(std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr)
         player.onKeyPressed(KeyCodec::Forward,Event::K_W,KeyCodec::Mapping(0));
+      if(std::getenv("OPENGOTHIC_DIALOG_PROBE")!=nullptr) {
+        auto& script = Gothic::inst().world()->script();
+        auto& vm = script.getVm();
+        auto info = std::static_pointer_cast<zenkit::IInfo>(vm.find_symbol_by_name("DIA_WILLEM_EXIT")->get_instance());
+        auto npc = Gothic::inst().world()->findNpcByInstance(size_t(info->npc));
+        auto pl = Gothic::inst().player();
+        Log::i("[DIALOG_PROBE] npc=",npc!=nullptr," info=",info->information);
+        if(npc!=nullptr) {
+          GameScript::DlgChoice exit;
+          exit.handle = info.get();
+          exit.scriptFn = uint32_t(info->information);
+          if(std::string_view(std::getenv("OPENGOTHIC_DIALOG_PROBE"))=="ui") {
+            npc->clearState(true);
+            npc->clearAiQueue();
+            npc->setPosition(pl->position()+Tempest::Vec3(200,0,0));
+            dialogProbeNpc = npc;
+            } else {
+            Log::i("[DIALOG_PROBE] begin exit");
+            script.exec(exit,*pl,*npc);
+            Log::i("[DIALOG_PROBE] returned exit");
+            }
+          }
+        }
       profileAt = profileEntry;
       Log::i("[ARCHOLOS_BEGIN] width=",swapchain.w()," height=",swapchain.h(),
              " scale=",Gothic::inst().settingsGetI("INTERNAL","vidResIndex"));
+      }
+    if(sampling && dialogProbeNpc!=nullptr) {
+      if(dialogs.isNpcInDialog(dialogProbeNpc)) {
+        dialogProbePending = false;
+        if(dialogProbeRounds==0)
+          Log::i("[DIALOG_PROBE] open round=",++dialogProbeRounds," npc_triggered=1");
+        }
+      if(!dialogs.isActive() && !dialogProbePending && dialogProbeRounds<2 && profileFrames>0 && profileFrames%120==0) {
+        dialogProbeNpc->startDialog(*Gothic::inst().player());
+        dialogProbePending = true;
+        Log::i("[DIALOG_PROBE] open round=",++dialogProbeRounds);
+        }
       }
     double profileStage = profileEntry;
     const auto profileStamp = [&](size_t stage) {
@@ -1334,7 +1380,7 @@ void MainWindow::render(){
       const auto p=Gothic::inst().player()->position();
       Log::i("[GATE_INPUT] frame=",profileFrames," pos=",p.x,",",p.y,",",p.z," collision=",Gothic::inst().player()->hasCollision());
       }
-    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)) {
+    if(sampling && ++profileFrames==(dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,
@@ -1345,6 +1391,8 @@ void MainWindow::render(){
              " encode_ms=",profileMs[4]/profileFrames,
              " submit_present_ms=",profileMs[5]/profileFrames,
              " limiter_ms=",profileMs[6]/profileFrames);
+      if(dialogProbeNpc!=nullptr)
+        Log::i("[DIALOG_PROBE] finished rounds=",dialogProbeRounds," active=",dialogs.isActive());
       auto profileImage = renderer.screenshoot(cmdId);
       device.readPixels(textureCast<const Texture2d&>(profileImage)).save("profile.png");
       Tempest::SystemApi::exit();

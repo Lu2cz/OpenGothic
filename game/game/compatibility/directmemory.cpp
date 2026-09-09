@@ -1202,6 +1202,10 @@ int DirectMemory::mem_realloc(int address, int oldsz, int size) {
 
 
 void DirectMemory::setupDirectFunctions() {
+  // Resolve function variables through the VM instead of legacy parser memory.
+  vm.override_function("MEM_GetFuncID", [](zenkit::DaedalusFunction fn) {
+    return fn.value!=nullptr ? int32_t(fn.value->index()) : -1;
+    });
   vm.override_function("MEM_GetFuncIdByOffset", [this](int off) { return mem_getfuncidbyoffset(off); });
   vm.override_function("MEM_AssignInst",        [this](int index, int ptr) { mem_assigninst(index, ptr); });
 
@@ -1662,6 +1666,13 @@ void DirectMemory::setupInitFileFunctions() {
   }
 
 void DirectMemory::setupUiFunctions() {
+  if(vm.find_symbol_by_name("PrintS_Ext")!=nullptr) {
+    vm.override_function("PrintS_Ext", [](std::string_view msg, int /*color*/) {
+      // ponytail: native notices omit LeGo color/fade effects; add a colored overlay for visual parity.
+      Gothic::inst().onPrint(msg);
+      });
+    }
+
   // https://github.com/Lehona/LeGo/blob/dev/View.d
   const int ZCVIEW__ZCVIEW     = 8017664;
   const int ZCVIEW__OPEN       = 8023040;

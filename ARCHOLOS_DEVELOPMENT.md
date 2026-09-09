@@ -6,9 +6,9 @@ Working branch: `archolos/performance-v092`, based on OpenGothic v0.92. The newe
 
 Workspace and user-facing evidence: `/Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues`. Launcher and reports are under `outputs`; proprietary game data, saves, benchmark runs, and extraction tools are under `work` and are not committed.
 
-## Current investigation: ship bars
+## Current milestone: dialogue exits and notifications
 
-Status: the normal-forward-input failure is fixed and the tested build is installed. Relevant object `SHIP_TRAPDOOR`, mover id 1795, visual `OC_LOB_GATE_BIG.3DS`. World data enables dynamic collision; compiled mesh has four collidable triangles. The checks below establish blocked passage while closed and successful passage after opening. Dialogue exits are next.
+Status: ship bars, the reproduced Willem dialogue-exit failure, and native XP-notification delivery are fixed and installed locally. Detailed before/after tests and limits appear in the latest entries below. Recipe journal generation and scrolling are next; cursor work is deferred.
 
 # Archolos: first performance milestone
 
@@ -105,3 +105,35 @@ Next priorities:
 4. Normal opening-quest progression, quest-triggered gate opening, conversations, and save/reload checkpoints; then broaden campaign/system coverage.
 
 More story progression is not required to begin these known issues. Later, saves before and after natural story transitions will improve coverage. Current status is a playable early compatibility build: performance, dubbing, basic movement/combat, tested inventory/quest save restoration and ship-bar traversal are established. Full campaign completion, later scripted sequences, crafting/trading coverage and world transitions remain unverified. A percentage of total completion or reliable completion date cannot be inferred from these early milestones.
+
+## Dialogue exits and native notifications, 9 September 2026
+
+Implemented and installed locally. The production change adds two compatibility adapters in `game/game/compatibility/directmemory.cpp`; cursor and movement code are unchanged.
+
+### Cause and change
+
+Installed v1.2.11 bytecode confirms `DIA_WILLEM_EXIT_INFO` calls `AI_RESETFACEANI` immediately before `AI_STOPPROCESSINFOS`. The latter was never reached in the reproduced failure. `AI_RESETFACEANI -> AI_FUNCTION_NSII -> MEM_GetFuncID` tried to resolve function references through the legacy Ikarus parser-memory implementation, producing the same MOB_CREATEITEMS.PAR1 / MEMINT_STACKPOS / unresolvable-function trace as the user's log. `MEM_GetFuncID` now uses the existing ZenKit `DaedalusFunction` resolver, which follows function-variable references and accepts script/external functions. Invalid references return -1.
+
+The resolver-only candidate passed two dialogue exits, but a warmed-up XP award then reached unsupported LeGo notification allocation and crashed in `mem_insttoptr`. The combined fix also routes `PrintS_Ext` through OpenGothic's existing `onPrint` notification UI. `PrintS` and Archolos `PrintScreenS` delegate to this shared function; direct colored crafting-notice callers use it too. No new overlay or animation system was added. Notifications currently use native text styling; LeGo color and fade effects are deliberately omitted.
+
+### Verification
+
+- Direct installed-script baseline `work/frame-profile-0-v1ziefre`: reproduced the user's exact error; exit script returned without reaching the stop instruction.
+- Resolver-only direct script check `work/frame-profile-0-oivt5jg6`: stop instruction reached, no resolver error in the exit segment.
+- Full UI baseline `work/dialog-ui-before`: automatic Willem greeting was answered through normal selection; function resolution failed and the conversation remained active after 2400 frames.
+- Resolver-only UI check `work/dialog-ui-greeting`: automatic greeting, response, exit, reopen and second exit all completed; 59.60 FPS.
+- Final combined check `work/dialog-ui-native-notices`: after the ten-second warmup, `B_GIVEPLAYERXP(50)` increased XP by 50 and delivered `Experience + 50` to `DialogMenu::print`. Then Willem's automatic greeting, normal response, exit, reopen and second exit completed. Both exit instructions reached the AI queue and both conversations closed after spoken output. Final dialogue state inactive; 2400 frames at 59.09 FPS; normal process exit. This verifies delivery into the native message UI, not a pixel comparison of the notification.
+- Final ship regressions: `work/gate-dialog-fix-closed` blocks ascent (600 frames, 59.72 FPS); `work/gate-dialog-fix-open` permits ascent after the normal mover trigger (600 frames, 58.90 FPS).
+- All valid completed tests preserved the source save SHA-256. Release build and whitespace checks passed. An explicit `<cstdlib>` include added during cleanup produced a byte-identical executable to the combined dialogue test.
+
+The test relocates Willem alongside the player in a disposable copy of the ship save, allowing his automatic greeting to trigger. It uses real dialogue choices and NPC output queues and lets voice lines finish. It does not replay the mainland journey or prove every dialogue branch. An earlier XP probe ran before script initialization and is excluded (`work/dialog-ui-after-xp`); its corrected warmed-up version established the real notification crash (`work/dialog-ui-after-xp-warm`). That crashing candidate was never installed in the normal app.
+
+`tests/run_archolos_dialog.py` repeats the test with user-supplied local game data and save, a new output directory, a 180-second timeout, isolated OPENGOTHIC variables and source-save hash verification. Add `--after-xp` for the combined regression. Engine probes require profiling plus the dialogue-probe flag; normal launches leave them inactive.
+
+```sh
+rtk proxy python3 /Users/lu2/projects/OpenGothic-v092/tests/run_archolos_dialog.py --executable work/ArcholosProfile.app/Contents/MacOS/Gothic2Notr --game work/archolos-game --save work/playtest/save_slot_1.sav --output work/dialog-next --after-xp
+```
+
+The tested executable is installed in ArcholosFast.app. Previous normal executable: `work/Gothic2Notr-before-dialogue-fix`. Current executable SHA-256: `2b53e74324419f06f8a9688c1c1fee6f49b63c5a5b75273735b45da6949a57c6`. The launcher still opens the main menu with persistent manual saves. Source data, saves and cursor behavior are unchanged.
+
+Remaining: learned-recipe journal generation, journal scrolling, normal opening-quest progression and broader campaign/save coverage. General VM exception recovery, legacy-memory APIs and the existing unimplemented NSII face-animation callback remain incomplete; this is a verified fix for the reproduced dialogue blocker, not proof that all scripted dialogue is supported. No additional user save is required to start the next known issues.

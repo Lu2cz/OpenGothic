@@ -4,6 +4,7 @@
 #include <Tempest/Log>
 #include <algorithm>
 #include <cassert>
+#include <cstdlib>
 
 #include "utils/gthfont.h"
 #include "utils/string_frm.h"
@@ -64,7 +65,9 @@ void DialogMenu::setupSettings() {
   }
 
 void DialogMenu::tick(uint64_t dt) {
+  static bool probeSelectedExit=false;
   if(state==State::PreStart) {
+    probeSelectedExit=false;
     except.clear();
     dlgTrade=false;
     trade.close();
@@ -116,6 +119,25 @@ void DialogMenu::tick(uint64_t dt) {
       }
     }
 
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_DIALOG_PROBE")!=nullptr) {
+    if(state==State::Idle)
+      probeSelectedExit=false;
+    if(state==State::Active && !probeSelectedExit && current.time==0 && !haveToWaitOutput()) {
+      auto& vm = Gothic::inst().world()->script().getVm();
+      auto exit = vm.find_symbol_by_name("DIA_WILLEM_EXIT_INFO");
+      auto greeting = vm.find_symbol_by_name("DIA_WILLEM_HEYTHERE_NOTNICE");
+      for(size_t i=0; exit!=nullptr && i<choice.size(); ++i) {
+        const bool isExit = choice[i].scriptFn==exit->index();
+        if(!isExit && (greeting==nullptr || choice[i].scriptFn!=greeting->index()))
+          continue;
+        probeSelectedExit=isExit;
+        dlgSel=i;
+        Log::i(isExit ? "[DIALOG_PROBE] select exit" : "[DIALOG_PROBE] answer greeting");
+        onSelect();
+        break;
+        }
+      }
+    }
   // update();
   }
 
@@ -253,6 +275,8 @@ bool DialogMenu::aiClose() {
     return false;
     }
 
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_DIALOG_PROBE")!=nullptr)
+    Log::i("[DIALOG_PROBE] closed after output");
   choice.clear();
   close();
   state=State::Idle;
@@ -310,6 +334,9 @@ void DialogMenu::drawMsg(Tempest::Painter& p, int offsetY) {
   }
 
 void DialogMenu::print(std::string_view msg) {
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_DIALOG_PROBE")!=nullptr)
+    Log::i("[DIALOG_PROBE] notification=",msg);
+
   if(msg.empty())
     return;
 

@@ -4,6 +4,7 @@
 #include <Tempest/SoundEffect>
 
 #include <cctype>
+#include <cstdlib>
 
 #include "game/compatibility/directmemory.h"
 #include "game/definitions/spelldefinitions.h"
@@ -2888,6 +2889,8 @@ void GameScript::ai_output(std::shared_ptr<zenkit::INpc> selfRef, std::shared_pt
   }
 
 void GameScript::ai_stopprocessinfos(std::shared_ptr<zenkit::INpc> selfRef) {
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_DIALOG_PROBE")!=nullptr)
+    Log::i("[DIALOG_PROBE] stop instruction reached");
   auto self = findNpc(selfRef);
   if(self) {
     self->aiPush(AiQueue::aiStopProcessInfo(aiOutOrderId));
