@@ -21,7 +21,8 @@ class Mem32 {
       plain,
       zCParser,
       zCParser_variables,
-      zCPar_Symbol
+      zCPar_Symbol,
+      firstScriptReference // subsequent values identify individual VM-backed regions
       };
 
     using                     ptr32_t  = Compatibility::ptr32_t;

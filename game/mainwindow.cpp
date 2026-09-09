@@ -14,6 +14,7 @@
 
 #include "ui/dialogmenu.h"
 #include "ui/menuroot.h"
+#include "ui/gamemenu.h"
 #include "ui/stacklayout.h"
 #include "ui/videowidget.h"
 
@@ -1235,6 +1236,51 @@ void MainWindow::render(){
       }
     const bool sampling = profileReady && profileEntry-loadedAt>=10000;
     if(sampling && profileAt==0) {
+      if(std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr) {
+        auto& script = Gothic::inst().world()->script();
+        auto& vm = script.getVm();
+        auto pl = Gothic::inst().player();
+        auto doc = vm.init_instance<zenkit::IItem>("ITRE_RATSTICK");
+        vm.find_symbol_by_name("PLAYER_TALENT_COOKING")->set_int(0,uint16_t(vm.find_symbol_by_name("MEAL_RATSTICK")->get_int()));
+        auto talent = vm.find_symbol_by_name("PLAYER_TALENT_COOKING");
+        std::vector<int32_t> beforeTalents;
+        for(uint16_t i=0;i<talent->count();++i)
+          beforeTalents.push_back(talent->get_int(i));
+        auto beforeLog = *Gothic::inst().questLog();
+        vm.global_item()->set_instance(doc);
+        Log::i("[RECIPE_PROBE] begin learning hp=",doc->hp);
+
+        script.invokeState(pl->handlePtr(),pl->handlePtr(),"USECOOKINGRECIPE");
+        Log::i("[RECIPE_PROBE] learned=",vm.find_symbol_by_name("PLAYER_TALENT_COOKING")->get_int(uint16_t(vm.find_symbol_by_name("MEAL_RATSTICK")->get_int())));
+        auto ql = Gothic::inst().questLog();
+        for(size_t i=0; i<ql->questCount(); ++i) {
+          auto& q = ql->quest(i);
+          Log::i("[RECIPE_PROBE] topic=",q.name);
+          for(auto& e:q.entry)
+            Log::i("[RECIPE_PROBE] entry=",e);
+          }
+        bool preserved = true;
+        const auto learnedIndex = vm.find_symbol_by_name("MEAL_RATSTICK")->get_int();
+        for(uint16_t i=0;i<talent->count();++i)
+          if(i!=learnedIndex && talent->get_int(i)!=beforeTalents[i])
+            preserved = false;
+        for(size_t i=0;i<beforeLog.questCount();++i) {
+          auto& old = beforeLog.quest(i);
+          auto& now = ql->quest(i);
+          if(old.name!="Cooking" && (old.name!=now.name || old.entry!=now.entry || old.status!=now.status))
+            preserved = false;
+          }
+        size_t entries = 0;
+        for(size_t i=0;i<ql->questCount();++i)
+          entries += ql->quest(i).entry.size();
+        vm.global_item()->set_instance(doc);
+        script.invokeState(pl->handlePtr(),pl->handlePtr(),"USECOOKINGRECIPE");
+        size_t afterEntries = 0;
+        for(size_t i=0;i<ql->questCount();++i)
+          afterEntries += ql->quest(i).entry.size();
+        Log::i("[RECIPE_PROBE] preserved=",preserved," reread_duplicate=",afterEntries!=entries);
+        Log::i("[RECIPE_PROBE] end");
+        }
       if(std::getenv("OPENGOTHIC_DIALOG_PROBE")!=nullptr && std::getenv("OPENGOTHIC_DIALOG_XP")!=nullptr) {
         auto& vm = Gothic::inst().world()->script().getVm();
         const int before = Gothic::inst().player()->handle().exp;
@@ -1269,9 +1315,14 @@ void MainWindow::render(){
             }
           }
         }
+      if(std::getenv("OPENGOTHIC_JOURNAL_PROBE")!=nullptr)
+        rootMenu.setMenu("MENU_LOG",KeyCodec::Log);
       profileAt = profileEntry;
       Log::i("[ARCHOLOS_BEGIN] width=",swapchain.w()," height=",swapchain.h(),
              " scale=",Gothic::inst().settingsGetI("INTERNAL","vidResIndex"));
+      if(std::getenv("OPENGOTHIC_JOURNAL_PROBE")!=nullptr)
+        static_cast<GameMenu&>(rootMenu.widget(0)).probeJournal();
+
       }
     if(sampling && dialogProbeNpc!=nullptr) {
       if(dialogs.isNpcInDialog(dialogProbeNpc)) {

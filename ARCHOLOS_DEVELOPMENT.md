@@ -6,9 +6,9 @@ Working branch: `archolos/performance-v092`, based on OpenGothic v0.92. The newe
 
 Workspace and user-facing evidence: `/Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues`. Launcher and reports are under `outputs`; proprietary game data, saves, benchmark runs, and extraction tools are under `work` and are not committed.
 
-## Current milestone: dialogue exits and notifications
+## Current milestone: recipe learning and journal scrolling
 
-Status: ship bars, the reproduced Willem dialogue-exit failure, and native XP-notification delivery are fixed and installed locally. Detailed before/after tests and limits appear in the latest entries below. Recipe journal generation and scrolling are next; cursor work is deferred.
+Status: recipe learning/document generation and held-key journal scrolling are fixed and installed locally, alongside the prior performance, voice, ship-bar and dialogue/XP fixes. Next: normal opening-quest progression, actual cooking, and quest-triggered gate opening. Cursor work remains deferred.
 
 # Archolos: first performance milestone
 
@@ -137,3 +137,41 @@ rtk proxy python3 /Users/lu2/projects/OpenGothic-v092/tests/run_archolos_dialog.
 The tested executable is installed in ArcholosFast.app. Previous normal executable: `work/Gothic2Notr-before-dialogue-fix`. Current executable SHA-256: `2b53e74324419f06f8a9688c1c1fee6f49b63c5a5b75273735b45da6949a57c6`. The launcher still opens the main menu with persistent manual saves. Source data, saves and cursor behavior are unchanged.
 
 Remaining: learned-recipe journal generation, journal scrolling, normal opening-quest progression and broader campaign/save coverage. General VM exception recovery, legacy-memory APIs and the existing unimplemented NSII face-animation callback remain incomplete; this is a verified fix for the reproduced dialogue blocker, not proof that all scripted dialogue is supported. No additional user save is required to start the next known issues.
+
+## Recipe learning and journal scrolling, 9 September 2026
+
+The installed v1.2.11 recipe scripts are unchanged. The fix is in shared Ikarus/LeGo compatibility and the native journal input handler.
+
+### Recipe cause and change
+
+The copied save reproduces the empty Cooking topic: the real `USECOOKINGRECIPE` function leaves `PLAYER_TALENT_COOKING[18]` unset and produces no recipe entry. Installed bytecode confirms that it creates a `C_RECIPE`, reads/writes a cooking array, calls `BUILDRECIPELOG`, and then displays the recipe document.
+
+Three shared compatibility gaps prevented this flow:
+- LeGo `Create` depended on an uninitialized parser-symbol table and a failing legacy assembly call path. A native adapter now resolves the instance's parent class and reuses the existing engine constructor callback. A diagnostic parser reinitialization alone did not solve recipe learning.
+- Transient instance arrays used class metadata as their element stride. Integer/float elements now advance four bytes; Gothic strings advance twenty bytes.
+- Taking addresses of native item members was unsupported, and global arrays were treated as twenty-byte per-symbol slots instead of contiguous elements. References now use existing Mem32 callbacks to synchronize contiguous integer/float/string storage with the actual VM values. Native instance references are retained until the VM ends; large-scale mapping reclamation is deferred.
+
+These are shared API changes, not a hardcoded recipe description or a replacement for Archolos's learning logic. A recipe whose learned flag was already saved as true but whose log is missing is not automatically repaired. The inspected original and current playable slot 1 both have the rat recipe flag at zero, so reading the recipe again can run the corrected learning path. Reading a recipe does not consume it in this engine's normal inventory-use path.
+
+### Scrolling cause and change
+
+`ListContentDialog` handled wheel input and key releases but lacked the repeat handler already present in `ListViewDialog`. Holding Down therefore did nothing until release, which moved only one line. The one-line change forwards repeat events to the existing Up/Down/W/S handler.
+
+The regression loads the real MENU.DAT journal layout and copied save's Below the Deck text, dispatches held keys and wheel events through Tempest's EventDispatcher into ListContentDialog, and checks the normal draw path's clamped line range. Before: held Down produces offset zero; release produces one; wheel reaches eight. After: held Down reaches the final page at eight, held Up returns to zero, and wheel reaches the same final page. The 29-line test content has 21 visible lines. This verifies the engine dispatcher and rendered text range; it is not a native macOS event-injection or screenshot comparison of the modal overlay. Earlier modal probe attempts could not pump the application from timer/render callbacks and are excluded from acceptance evidence.
+
+### Verification
+
+- `work/frame-profile-0-rmmmxeo5`: original recipe failure, empty Cooking topic, learned flag zero.
+- `work/recipe-native-create`: native construction plus member strides alone still leaves the recipe unlearned.
+- `work/recipe-array-map`: learned flag and full ingredient log work, while document member access still fails; this intermediate build was not installed for normal play.
+- `work/recipe-native-members`: final recipe test passes. Rat on a stick lists Heavy Branch, 2x Fried rat meat, Salt, and A bag of pepper. Both recipe-document displays contain the description, 35 HP restoration, and value 6. Rereading adds no duplicate; other cooking flags and pre-existing quest entries remain intact. No memory-translation failure or VM exception occurs inside the tested learning/document sequence. `LOG_MOVETOTOP` remains unimplemented, affecting ordering rather than entry creation.
+- `work/journal-dispatch-before`: held-key regression fails as expected.
+- `work/journal-after`: held Down, held Up, wheel, and final-page draw checks pass.
+- `work/dialog-recipe-regression`: XP award/notice, automatic Willem greeting, two exits, and final inactive dialogue pass.
+- `work/gate-recipe-closed` and `work/gate-recipe-open`: closed/open traversal regressions.
+
+The recipe runner invokes the installed inventory-use script with the player and recipe item after ten seconds of initialization. It checks the script result and document delivery; it does not simulate clicking the inventory or cooking the meal. Both new runners use private save copies and verify that the source save hash is unchanged. Diagnostic manipulation requires OPENGOTHIC_PROFILE plus a specific probe flag; the normal launcher disables profiling.
+
+The next milestone is natural opening-quest progression, including actual cooking and quest-triggered gate opening, followed by broader campaign/world-transition/save coverage. Cursor work remains deferred. No upstream push or submission is authorized.
+
+Release build and whitespace checks pass. All five final integration runs exit normally and preserve the source save SHA-256. Installed executable SHA-256: `33e947e052e43c6c604d455dc95358acbd016aba59c45e3974fd0dd22630a42b`. Previous normal executable: `work/Gothic2Notr-before-recipe-journal-fix`. The launcher still opens the main menu with persistent manual saves.

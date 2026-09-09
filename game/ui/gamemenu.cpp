@@ -4,6 +4,8 @@
 #include <Tempest/Log>
 #include <Tempest/TextCodec>
 #include <Tempest/Dialog>
+#include <Tempest/EventDispatcher>
+#include <cstdlib>
 
 #include <algorithm>
 
@@ -43,6 +45,7 @@ struct GameMenu::ListContentDialog : Dialog {
     }
 
   void keyDownEvent(KeyEvent &e) override { e.accept(); }
+  void keyRepeatEvent(KeyEvent &e) override { keyUpEvent(e); }
   void keyUpEvent  (KeyEvent &e) override {
     if(e.key==Event::K_ESCAPE) {
       close();
@@ -457,8 +460,33 @@ void GameMenu::drawItem(Painter& p, Item& hItem) {
     int lineCnt     = fnt.lineCount(tRect.w,textBuf.data());
     int linesInView = tRect.h/fnt.pixelSize();
 
+    if(lineCnt>linesInView && std::getenv("OPENGOTHIC_PROFILE")!=nullptr &&
+       std::getenv("OPENGOTHIC_JOURNAL_PROBE")!=nullptr) {
+      static int phase = 0;
+      if(phase<=3)
+        Log::i("[JOURNAL_PROBE] phase=",phase," scroll=",hItem.scroll);
+      if(phase<3) {
+        ListContentDialog dlg(hItem);
+        EventDispatcher dispatcher(dlg);
+        KeyEvent key(phase==0 ? Event::K_Down : Event::K_Up);
+        if(phase<2) {
+          for(int i=0;i<200;++i)
+            dispatcher.dispatchKeyDown(dlg,key,1);
+          Log::i("[JOURNAL_PROBE] held scroll=",hItem.scroll);
+          dispatcher.dispatchKeyUp(dlg,key,1);
+          } else {
+          MouseEvent wheel(10,10,Event::ButtonNone,Event::M_NoModifier,-1);
+          for(int i=0;i<200;++i)
+            dispatcher.dispatchMouseWheel(dlg,wheel);
+          }
+        }
+      ++phase;
+      }
     hItem.scroll = std::min(hItem.scroll, std::max(lineCnt-linesInView,0));
     hItem.scroll = std::max(hItem.scroll, 0);
+    if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_JOURNAL_PROBE")!=nullptr)
+      Log::i("[JOURNAL_PROBE] draw scroll=",hItem.scroll," lines=",lineCnt," visible=",linesInView);
+
     if(lineCnt>linesInView+hItem.scroll) {
       p.setBrush(*down);
       p.drawRect(x+(tw-down->w())/2, y+th-padd,
@@ -643,6 +671,28 @@ void GameMenu::onTick() {
     setPosition((owner.w()-w())/2, (owner.h()-h())/2);
     } else {
     setPosition(int(float(menu->pos_x)/scriptDiv*fx), int(float(menu->pos_y)/scriptDiv*fy));
+    }
+  }
+
+void GameMenu::probeJournal() {
+  onTick();
+  for(auto& it:hItems) {
+    if(it.handle==nullptr || it.handle->type!=zenkit::MenuItemType::LISTBOX)
+      continue;
+    ListViewDialog list(*this,it);
+    if(list.status!=QuestStat::Current || list.numQuests()==0)
+      continue;
+    auto next = selectedContentItem(&it);
+    auto quest = list.selectedQuest();
+    if(next==nullptr || quest==nullptr)
+      continue;
+    Log::i("[JOURNAL_PROBE] opening=",quest->name);
+    next->handle->text[0].clear();
+    for(auto& entry:quest->entry)
+      next->handle->text[0] += entry + "\n---\n";
+    next->scroll = 0;
+    next->visible = true;
+    break;
     }
   }
 

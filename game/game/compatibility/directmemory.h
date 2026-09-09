@@ -1,6 +1,7 @@
 #pragma once
 
 #include <zenkit/DaedalusScript.hh>
+#include <map>
 
 #include "game/gamescript.h"
 
@@ -70,6 +71,7 @@ class DirectMemory {
 
     ptr32_t     scriptVariables = 0;
     ptr32_t     scriptSymbols   = 0;
+    std::map<std::pair<std::shared_ptr<zenkit::DaedalusInstance>,uint32_t>,ptr32_t> scriptReferences;
 
     void        setupFunctionTable();
     void        setupIkarusLoops();

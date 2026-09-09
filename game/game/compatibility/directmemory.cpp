@@ -38,23 +38,23 @@ static float intBitsToFloat(int32_t i) {
 void DirectMemory::memory_instance::set_int(const zenkit::DaedalusSymbol& sym, uint16_t index, int32_t value) {
   if(sym.name()=="ZCARRAY.NUMINARRAY" && value>1024)
     Log::d("");
-  ptr32_t addr = address + ptr32_t(sym.offset_as_member()) + ptr32_t(index*sym.class_size());
+  ptr32_t addr = address + ptr32_t(sym.offset_as_member()) + ptr32_t(index*sizeof(int32_t));
   owner.mem32.writeInt(addr, value);
   }
 
 int32_t DirectMemory::memory_instance::get_int(const zenkit::DaedalusSymbol& sym, uint16_t index) const {
-  ptr32_t addr = address + ptr32_t(sym.offset_as_member()) + ptr32_t(index * sym.class_size());
+  ptr32_t addr = address + ptr32_t(sym.offset_as_member()) + ptr32_t(index * sizeof(int32_t));
   int32_t v = owner.mem32.readInt(addr);
   return v;
   }
 
 void DirectMemory::memory_instance::set_float(const zenkit::DaedalusSymbol& sym, uint16_t index, float value) {
-  ptr32_t addr = address + ptr32_t(sym.offset_as_member()) + ptr32_t(index*sym.class_size());
+  ptr32_t addr = address + ptr32_t(sym.offset_as_member()) + ptr32_t(index*sizeof(int32_t));
   owner.mem32.writeInt(addr, *reinterpret_cast<const int32_t*>(&value));
   }
 
 float DirectMemory::memory_instance::get_float(const zenkit::DaedalusSymbol& sym, uint16_t index) const {
-  ptr32_t addr = address + ptr32_t(sym.offset_as_member()) + ptr32_t(index * sym.class_size());
+  ptr32_t addr = address + ptr32_t(sym.offset_as_member()) + ptr32_t(index * sizeof(int32_t));
   int32_t v = owner.mem32.readInt(addr);
 
   float f = 0;
@@ -63,13 +63,13 @@ float DirectMemory::memory_instance::get_float(const zenkit::DaedalusSymbol& sym
   }
 
 void DirectMemory::memory_instance::set_string(const zenkit::DaedalusSymbol& sym, uint16_t index, std::string_view value) {
-  ptr32_t addr = address + ptr32_t(sym.offset_as_member()) + ptr32_t(index*sym.class_size());
+  ptr32_t addr = address + ptr32_t(sym.offset_as_member()) + ptr32_t(index*sizeof(zString));
   if(auto* s = owner.mem32.deref<zString>(addr))
     owner.memAssignString(*s, value);
   }
 
 const std::string& DirectMemory::memory_instance::get_string(const zenkit::DaedalusSymbol& sym, uint16_t index) const {
-  ptr32_t addr = address + ptr32_t(sym.offset_as_member()) + ptr32_t(index*sym.class_size());
+  ptr32_t addr = address + ptr32_t(sym.offset_as_member()) + ptr32_t(index*sizeof(zString));
 
   if(auto zs = owner.mem32.deref<const zString>(addr)) {
     static std::string ret;
@@ -1040,20 +1040,57 @@ void DirectMemory::setupMemoryFunctions() {
 auto DirectMemory::_takeref(zenkit::DaedalusVm& vm) -> zenkit::DaedalusNakedCall {
   if(vm.top_is_reference()) {
     auto [ref, idx, context] = vm.pop_reference();
-    if(idx!=0) {
-      Log::e("Ikarus: _takeref - unable take reference to array element");
-      vm.push_int(int32_t(0xBAD10000));
-      return zenkit::DaedalusNakedCall();
-      }
-
+    const bool string = ref->type()==zenkit::DaedalusDataType::STRING;
+    const uint32_t stride = string ? uint32_t(sizeof(zString)) : 4u;
     if(ref->is_member()) {
       if(auto d = dynamic_cast<memory_instance*>(context.get())) {
-        const ptr32_t ptr = d->address;
-        vm.push_int(int32_t(ptr + ref->offset_as_member()));
+        vm.push_int(int32_t(d->address+ref->offset_as_member()+uint32_t(idx)*stride));
         return zenkit::DaedalusNakedCall();
         }
-      Log::e("Ikarus: _takeref - unable take reference to struct element");
-      vm.push_int(int32_t(0xBAD10000));
+      } else {
+      context.reset();
+      }
+
+    // Map native members and arrays as contiguous Gothic values, not ScriptVar slots.
+    if((ref->is_member() || ref->count()>1) &&
+       (string || ref->type()==zenkit::DaedalusDataType::INT || ref->type()==zenkit::DaedalusDataType::FLOAT)) {
+      if(idx>=ref->count() || (ref->is_member() && context==nullptr)) {
+        Log::e("Ikarus: _takeref - invalid member or array reference: ",ref->name());
+        vm.push_int(0);
+        return zenkit::DaedalusNakedCall();
+        }
+      // ponytail: retain referenced VM instances until session end; use reclaimable mappings if this grows materially.
+      auto& ptr = scriptReferences[{context,ref->index()}];
+      if(ptr==0) {
+        const auto type = Mem32::Type(uint32_t(Mem32::Type::firstScriptReference)+uint32_t(scriptReferences.size()));
+        if(string) {
+          mem32.setCallbackR(type, [this,ref,context](zString& value, uint32_t i) {
+            memAssignString(value,ref->get_string(uint16_t(i),context.get()));
+            });
+          mem32.setCallbackW(type, [this,ref,context](zString& value, uint32_t i) {
+            std::string text;
+            memFromString(text,value);
+            ref->set_string(text,uint16_t(i),context.get());
+            });
+          } else {
+          mem32.setCallbackR(type, [ref,context](int32_t& value, uint32_t i) {
+            value = ref->type()==zenkit::DaedalusDataType::FLOAT ?
+                    floatBitsToInt(ref->get_float(uint16_t(i),context.get())) : ref->get_int(uint16_t(i),context.get());
+            });
+          mem32.setCallbackW(type, [ref,context](int32_t& value, uint32_t i) {
+            if(ref->type()==zenkit::DaedalusDataType::FLOAT)
+              ref->set_float(intBitsToFloat(value),uint16_t(i),context.get()); else
+              ref->set_int(value,uint16_t(i),context.get());
+            });
+          }
+        ptr = mem32.alloc(uint32_t(ref->count())*stride,type);
+        }
+      vm.push_int(int32_t(ptr+uint32_t(idx)*stride));
+      return zenkit::DaedalusNakedCall();
+      }
+    if(idx!=0 || ref->is_member()) {
+      Log::e("Ikarus: _takeref - unsupported reference: ",ref->name());
+      vm.push_int(0);
       return zenkit::DaedalusNakedCall();
       }
 
@@ -1600,7 +1637,7 @@ void DirectMemory::setupzCParserFunctions() {
     });
 
   const ptr32_t ZCPARSER__CREATEINSTANCE = 7942048;
-  cpu.register_thiscall(ZCPARSER__CREATEINSTANCE, [this](ptr32_t, int32_t instId, ptr32_t ptr){
+  auto createInstance = [this](int32_t instId, ptr32_t ptr){
     auto *sym = vm.find_symbol_by_index(uint32_t(instId));
     auto *cls = sym;
     if(sym != nullptr && sym->type() == zenkit::DaedalusDataType::INSTANCE) {
@@ -1629,7 +1666,22 @@ void DirectMemory::setupzCParserFunctions() {
 
     sym->set_instance(inst);
     return int(ptr); // no idea, what return-value suppose to be - unused in LeGo
+    };
+  cpu.register_thiscall(ZCPARSER__CREATEINSTANCE, [createInstance](ptr32_t, int32_t instId, ptr32_t ptr) {
+    return createInstance(instId,ptr);
     });
+  if(vm.find_symbol_by_name("Create")!=nullptr) {
+    vm.override_function("Create", [this,createInstance](int32_t id) {
+      auto cls = this->vm.find_symbol_by_index(uint32_t(id));
+      if(cls==nullptr || cls->type()!=zenkit::DaedalusDataType::INSTANCE)
+        return 0;
+      while(cls!=nullptr && cls->type()!=zenkit::DaedalusDataType::CLASS)
+        cls = this->vm.find_symbol_by_index(cls->parent());
+      if(cls==nullptr || cls->class_size()==0)
+        return 0;
+      return createInstance(id,mem32.alloc(cls->class_size()));
+      });
+    }
   }
 
 void DirectMemory::setupInitFileFunctions() {

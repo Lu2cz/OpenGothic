@@ -1,5 +1,8 @@
 #include "documentmenu.h"
 
+#include <Tempest/Log>
+#include <cstdlib>
+
 #include "world/objects/interactive.h"
 #include "world/objects/npc.h"
 #include "utils/gthfont.h"
@@ -16,6 +19,9 @@ DocumentMenu::DocumentMenu(const KeyCodec& key)
 
 void DocumentMenu::show(const DocumentMenu::Show &doc) {
   document = doc;
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr)
+    for(auto& page:document.pages)
+      Log::i("[RECIPE_PROBE] document=",page.text);
   active   = true;
   update();
   }

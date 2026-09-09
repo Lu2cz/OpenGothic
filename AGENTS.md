@@ -5,8 +5,8 @@
   `rtk proxy /bin/zsh "/Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues/outputs/Play-Archolos.command"`
 - Prefix shell commands with `rtk`; use `rtk proxy` for commands without a filter.
 - Preserve the original game data, installers, and playtest save. Run benchmarks using independent save copies, without concurrent builds or other benchmark runs.
-- Ship bars and the reproduced Willem dialogue-exit failure are fixed locally. Next gameplay priorities: learned-recipe journal generation, journal scrolling, and normal story progression. The user has confirmed that loading a save restores quest progression and inventory.
+- Ship bars and the reproduced Willem dialogue-exit failure are fixed locally. Recipe learning/document generation and held-key journal scrolling are also fixed locally. Next gameplay priorities: normal opening-quest progression, actual cooking, and quest-triggered gate opening. The user has confirmed that loading a save restores quest progression and inventory.
 
-- Read `ARCHOLOS_DEVELOPMENT.md` before continuing. Update it at verified milestones with cause, change, tests, limitations, and next steps; keep the user-facing status report in sync. Ship-bar and dialogue/XP-notification regression checks are available under tests/.
+- Read `ARCHOLOS_DEVELOPMENT.md` before continuing. Update it at verified milestones with cause, change, tests, limitations, and next steps; keep the user-facing status report in sync. Ship-bar, dialogue/XP-notification, recipe, and journal-scrolling regression checks are available under tests/.
 
 - Cursor changes were reverted after the user reported broken mouse look. Leave cursor behavior alone until explicitly requested again.
