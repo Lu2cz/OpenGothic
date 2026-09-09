@@ -4,7 +4,6 @@
 #include <Tempest/Log>
 #include <Tempest/TextCodec>
 #include <Tempest/Dialog>
-#include <Tempest/EventDispatcher>
 #include <cstdlib>
 
 #include <algorithm>
@@ -60,6 +59,8 @@ struct GameMenu::ListContentDialog : Dialog {
     }
 
   void onMove(int dy) {
+    if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr)
+      Log::i("[MODAL_PROBE] move=",dy," before=",textView.scroll);
     if(dy<0) {
       if(textView.scroll>0)
         textView.scroll--;
@@ -120,7 +121,11 @@ struct GameMenu::ListViewDialog : Dialog {
 
     ListContentDialog dlg(*next);
     dlg.resize(owner.owner.size());
+    if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr)
+      Log::i("[MODAL_PROBE] content opened");
     dlg.exec();
+    if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr)
+      Log::i("[MODAL_PROBE] content closed scroll=",next->scroll);
     next->visible = vis;
     owner.curItem = prev;
     }
@@ -286,6 +291,12 @@ GameMenu::GameMenu(MenuRoot &owner, KeyCodec& keyCodec, zenkit::DaedalusVm& vm, 
   back = Resources::loadTexture(menu->back_pic);
 
   initItems();
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr) {
+    Log::i("[MODAL_PROBE] menu opened=",menuSection);
+    for(const auto& item : menu->items)
+      if(!item.empty())
+        Log::i("[MODAL_PROBE] menu item=",item);
+    }
   float infoX = 1000.0f/scriptDiv;
   float infoY = 7500.0f/scriptDiv;
 
@@ -420,6 +431,9 @@ void GameMenu::drawItem(Painter& p, Item& hItem) {
 
   auto& item  = hItem.handle;
   auto flags = item->flags;
+  if(ctrlInput==&hItem && std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr)
+    Log::i("[MODAL_PROBE] save name drawn=",item->text[0]);
+
   getText(hItem,textBuf);
 
   const int32_t dimx = (item->dim_x!=-1) ? item->dim_x : 8192;
@@ -460,32 +474,10 @@ void GameMenu::drawItem(Painter& p, Item& hItem) {
     int lineCnt     = fnt.lineCount(tRect.w,textBuf.data());
     int linesInView = tRect.h/fnt.pixelSize();
 
-    if(lineCnt>linesInView && std::getenv("OPENGOTHIC_PROFILE")!=nullptr &&
-       std::getenv("OPENGOTHIC_JOURNAL_PROBE")!=nullptr) {
-      static int phase = 0;
-      if(phase<=3)
-        Log::i("[JOURNAL_PROBE] phase=",phase," scroll=",hItem.scroll);
-      if(phase<3) {
-        ListContentDialog dlg(hItem);
-        EventDispatcher dispatcher(dlg);
-        KeyEvent key(phase==0 ? Event::K_Down : Event::K_Up);
-        if(phase<2) {
-          for(int i=0;i<200;++i)
-            dispatcher.dispatchKeyDown(dlg,key,1);
-          Log::i("[JOURNAL_PROBE] held scroll=",hItem.scroll);
-          dispatcher.dispatchKeyUp(dlg,key,1);
-          } else {
-          MouseEvent wheel(10,10,Event::ButtonNone,Event::M_NoModifier,-1);
-          for(int i=0;i<200;++i)
-            dispatcher.dispatchMouseWheel(dlg,wheel);
-          }
-        }
-      ++phase;
-      }
     hItem.scroll = std::min(hItem.scroll, std::max(lineCnt-linesInView,0));
     hItem.scroll = std::max(hItem.scroll, 0);
-    if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_JOURNAL_PROBE")!=nullptr)
-      Log::i("[JOURNAL_PROBE] draw scroll=",hItem.scroll," lines=",lineCnt," visible=",linesInView);
+    if(lineCnt>linesInView && std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr)
+      Log::i("[MODAL_PROBE] draw scroll=",hItem.scroll," lines=",lineCnt," visible=",linesInView);
 
     if(lineCnt>linesInView+hItem.scroll) {
       p.setBrush(*down);
@@ -674,28 +666,6 @@ void GameMenu::onTick() {
     }
   }
 
-void GameMenu::probeJournal() {
-  onTick();
-  for(auto& it:hItems) {
-    if(it.handle==nullptr || it.handle->type!=zenkit::MenuItemType::LISTBOX)
-      continue;
-    ListViewDialog list(*this,it);
-    if(list.status!=QuestStat::Current || list.numQuests()==0)
-      continue;
-    auto next = selectedContentItem(&it);
-    auto quest = list.selectedQuest();
-    if(next==nullptr || quest==nullptr)
-      continue;
-    Log::i("[JOURNAL_PROBE] opening=",quest->name);
-    next->handle->text[0].clear();
-    for(auto& entry:quest->entry)
-      next->handle->text[0] += entry + "\n---\n";
-    next->scroll = 0;
-    next->visible = true;
-    break;
-    }
-  }
-
 void GameMenu::processMusicTheme() {
   if(auto theme = Gothic::musicDef()[menu->music_theme])
     GameMusic::inst().setMusic(*theme,GameMusic::mkTags(GameMusic::Std,GameMusic::Day));
@@ -852,7 +822,11 @@ void GameMenu::execSingle(Item &it, int slideDx, KeyCodec::Action hint) {
       if(it.savHdr.version==0)
         dlg.text = "";
       dlg.resize(owner.size());
+      if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr)
+        Log::i("[MODAL_PROBE] save name opened slot=",it.name);
       dlg.exec();
+      if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr)
+        Log::i("[MODAL_PROBE] save name closed accepted=",dlg.accepted," text=",item->text[0]);
       ctrlInput = nullptr;
       if(!dlg.accepted)
         return;

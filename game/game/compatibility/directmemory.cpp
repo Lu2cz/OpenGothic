@@ -434,7 +434,17 @@ void DirectMemory::setupEngineMemory() {
 
   const ptr32_t INGAME_MENU_INSTANCE = 8980576;
   mem32.pin(menuName, INGAME_MENU_INSTANCE, sizeof(menuName)-1, "MENU_NAME");
-  std::strncpy(menuName, ::menuMain.data(), std::min(sizeof(menuName), ::menuMain.size()));
+  // Mods can declare a separate pause menu; legacy initialization may fail to
+  // apply the runtime patch. Keep the mapped buffer writable by scripts.
+  std::string_view initialMenu = ::menuMain;
+  if(auto sym = vm.find_symbol_by_name("INGAME_MENU_INSTANCE")) {
+    if(sym->type()==zenkit::DaedalusDataType::STRING && sym->is_const() && !sym->is_member()) {
+      const auto& name = sym->get_string();
+      if(!name.empty() && name.size()<sizeof(menuName))
+        initialMenu = name;
+      }
+    }
+  std::memcpy(menuName, initialMenu.data(), initialMenu.size());
 
   const ptr32_t ZERRPTR = 9231568;
   mem32.alloc(ZERRPTR, sizeof(zError));

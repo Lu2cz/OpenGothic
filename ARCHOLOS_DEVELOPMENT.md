@@ -6,9 +6,9 @@ Working branch: `archolos/performance-v092`, based on OpenGothic v0.92. The newe
 
 Workspace and user-facing evidence: `/Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues`. Launcher and reports are under `outputs`; proprietary game data, saves, benchmark runs, and extraction tools are under `work` and are not committed.
 
-## Current milestone: recipe learning and journal scrolling
+## Current milestone: actual modal journal scrolling and in-game saving
 
-Status: recipe learning/document generation and held-key journal scrolling are fixed and installed locally, alongside the prior performance, voice, ship-bar and dialogue/XP fixes. Next: normal opening-quest progression, actual cooking, and quest-triggered gate opening. Cursor work remains deferred.
+The user confirms XP notices and both recipe displays work. Their follow-up disproved the earlier journal-scrolling acceptance: the detached dispatcher check missed a macOS modal event-loop defect. A replacement real-modal test now passes. Saving also had an inaccessible menu entry, diagnosed below. Installation and final regression results are recorded in the latest milestone. Cursor work remains deferred.
 
 # Archolos: first performance milestone
 
@@ -153,7 +153,9 @@ Three shared compatibility gaps prevented this flow:
 
 These are shared API changes, not a hardcoded recipe description or a replacement for Archolos's learning logic. A recipe whose learned flag was already saved as true but whose log is missing is not automatically repaired. The inspected original and current playable slot 1 both have the rat recipe flag at zero, so reading the recipe again can run the corrected learning path. Reading a recipe does not consume it in this engine's normal inventory-use path.
 
-### Scrolling cause and change
+### Scrolling cause and change (initial, incomplete fix)
+
+**Superseded acceptance:** the user subsequently reported that scrolling still failed. The detached test below missed modal timer starvation; see the latest milestone for the reproduction and replacement test.
 
 `ListContentDialog` handled wheel input and key releases but lacked the repeat handler already present in `ListViewDialog`. Holding Down therefore did nothing until release, which moved only one line. The one-line change forwards repeat events to the existing Up/Down/W/S handler.
 
@@ -175,3 +177,51 @@ The recipe runner invokes the installed inventory-use script with the player and
 The next milestone is natural opening-quest progression, including actual cooking and quest-triggered gate opening, followed by broader campaign/world-transition/save coverage. Cursor work remains deferred. No upstream push or submission is authorized.
 
 Release build and whitespace checks pass. All five final integration runs exit normally and preserve the source save SHA-256. Installed executable SHA-256: `33e947e052e43c6c604d455dc95358acbd016aba59c45e3974fd0dd22630a42b`. Previous normal executable: `work/Gothic2Notr-before-recipe-journal-fix`. The launcher still opens the main menu with persistent manual saves.
+
+
+## Modal journal scrolling and in-game saving, 9 September 2026
+
+The user confirms XP notifications and recipe reading/journal entries work, but reports no journal scrolling and inability to save. The earlier statement that journal scrolling was fixed was premature. Its detached-dialog test did not enter the modal event loop; that probe and runner have now been replaced.
+
+### Causes and changes
+
+- **Journal:** real Cocoa key events reach the live ListContentDialog, and its scroll offset changes. However, macOS ran Tempest UI timers only in the outer application loop. The nested Dialog::exec loop calls processEvents directly, so the GameMenu repaint timer never fired. The production fix services timers from the inner event pump when no native event is waiting, as the other platform backends do. The previous held-key handler remains necessary.
+- **Saving:** pressing Escape after loading opens MENU_MAIN, which has no Save Game or Resume entry in installed v1.2.11. The installed scripts declare INGAME_MENU_INSTANCE="MENU_GAME"; that menu has both entries. INIT_INGAMEMENU normally patches the legacy engine's menu-name memory. OpenGothic's save-loading constructor restores game/script state without replaying startup scripts, and DirectMemory initializes this runtime buffer to MENU_MAIN. The compatibility layer now initializes that same writable buffer from the mod's declared constant when it is a nonempty string that fits; otherwise the standard menu remains the default. Script patches can still change the buffer. This addresses menu initialization, not general persistence of every legacy memory patch.
+
+### Replacement integration coverage
+
+`tests/run_archolos_modal.py` loads private copies of the supplied ship save. Its journal mode opens the actual journal list and nested description. Opt-in diagnostic replay posts key events into the application's own Cocoa queue; wheel events enter through the window dispatcher. No global input injection or accessibility permission is required. The test checks visible text ranges separately for held Down, Up, S, W and wheel, and verifies the original save hash.
+
+Save mode starts from gameplay and presses Escape through the real pause-menu path, selects Save Game, selects a private slot 2, types ModalTest, confirms, and checks the resulting save ZIP. It verifies the name, quest payload and player inventory against its input. Running it again with that new save proves fresh-process loading and re-saving. Tests use disposable directories; no user save is overwritten.
+
+Baseline evidence:
+- work/modal-journal-before: real modal receives input but never repaints the last page; expected failure.
+- work/modal-save-before: direct save submenu works, but bypassing the pause menu was insufficient to test accessibility.
+- work/modal-pause-save-before: real Escape opens MENU_MAIN without Save Game; expected failure.
+
+Corrected evidence:
+- work/modal-journal-after: first actual-modal Down/Up/wheel pass.
+- work/modal-journal-final: held Down and S reach the last page (offset 7, 28 lines, 21 visible); Up and W return to offset 0; wheel reaches offset 7. Each phase checks an actual redraw while the modal is open.
+- work/modal-pause-save-after: Escape opens MENU_GAME with Save Game; typing and confirming ModalTest creates a valid slot 2. Quest and player inventory payloads match the original.
+
+The keyboard check includes native macOS event translation; the wheel check starts at the window dispatcher and does not validate physical trackpad/Cocoa delta conversion. Draw-range logging is not a screenshot comparison. The normal launcher disables these probes. Cursor behavior is unchanged.
+
+- work/modal-pause-save-reload: a fresh process loads the new slot-2 save through normal loading, opens the real pause menu, saves again, and preserves byte-identical quest and player inventory payloads. The input save hash is unchanged.
+
+Re-run journal mode using a new output directory:
+
+```sh
+rtk proxy python3 /Users/lu2/projects/OpenGothic-v092/tests/run_archolos_modal.py --executable work/ArcholosProfile.app/Contents/MacOS/Gothic2Notr --game work/archolos-game --save work/playtest/save_slot_1.sav --output work/modal-next-journal --mode journal
+```
+
+For saving, use `--mode save`. Repeat with the newly generated `save_slot_2.sav` as `--save` and another new output directory for a fresh-process load/save round trip. This runner targets the supplied single-world ship-save scenario; broader campaign saves need corresponding state expectations.
+
+
+Final regression and installation:
+- work/recipe-modal-regression: recipe learning, ingredients, document stats and repeat-read checks pass (59.76 FPS).
+- work/dialog-modal-regression: XP +50 notification, automatic Willem greeting and two exits pass; final dialogue inactive (59.87 FPS).
+- Release build and whitespace checks pass. No cursor or movement changes were made. The replaced journal checker is removed to prevent the earlier false acceptance from recurring.
+- Installed tested binary SHA-256: `2e44bf55ae52550a6849b8555dbbe0d4a74d0fca65b83ac8a7041d11df82e7e7`. Previous normal build is preserved at work/Gothic2Notr-before-modal-save-fix. Normal launch command and persistent work/playable directory are unchanged. Original ship save hash remains `6a084b00dedd4a104f16c5a53e8c1569aba0b4b846d4b989dd91b36e97a1316d`.
+- Tempest checkpoint: `9d524a7`. All changes stay local; nothing was pushed.
+
+Next: normal opening-quest progression, actual cooking, quest-triggered gate opening, and later world-transition/campaign coverage. Neither this menu fix nor the earlier recipe fix establishes full legacy-runtime compatibility.

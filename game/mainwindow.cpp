@@ -1071,6 +1071,8 @@ void MainWindow::loadGame(std::string_view slot) {
   }
 
 void MainWindow::saveGame(std::string_view slot, std::string_view name) {
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr)
+    Log::i("[MODAL_PROBE] save requested slot=",slot," name=",name," dialogue=",dialogs.isActive());
   if(dialogs.isActive())
     return;
   if(auto w = Gothic::inst().world(); w!=nullptr && w->currentCs()!=nullptr)
@@ -1315,13 +1317,15 @@ void MainWindow::render(){
             }
           }
         }
-      if(std::getenv("OPENGOTHIC_JOURNAL_PROBE")!=nullptr)
-        rootMenu.setMenu("MENU_LOG",KeyCodec::Log);
+      if(auto mode = std::getenv("OPENGOTHIC_UI_PROBE")) {
+        if(std::string_view(mode)=="journal")
+          rootMenu.setMenu("MENU_LOG");
+        Log::i("[MODAL_PROBE] in-game menu=",Gothic::inst().menuMain());
+        setenv("OPENGOTHIC_UI_READY","1",1);
+        }
       profileAt = profileEntry;
       Log::i("[ARCHOLOS_BEGIN] width=",swapchain.w()," height=",swapchain.h(),
              " scale=",Gothic::inst().settingsGetI("INTERNAL","vidResIndex"));
-      if(std::getenv("OPENGOTHIC_JOURNAL_PROBE")!=nullptr)
-        static_cast<GameMenu&>(rootMenu.widget(0)).probeJournal();
 
       }
     if(sampling && dialogProbeNpc!=nullptr) {
@@ -1431,7 +1435,7 @@ void MainWindow::render(){
       const auto p=Gothic::inst().player()->position();
       Log::i("[GATE_INPUT] frame=",profileFrames," pos=",p.x,",",p.y,",",p.z," collision=",Gothic::inst().player()->hasCollision());
       }
-    if(sampling && ++profileFrames==(dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u))) {
+    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,
