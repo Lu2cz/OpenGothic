@@ -11,6 +11,7 @@
 #include <Tempest/Layout>
 #include <Tempest/Application>
 #include <Tempest/Log>
+#include <Tempest/EventDispatcher>
 
 #include "ui/dialogmenu.h"
 #include "ui/menuroot.h"
@@ -50,6 +51,9 @@ MainWindow::MainWindow(Device& device)
 
   if(!CommandLine::inst().isWindowMode())
     setFullscreen(true);
+
+  // Gameplay uses camera controls in both window modes.
+  setCursorShape(CursorShape::Hidden);
 
   //renderer.resetSwapchain();
   setupUi();
@@ -300,10 +304,8 @@ void MainWindow::resizeEvent(SizeEvent&) {
   if(auto camera = Gothic::inst().camera())
     camera->setViewport(swapchain.w(),swapchain.h());
 
-  const bool fs = SystemApi::isFullscreen(hwnd());
   auto rect = SystemApi::windowClientRect(hwnd());
   setCursorPosition(rect.w/2,rect.h/2);
-  setCursorShape(fs ? CursorShape::Hidden : CursorShape::Arrow);
   dMouse = Point();
   }
 
@@ -1235,6 +1237,20 @@ void MainWindow::render(){
         Gothic::inst().world()->execTriggerEvent(TriggerEvent("SHIP_TRAPDOOR", "ARCHOLOS_GATE_PROBE", TriggerEvent::T_Trigger));
       if(std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr)
         player.onKeyPressed(KeyCodec::Forward,Event::K_W,KeyCodec::Mapping(0));
+      if(std::getenv("OPENGOTHIC_CURSOR_PROBE")!=nullptr) {
+        EventDispatcher events;
+        MouseEvent move(w()/2,h()/2);
+        events.dispatchMouseMove(*this,move);
+        const auto report = [&](const char* stage) {
+          Log::i("[CURSOR_PROBE] stage=",stage," fullscreen=",SystemApi::isFullscreen(hwnd()),
+                 " hidden=",cursorShape()==CursorShape::Hidden
+                 );
+          };
+        report("gameplay");
+        SizeEvent size(w(),h());
+        resizeEvent(size);
+        report("resize");
+        }
       profileAt = profileEntry;
       Log::i("[ARCHOLOS_BEGIN] width=",swapchain.w()," height=",swapchain.h(),
              " scale=",Gothic::inst().settingsGetI("INTERNAL","vidResIndex"));
