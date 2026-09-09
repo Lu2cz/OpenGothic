@@ -225,3 +225,18 @@ Final regression and installation:
 - Tempest checkpoint: `9d524a7`. All changes stay local; nothing was pushed.
 
 Next: normal opening-quest progression, actual cooking, quest-triggered gate opening, and later world-transition/campaign coverage. Neither this menu fix nor the earlier recipe fix establishes full legacy-runtime compatibility.
+
+
+## User acceptance and upstream cursor review, 9 September 2026
+
+The user confirms both the real-modal journal scrolling fix and the in-game Save Game menu now work. This supplements automated acceptance of checkpoint f758d0d4.
+
+Reviewed OpenGothic PR https://github.com/Try/OpenGothic/pull/980 (open, commit 2de81bfce28955809228e2449c84baebc6ee0e1b). It hides the cursor at construction/focus gain, removes fullscreen-dependent cursor selection on resize, recenters using widget dimensions, and points Tempest to ee90967c084806d29fe3fed1e5564add3fbf3277. The construction/resize edits overlap substantially with our reverted ace46864; the PR does not establish macOS mouse-look correctness.
+
+Its dependency https://github.com/Try/Tempest/pull/98 was tested on Linux/X11 and closed unmerged. It makes Window::setCursorShape apply a native cursor immediately regardless of hover state. The maintainer objected that this can override child-widget cursors and mishandle multiple windows, then closed it because a newer PR exists: https://github.com/Try/Tempest/pull/98#issuecomment-5532952841.
+
+Replacement https://github.com/Try/Tempest/pull/100 is open and also reports Linux/X11 testing. It reevaluates hovered widgets on window entry, focus and geometry changes. It includes shared dispatcher changes but its new platform event handling is X11-specific; it contains no macOS backend fix. PR980 still references the older rejected Tempest commit at review time.
+
+Assessment: a useful lead about startup/focus/hover cursor state, with no verified drop-in macOS solution. Our macOS backend still handles native hide/show and cursor warping separately. In this checkout ordinary mouse-move camera input is fullscreen-gated, while dragging has its own enabled path. These interactions require reproduction and actual camera-motion tests before any further cursor change is installed. No cursor source changes or app replacements were made for this review. The user authorized investigating this link; installation of an unverified cursor candidate is not part of the review.
+
+Next gameplay checks, in priority order: actual cooking (ingredients consumed, meal produced, progression updated), completing the opening quest and opening the ship gate through the quest's real script, then natural travel/chapter/world transitions with save checkpoints. These are unverified flows, not confirmed new failures. Known lower-priority compatibility gaps include LOG_MOVETOTOP ordering, LeGo notification styling, and unsupported legacy runtime hooks. Reproduce a player-visible consequence before broad compatibility work.
