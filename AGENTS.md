@@ -5,3 +5,4 @@
   `rtk proxy /bin/zsh "/Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues/outputs/Play-Archolos.command"`
 - Prefix shell commands with `rtk`; use `rtk proxy` for commands without a filter.
 - Preserve the original game data, installers, and playtest save. Run benchmarks using independent save copies, without concurrent builds or other benchmark runs.
+- Current gameplay priorities: fix the ship bars first, then dialogue exits. The user has confirmed that loading a save restores quest progression and inventory.
