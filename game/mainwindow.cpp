@@ -1,5 +1,8 @@
 #include "mainwindow.h"
 
+#include <chrono>
+#include <cstdlib>
+
 #include <Tempest/Except>
 #include <Tempest/Painter>
 
@@ -1211,6 +1214,32 @@ void MainWindow::setFullscreen(bool fs) {
 
 void MainWindow::render(){
   try {
+    // Temporary local profiling: load a save, warm up, measure, then exit.
+    static const bool profileEnabled = std::getenv("OPENGOTHIC_PROFILE")!=nullptr;
+    static double loadedAt=0, profileAt=0, profileMs[7]={};
+    static uint32_t profileFrames=0, profileSkipped=0;
+    const auto profileNow = [] {
+      return std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+      };
+    const double profileEntry = profileEnabled ? profileNow() : 0;
+    const bool profileReady = profileEnabled && Gothic::inst().world()!=nullptr &&
+                              Gothic::inst().checkLoading()==Gothic::LoadState::Idle;
+    if(profileReady && loadedAt==0)
+      loadedAt = profileEntry;
+    const bool sampling = profileReady && profileEntry-loadedAt>=10000;
+    if(sampling && profileAt==0) {
+      profileAt = profileEntry;
+      Log::i("[ARCHOLOS_BEGIN] width=",swapchain.w()," height=",swapchain.h(),
+             " scale=",Gothic::inst().settingsGetI("INTERNAL","vidResIndex"));
+      }
+    double profileStage = profileEntry;
+    const auto profileStamp = [&](size_t stage) {
+      if(!sampling)
+        return;
+      const double now = profileNow();
+      profileMs[stage] += now-profileStage;
+      profileStage = now;
+      };
     static uint64_t time=Application::tickCount();
 
     static bool once=true;
@@ -1233,15 +1262,21 @@ void MainWindow::render(){
       lastly - camera position
       */
     const uint64_t dt = tick();
+    profileStamp(0);
     updateAnimation(dt);
+    profileStamp(1);
     tickCamera(dt);
 
     auto& sync = fence[cmdId];
     if(!sync.wait(0)) {
       // GPU rendering is not done, pass to next frame
       std::this_thread::yield();
+      profileStamp(2);
+      if(sampling)
+        ++profileSkipped;
       return;
       }
+    profileStamp(2);
     Resources::resetRecycled(cmdId);
 
     if(video.isActive()) {
@@ -1259,14 +1294,17 @@ void MainWindow::render(){
       }
     uiMesh [cmdId].update(device,uiLayer);
     numMesh[cmdId].update(device,numOverlay);
+    profileStamp(3);
 
     CommandBuffer& cmd = commands[cmdId];
     {
     auto enc = cmd.startEncoding(device);
     renderer.draw(enc,cmdId,swapchain.currentImage(),uiMesh[cmdId],numMesh[cmdId],inventory,video);
     }
+    profileStamp(4);
     sync = device.submit(cmd);
     device.present(swapchain);
+    profileStamp(5);
     cmdId = (cmdId+1u)%Resources::MaxFramesInFlight;
 
     auto t = Application::tickCount();
@@ -1284,6 +1322,22 @@ void MainWindow::render(){
     if(Gothic::inst().isBenchmarkMode() && Gothic::inst().world()!=nullptr && Gothic::inst().world()->currentCs()!=nullptr)
       benchmark.push(t-time);
     time = t;
+    profileStamp(6);
+    if(sampling && ++profileFrames==180) {
+      const double ms = (profileNow()-profileAt)/double(profileFrames);
+      Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
+             " frame_ms=",ms," fps=",1000.0/ms,
+             " tick_ms=",profileMs[0]/profileFrames,
+             " animation_ms=",profileMs[1]/profileFrames,
+             " camera_fence_ms=",profileMs[2]/profileFrames,
+             " ui_ms=",profileMs[3]/profileFrames,
+             " encode_ms=",profileMs[4]/profileFrames,
+             " submit_present_ms=",profileMs[5]/profileFrames,
+             " limiter_ms=",profileMs[6]/profileFrames);
+      auto profileImage = renderer.screenshoot(cmdId);
+      device.readPixels(textureCast<const Texture2d&>(profileImage)).save("profile.png");
+      Tempest::SystemApi::exit();
+      }
     }
   catch(const Tempest::SwapchainSuboptimal&) {
     Log::e("swapchain is outdated - reset renderer");
