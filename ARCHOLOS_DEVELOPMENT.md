@@ -90,20 +90,18 @@ rtk proxy python3 /Users/lu2/projects/OpenGothic-v092/tests/run_archolos_gate.py
 
 `tests/check_archolos_gate.py` can also check an existing trace. The probe in `mainwindow.cpp` drives the real `PlayerControl` forward action for 600 submitted frames; `movetrigger.cpp` prepares the starting position and reports gate state. These diagnostics are opt-in and separate from the movement fix. The normal launcher clears `OPENGOTHIC_PROFILE`, opens the main menu and stores manual saves persistently in `work/playable`.
 
-## Cursor and user confirmation, 9 September 2026
+## Cursor change reverted; next milestones
 
-The user confirms that the ship bars now work in gameplay. The automated gate test starts below the bars despite the preserved source save starting above them; the original save is not modified.
+The user confirmed the ship bars work, then reported that cursor commit `ace46864` prevented mouse look and caused additional problems. Reverted all cursor code and its probe/checker. Restored both ArcholosFast.app and ArcholosProfile.app from `work/Gothic2Notr-before-cursor-fix`; their SHA-256 matches the previously validated ship-bar executable (`1bcf7246eb0e8b29196f99c2e57ec243bd006733a7abd5ea652b58d9a43c16b5`). The launch command is unchanged. Saves and game data were not modified.
 
-The cursor report reproduces at the engine-policy level: windowed gameplay uses the default Arrow cursor and resizeEvent explicitly restores Arrow when not fullscreen. The launcher uses `-window`. The fix sets Hidden in the MainWindow constructor and removes the fullscreen-dependent cursor assignment from resizeEvent. Existing menu cursor settings and mouse input controls remain intact.
+The previous cursor test checked only requested cursor state, not working mouse look or native cursor behavior. Its passing result was insufficient for gameplay acceptance. No further cursor investigation is authorized for now; leave this issue deferred.
 
-An opt-in `OPENGOTHIC_CURSOR_PROBE=1` within the existing profiling mode sends mouse movement through EventDispatcher in the loaded scene, then records the MainWindow cursor policy before and after resizeEvent. `tests/check_archolos_cursor.py` fails on the pre-fix trace (Hidden false twice) and passes on the fixed trace (Hidden true twice):
-- Before: `work/frame-profile-0-6rbk1rpp/terminal.log`, 58.94 FPS.
-- After: `work/frame-profile-0-lzgf3w12/terminal.log`, 58.69 FPS.
-- Both runs completed 180 submitted frames, exited normally, and preserved the original save hash. Release build and `git diff --check` passed.
-- The tested binary is installed in ArcholosFast.app; previous binary preserved as `work/Gothic2Notr-before-cursor-fix`. Launcher still opens the main menu and supports persistent manual saves.
+Latest user log (`2a01881e-f464-4dd3-8f39-11f6f53cd451/pasted-text.txt`) exits normally through LEAVE_GAME, with unsupported script hooks, memory-translation warnings and an ApplyHouseWallTexture null-pointer trace. It contains no Willem/MEM_GetFuncID exit trace; that does not establish a dialogue fix.
 
-Verification limit: the automated cursor check establishes the engine's requested state and exercises mouse dispatch/resize; it does not visually inspect the OS cursor or test switching between applications. A native visibility-query attempt was removed because the macOS API is deprecated and unsupported. Fullscreen behavior was not re-tested.
+Next priorities:
+1. Reproduce and fix dialogue exits, especially the Willem AI_RESETFACEANI / AI_FUNCTION_NSII / MEM_GetFuncID path; investigate shared function resolution and VM call-stack recovery.
+2. Missing XP notifications and recipe journal entries, potentially sharing script compatibility failures; verify rather than assume a common cause.
+3. Long journal text scrolling.
+4. Normal opening-quest progression, quest-triggered gate opening, conversations, and save/reload checkpoints; then broaden campaign/system coverage.
 
-Latest user log (`2a01881e-f464-4dd3-8f39-11f6f53cd451/pasted-text.txt`) ends normally through LEAVE_GAME. It contains 81 unsupported HookEngineI calls, 24 memory-translation failures, five missing mesh warnings and one ApplyHouseWallTexture null-pointer stack trace during initialization. It has no MEM_GetFuncID/Willem exit trace. These remain compatibility findings; this session does not establish that the dialogue exit problem is fixed. Dialogue exits remain the next gameplay blocker, followed by XP/recipe/journal issues.
-
-To repeat the cursor check, run the existing workspace `work/run-frame-profile.py` with `OPENGOTHIC_CURSOR_PROBE=1`, `--scale 0 --bindless 0`, and pass its resulting terminal.log to `tests/check_archolos_cursor.py`. The normal launcher disables profiling, so the probe is inactive during normal play.
+More story progression is not required to begin these known issues. Later, saves before and after natural story transitions will improve coverage. Current status is a playable early compatibility build: performance, dubbing, basic movement/combat, tested inventory/quest save restoration and ship-bar traversal are established. Full campaign completion, later scripted sequences, crafting/trading coverage and world transitions remain unverified. A percentage of total completion or reliable completion date cannot be inferred from these early milestones.

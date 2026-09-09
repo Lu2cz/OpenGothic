@@ -8,3 +8,5 @@
 - Current gameplay priorities: fix the ship bars first, then dialogue exits. The user has confirmed that loading a save restores quest progression and inventory.
 
 - Read `ARCHOLOS_DEVELOPMENT.md` before continuing. Update it at verified milestones with cause, change, tests, limitations, and next steps; keep the user-facing status report in sync. The ship-bar forward-movement regression is fixed locally; dialogue exits are next.
+
+- Cursor changes were reverted after the user reported broken mouse look. Leave cursor behavior alone until explicitly requested again.
