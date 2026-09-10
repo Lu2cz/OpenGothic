@@ -138,6 +138,23 @@ void DialogMenu::tick(uint64_t dt) {
         }
       }
     }
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr &&
+     state==State::Active && current.time==0 && !haveToWaitOutput()) {
+    auto& vm = Gothic::inst().world()->script().getVm();
+    for(size_t i=0;i<choice.size();++i) {
+      const auto& name=vm.find_symbol_by_index(choice[i].scriptFn)->name();
+      if(name=="DIA_JORN_Q101_WHATSUP_INFO" || name=="DIA_JORN_Q101_WHATSUP_YES" ||
+         name=="TRIA_CAPTAIN_Q101_JORNTRIALOG_1" || name=="TRIA_CAPTAIN_Q101_TIMOTRIALOG_NOTNECESSARY") {
+        Log::i("[CAPTAIN_PROBE] select ",name);
+        dlgSel=i;
+        onSelect();
+        break;
+        }
+      }
+    }
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_CAPTAIN_SKIP")!=nullptr &&
+     current.time>0 && current.time+500<current.msgTime)
+    skipPhrase();
   // update();
   }
 

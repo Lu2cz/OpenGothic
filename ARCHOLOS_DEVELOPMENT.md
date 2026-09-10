@@ -6,9 +6,9 @@ Working branch: `archolos/performance-v092`, based on OpenGothic v0.92. The newe
 
 Workspace and user-facing evidence: `/Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues`. Launcher and reports are under `outputs`; proprietary game data, saves, benchmark runs, and extraction tools are under `work` and are not committed.
 
-## Current milestone: Vrazka stash and initial container loot
+## Current milestone: Captain cutscene and scripted departure
 
-The latest installed milestone restores the timed stash reveal, fixes whitespace in initial container inventories, and implements the follow-up container-item call. A separate recovery save preserves the user’s gameplay state while restoring missing ship loot. See the final milestone for evidence and limits; full campaign compatibility remains unverified.
+The latest installed milestone restores the fade animation timer after loading and native jump handling for scripted flying transitions. The full captain/departure replay reaches the beach with a normal camera and passes a fresh-process menu save round trip. See the final milestone for tested branches and remaining limits; full campaign compatibility remains unverified.
 
 # Archolos: first performance milestone
 
@@ -317,3 +317,41 @@ Additional acceptance:
 Installation: tested SHA-256 9e41794d68231c5a07a72423c909ee8139c8c013df02261579549944896a184f in both diagnostic and playable bundles. Previous playable executable: work/Gothic2Notr-before-stash-loot-fix. The exact recovered copy is installed as work/playable/save_slot_10.sav, titled “Archolos loot recovery”; slots 1–9 retain their original hashes. The source is the user's slot 9. No item is inserted into the player's inventory and no quest is force-completed in this delivered recovery.
 
 Release build, whitespace checks and Python syntax checks pass. No cursor changes or upstream pushes. Next: user continues Vrazka's quest from the recovery or a new game; full quest-triggered ship exit and later campaign progression remain unverified. A new game is recommended for a completely corrected distribution of initial loot across already initialized world areas; the recovery is limited to the five audited ship containers.
+
+
+## Captain cutscene and scripted departure, 10 September 2026
+
+The user’s slot 11 is a pre-captain checkpoint. All tests load a private copy, move the player next to Jorn, open the normal dialogue, and select “Anything new?” / “More or less.” No quest flag is forced, no camera is forcibly released, and no user save is patched.
+
+### Confirmed causes
+
+1. After loading, LeGo’s `_ANIM8_FFLOOP` recurring animation update was absent. `Q101_SHIP_FINISHCUTSCENE` reached the normal fade function, but the animation stayed at alpha 0 indefinitely. The script therefore never called `Q101_SHIP_TELEPORTNPC_FADESCREEN`. Register the animation callback using LeGo’s own `FF_APPLYONCEGT` during load restoration.
+2. The subsequent ship departure stalled waiting for Rupert to swim. His installed `T_CUTSCENEJUMP_START` animation exists and carries MOVE | FLY flags, but `AI_PlayAni` supplied BS_NONE. Ordinary ground movement prevented the scripted jump from carrying him into the water. The NPC named-animation path now classifies an otherwise untyped flying transition as BS_JUMP, reusing existing vertical root motion, jump momentum and gravity handling. Explicit body states, normal player movement and non-NPC animations keep their existing paths. No animation name or quest is hardcoded into this fix.
+
+### Evidence
+
+- `work/captain-before`: normal Jorn and captain choices reproduce the reported freeze. Frames 5700–7800 repeatedly show camera active, dialogue closed, captain flag 6, fade state 1 and alpha 0.
+- `work/captain-anim-tick`: repeat reproduction, then register only `_ANIM8_FFLOOP` at frame 7000. The unchanged script immediately resumes, relocates actors to the deck, clears the fade and reaches the next Timo/captain choice. This separates the timer failure from the earlier trialogue warnings.
+- `work/captain-auto-anim`: automatic load restoration fixes the first freeze but exposes the later departure stop.
+- `work/captain-jump-trace`: Rupert’s custom jump is present and executed; he remains on deck and returns to his routine, while SHIP_FINAL_03 waits at flag 6.
+- `work/captain-jump-native`: native jump handling allows Rupert/Jorn to enter the water and the installed scripts advance through flags 8 and 11, reach the beach, clear the fade and return the camera. The private save ZIP is valid. This diagnostic run exited immediately after starting asynchronous saving and crashed during teardown; it is not a passing end-to-end result. The probe was corrected to wait for save finalization. No crashing candidate was installed in the playable app.
+
+### Scope and remaining compatibility gaps
+
+The main cutscene still emits legacy-memory/trialogue warnings: NPC visual impersonation, some face-animation callbacks, HUD/view fades and engine music hooks are incompletely supported. This milestone restores progression; it does not claim faithful multi-speaker presentation or complete LeGo memory emulation. The fixes do not persist the full legacy heap or arbitrary one-shot callbacks. The verified starting point is a save made before the captain event; loading mid-cutscene remains outside the tested contract.
+
+The repeatable runner is `tests/run_archolos_captain.py`. It preserves the source hash, chooses the captain’s first answer and the Timo intervention branch through the native dialogue UI, waits for normal camera return on shore, and writes a private save. `--skip-dialogue` uses the game’s existing phrase-skip handler after a short interval; final acceptance also needs a normal-duration run. Original assets, saves, cursor behavior and upstream repositories remain untouched.
+
+### Final full-duration replay
+
+`work/captain-final-full` passes without skipping voice lines. It selects the normal Jorn responses, the captain’s first answer and the Timo intervention branch, follows the scripted jumps, and reaches the beach at frame 18900 with captain flag 11, no active camera or dialogue, fade state/alpha zero and trialogue inactive. A private “Captain sequence test” save finishes, has a valid ZIP and quest/script payloads, and the process exits normally. Source slot 11 is unchanged. `captain-complete.png` was visually inspected and shows the normal third-person beach view.
+
+The post-save modal test initially received no keyboard events because the terminal-launched app had no Cocoa key window. No Save Game menu was reached; this was a replay limitation rather than evidence that game saving failed. The opt-in Tempest replay now falls back to a Tempest-owned window in the same process. It neither activates nor injects input into other apps. Its input path is disabled during normal play. The previously passing full-sequence binary’s SHA-256 is f443eac5ec1248848ecb48ff7a69cae04f39b4cd87061c9cfcfefdd181113fb6; the final build additionally includes this diagnostic-only targeting adjustment.
+
+`work/captain-shore-save-local-window` passes with the final build: a fresh process loads the completed beach save, Escape opens MENU_GAME, Save Game accepts the typed name “ModalTest”, and a second private save is created. Both quest and player inventory payloads are byte-identical across this load/save round trip. ZIP integrity and source hashes pass. The earlier no-input runs (`captain-shore-save-reload`, `captain-shore-save-focused`) are excluded from acceptance.
+
+Final regressions: `work/gate-captain-closed` blocks the stairs; `work/gate-captain-open` permits passage through the opened mover. Both pass, exit normally and preserve their source save. These moving correctness checks are not a controlled performance comparison. Release build, whitespace checks and runner syntax checks pass.
+
+Installed in both bundles with SHA-256 `542b758243e8814d6925e54678509d0add889ca0fb3370f8d32683f49790aedf`. Previous playable executable is preserved at `work/Gothic2Notr-before-captain-fix`. Tempest local diagnostic checkpoint: `60b734c`. The user can load their existing pre-Jorn save (tested slot 11) using the unchanged launcher; no new game or recovery patch is needed for this fix. No private test save is copied into the playable directory.
+
+Next: normal story progression from the beach and broader dialogue/quest/world-transition checks. Only the first captain answer and the intervention branch are covered by this full replay; the other narrative branch is not yet verified. Cursor work remains deferred. All commits are local; nothing is pushed.

@@ -609,6 +609,10 @@ const Animation::Sequence* MdlVisual::startAnimAndGet(std::string_view name, uin
 
 const Animation::Sequence* MdlVisual::startAnimAndGet(Npc &npc, std::string_view name, uint8_t comb, BodyState bs) {
   const Animation::Sequence* sq  = solver.solveFrm(name);
+  // Scripted flying transitions need the same root motion/gravity handoff as
+  // ordinary jumps. AI_PlayAni supplies no body state for custom animations.
+  if(bs==BS_NONE && sq!=nullptr && sq->animCls==Animation::Transition && sq->isFly())
+    bs = BS_JUMP;
   if(skInst->startAnim(solver,sq,comb,bs,Pose::NoHint,npc.world().tickCount()))
     return sq;
   return nullptr;

@@ -1,0 +1,45 @@
+"""Replay Jorn/captain progression on a private pre-captain save."""
+import argparse
+import hashlib
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import zipfile
+
+p = argparse.ArgumentParser()
+for name in ("executable", "game", "save", "output"):
+    p.add_argument("--" + name, required=True, type=Path)
+p.add_argument("--skip-dialogue", action="store_true")
+a = p.parse_args()
+exe, game, save, out = (getattr(a, n).resolve() for n in ("executable", "game", "save", "output"))
+original = hashlib.sha256(save.read_bytes()).hexdigest()
+out.mkdir(parents=True, exist_ok=False)
+shutil.copy2(save, out / "save_slot_1.sav")
+(out / "source.sha256").write_text(original)
+(out / "Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")
+env = {k: v for k, v in os.environ.items() if not k.startswith("OPENGOTHIC_")}
+env.update(OPENGOTHIC_PROFILE="1", OPENGOTHIC_CAPTAIN_PROBE="1")
+if a.skip_dialogue:
+    env["OPENGOTHIC_CAPTAIN_SKIP"] = "1"
+try:
+    with (out / "terminal.log").open("w") as log:
+        result = subprocess.run([str(exe), "-g", str(game), "-game:TheChroniclesOfMyrtana.ini",
+            "-window", "-rt", "0", "-gi", "0", "-aa", "0", "-bl", "0", "-save", "1"],
+            cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=700)
+    assert result.returncode == 0, f"Game exited {result.returncode}"
+    trace = (out / "terminal.log").read_text(errors="replace")
+    for fn in ("DIA_JORN_Q101_WHATSUP_INFO", "DIA_JORN_Q101_WHATSUP_YES",
+               "TRIA_CAPTAIN_Q101_JORNTRIALOG_1", "TRIA_CAPTAIN_Q101_TIMOTRIALOG_NOTNECESSARY"):
+        assert "[CAPTAIN_PROBE] select " + fn in trace, "Missing dialogue choice: " + fn
+    assert "[CAPTAIN_PROBE] complete" in trace, "Cutscene did not return control"
+    assert "[CAPTAIN_PROBE] save finalized" in trace, "Save did not finish"
+    assert "camera=0 dialogue=0 flag=11 fade=0 alpha=0 tria=0" in trace
+    assert "[CAPTAIN_PROBE] registered animation tick" not in trace, "Test injected the fix"
+    with zipfile.ZipFile(out / "save_slot_2.sav") as z:
+        assert z.testzip() is None
+        assert b"Captain sequence test" in z.read("header")
+        assert z.read("game/quests") and z.read("game/daedalus")
+finally:
+    assert hashlib.sha256(save.read_bytes()).hexdigest() == original, "Source save changed"
+print(f"Evidence: {out}")

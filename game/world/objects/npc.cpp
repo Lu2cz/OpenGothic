@@ -2532,6 +2532,9 @@ void Npc::nextAiAction(AiQueue& queue, uint64_t dt) {
         }
       break;
     case AI_PlayAnim:{
+      if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr &&
+         act.s0.find("CUTSCENEJUMP")!=std::string::npos)
+        Log::i("[CAPTAIN_PROBE] animation npc=",displayName()," ani=",act.s0," exists=",visual.hasAnim(act.s0));
       owner.script().eventPlayAni(*this, act.s0);
       if(auto sq = playAnimByName(act.s0,BS_NONE)) {
         implAniWait(uint64_t(sq->totalTime()));

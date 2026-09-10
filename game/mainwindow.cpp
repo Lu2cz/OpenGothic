@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "world/triggers/cscamera.h"
 #include "world/objects/item.h"
 #include "world/objects/interactive.h"
 
@@ -1231,6 +1232,7 @@ void MainWindow::render(){
     static int lockProbeMana=0;
     static unsigned dialogProbeRounds=0;
     static bool dialogProbePending=false;
+    static bool captainProbeSaved=false;
     const auto profileNow = [] {
       return std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
       };
@@ -1245,6 +1247,15 @@ void MainWindow::render(){
       }
     const bool sampling = profileReady && profileEntry-loadedAt>=10000;
     if(sampling && profileAt==0) {
+      if(std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr) {
+        auto& w = *Gothic::inst().world();
+        auto& vm = w.script().getVm();
+        auto npc = w.findNpcByInstance(vm.find_symbol_by_name("NONE_1_JORN")->index());
+        auto pl = w.player();
+        pl->setPosition(npc->position()+Tempest::Vec3(120,0,0));
+        npc->startDialog(*pl);
+        Log::i("[CAPTAIN_PROBE] started Jorn dialogue");
+        }
       if(std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) {
         auto& w = *Gothic::inst().world();
         auto& vm = w.script().getVm();
@@ -1609,7 +1620,38 @@ void MainWindow::render(){
       }
     if(sampling && std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr && profileFrames==750)
       saveGame("save_slot_2.sav","Archolos loot recovery");
-    if(sampling && ++profileFrames==((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))) {
+    if(sampling && std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr && captainProbeSaved) {
+      Log::i("[CAPTAIN_PROBE] save finalized");
+      Tempest::SystemApi::exit();
+      }
+    if(sampling && std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr && !captainProbeSaved && profileFrames%300==0) {
+      auto& w = *Gothic::inst().world();
+      auto& vm = w.script().getVm();
+      for(auto name : {"NONE_7_RUPERT","NONE_1_JORN"}) {
+        auto n = w.findNpcByInstance(vm.find_symbol_by_name(name)->index());
+        if(n!=nullptr) {
+          auto p=n->position();
+          Log::i("[CAPTAIN_PROBE] npc=",name," pos=",p.x,",",p.y,",",p.z," bs=",int(n->bodyStateMasked()));
+          }
+        }
+      Log::i("[CAPTAIN_PROBE] camera_name=",w.currentCs()!=nullptr ? w.currentCs()->name() : "none");
+      Log::i("[CAPTAIN_PROBE] frame=",profileFrames," camera=",w.currentCs()!=nullptr,
+             " dialogue=",dialogs.isActive()," flag=",vm.find_symbol_by_name("Q101_CAPTAIN_CUTSCENEENABLE")->get_int(),
+             " fade=",vm.find_symbol_by_name("FADESCREENSTATE")->get_int(),
+             " alpha=",vm.find_symbol_by_name("FADESCREENCURRA")->get_int(),
+             " tria=",vm.find_symbol_by_name("TRIA_RUNNING")->get_int(),
+             " player_y=",w.player()->position().y);
+      if(vm.find_symbol_by_name("Q101_CAPTAIN_CUTSCENEENABLE")->get_int()==11 &&
+         vm.find_symbol_by_name("FADESCREENSTATE")->get_int()==0 &&
+         w.currentCs()==nullptr && !Gothic::inst().camera()->isCutscene() && !dialogs.isActive()) {
+        Log::i("[CAPTAIN_PROBE] complete");
+        auto shot = renderer.screenshoot(cmdId);
+        device.readPixels(textureCast<const Texture2d&>(shot)).save("captain-complete.png");
+        captainProbeSaved=true;
+        saveGame("save_slot_2.sav","Captain sequence test");
+        }
+      }
+    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,

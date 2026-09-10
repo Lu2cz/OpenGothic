@@ -212,6 +212,12 @@ void DirectMemory::tick(uint64_t dt) {
       vm.call_function("MEM_InitAll");
       vm.call_function(init);
       }
+    // LeGo registers this recurring animation update during its own load hook.
+    // Without it, newly created fades never finish or call their continuation.
+    if(auto anim = vm.find_symbol_by_name("_ANIM8_FFLOOP")) {
+      if(vm.find_symbol_by_name("FF_APPLYONCEGT")!=nullptr)
+        vm.call_function("FF_APPLYONCEGT",int32_t(anim->index()));
+      }
     }
 
   //TODO: propper hook-engine
