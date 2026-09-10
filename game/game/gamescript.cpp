@@ -299,6 +299,7 @@ void GameScript::initCommon() {
   bindExternal("ai_pointatnpc",                  &GameScript::ai_pointatnpc);
 
   bindExternal("mob_hasitems",                   &GameScript::mob_hasitems);
+  bindExternal("mob_createitems",                &GameScript::mob_createitems);
   bindExternal("ai_printscreen",                 &GameScript::ai_printscreen);
 
   bindExternal("ta_min",                         &GameScript::ta_min);
@@ -656,6 +657,8 @@ void GameScript::loadVar(Serialize &fin) {
         break;
       }
     }
+  if(dma!=nullptr)
+    dma->onLoad();
   }
 
 void GameScript::savePerc(Serialize& fout) {
@@ -3254,6 +3257,25 @@ int GameScript::ai_printscreen(std::string_view msg, int posx, int posy, std::st
     }
   npc->aiPush(AiQueue::aiPrintScreen(timesec,font,posx,posy,msg));
   return 0;
+  }
+
+void GameScript::mob_createitems(std::string_view tag, int item, int amount) {
+  if(tag.empty() || item<=0 || amount<=0)
+    return;
+  auto sym=vm.find_symbol_by_index(uint32_t(item));
+  if(sym==nullptr || sym->type()!=zenkit::DaedalusDataType::INSTANCE)
+    return;
+  auto cls = sym;
+  while(cls!=nullptr && cls->type()!=zenkit::DaedalusDataType::CLASS)
+    cls = vm.find_symbol_by_index(uint32_t(cls->parent()));
+  if(cls==nullptr || cls->name()!="C_ITEM")
+    return;
+  auto& w=world();
+  for(uint32_t i=0;auto mob=w.mobsiById(i);++i)
+    if(mob->tag()==tag && mob->isContainer()) {
+      mob->inventory().addItem(size_t(item),size_t(amount),w);
+      return;
+      }
   }
 
 int GameScript::mob_hasitems(std::string_view tag, int item) {

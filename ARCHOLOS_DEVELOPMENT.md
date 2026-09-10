@@ -6,9 +6,9 @@ Working branch: `archolos/performance-v092`, based on OpenGothic v0.92. The newe
 
 Workspace and user-facing evidence: `/Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues`. Launcher and reports are under `outputs`; proprietary game data, saves, benchmark runs, and extraction tools are under `work` and are not committed.
 
-## Current milestone: actual modal journal scrolling and in-game saving
+## Current milestone: Vrazka stash and initial container loot
 
-The user confirms XP notices and both recipe displays work. Their follow-up disproved the earlier journal-scrolling acceptance: the detached dispatcher check missed a macOS modal event-loop defect. A replacement real-modal test now passes. Saving also had an inaccessible menu entry, diagnosed below. Installation and final regression results are recorded in the latest milestone. Cursor work remains deferred.
+The latest installed milestone restores the timed stash reveal, fixes whitespace in initial container inventories, and implements the follow-up container-item call. A separate recovery save preserves the user’s gameplay state while restoring missing ship loot. See the final milestone for evidence and limits; full campaign compatibility remains unverified.
 
 # Archolos: first performance milestone
 
@@ -275,3 +275,45 @@ Player slot-7 SHA-256: `09e4ffadba119604a4896b53b2e2c73c543f69db26134da782c4f32d
 Installed milestone: full PlayerControl cast, rejection checks, private save creation and fresh-process chest reload all pass. work/dialog-lock-regression also passes XP +50 delivery, automatic Willem greeting and two dialogue exits. Release build and whitespace checks pass. The tested executable is installed in ArcholosFast.app with SHA-256 `d8766a3a5895bf188ca9ed5ad9055d844ae625a09a20011b813ba49656251969`; previous executable preserved at work/Gothic2Notr-before-open-lock-fix. Launcher, user saves, proprietary data and cursor code are unchanged. Nothing is pushed upstream.
 
 Next acceptance: the user continues from their existing pre-chest save using the spell, then progresses through the remaining opening quest. Quest-triggered ship-bar opening and later campaign transitions remain unverified.
+
+
+## Vrazka stash and missing ship loot, 10 September 2026
+
+The user reported that Vrazka's “Examine the boards” never became actionable, and the stove chest contained only sticks. They explicitly requested a fresh game for loot reproduction. Current source save: work/playable/save_slot_9.sav. Tests use private directories; cursor work remains deferred.
+
+### Causes and implementation
+
+1. **Container-content whitespace.** Installed ARCHOLOS_MAINLAND.ZEN specifies the stove chest as four sticks, one knife, two torches and eleven gold. Every entry after the first begins with a space. Interactive::implAddItem passed that space into script-symbol lookup, silently losing the later items. The same defect removed the box from Vrazka's hidden stash, and items from the spell chest and barrels. Trim item tokens before lookup, including whitespace immediately before a colon. Existing inventory parsing/count behavior is retained. This applies to newly initialized containers throughout the game.
+2. **Frozen quest timers and missing registration after loading.** DirectMemory's mapped oGame.TIMESTEP stayed zero, so LeGo TIMERGT treated gameplay as paused. Full save loading also restores script variables but not the allocated frame-callback registry. Populate TIMESTEP from the actual simulation step; after loading, initialize Ikarus and invoke the mod's INIT_QUESTSEVENTSMANAGER once to restore its normal recurring dispatcher. No Q101 quest flag is patched; its own installed script tests distance, writes the log entry and triggers the mover. This deliberately restores the recurring quest manager, not arbitrary one-shot callbacks or the entire legacy heap. General callback/heap persistence remains incomplete.
+3. **Follow-up container item.** The real Vrazka return function calls MOB_CREATEITEMS to put her broken box in KM_VRAZKA. The engine previously logged “not implemented call [MOB_CREATEITEMS]”. Add that external using native container inventories, matching the first named container like existing MOB_HASITEMS. Reject invalid item types, nonpositive counts and empty targets. All script callers use this shared implementation.
+
+Fabio is different: B_CREATEAMBIENTINV chooses a random inventory set. Installed bytecode confirms the farmer set used by Fabio has one branch without gold; the other branches contain coins. Fresh runtime tests show five gold through the normal ransack iterator, while the player's save has zero. No evidence supports adding guaranteed gold or changing this random selection.
+
+The supplied GameFAQs URL returned a Cloudflare challenge to the attempted fetch. Guide contents were not independently read; the user's observations were compared with installed v1.2.11 data/bytecode and the v1.2.7 reference decompilation. Exact item names/counts above come from the installed world.
+
+### Reproduction evidence
+
+- work/stash-before: copied slot 9 at the amulet waypoint remains flag 1 and boards height -4092.44, below the floor.
+- work/loot-fresh-before: actual -nomenu new game gives four sticks only; the hidden stash contains eight gold only. Fabio has five gold and it appears in the ransack iterator.
+- work/stash-direct-before: directly invoking the installed callback changes flag 1 to 2, isolating the scheduling failure from the quest condition.
+- work/stash-init-candidate and work/stash-restore-candidate: normal timer dispatch changes flag 1 to 2 and the mover raises the boards to -1882.19. The latter uses production load restoration, without test initialization or direct quest invocation.
+- work/loot-fresh-fixed: actual new game creates all four stove-chest item types and all four hidden-stash item types, plus the previously missing spell-chest/barrel loot.
+- work/stash-repaired-test: a copied save with only the verified skipped ship items restored naturally reveals the boards, finds “Examine the boards” through World::findFocus, opens the normal chest inventory and writes a private save. No already collected first entry is refilled.
+- work/stash-return-before: fresh-process reload preserves the raised boards and recovered loot; taking the box and invoking the return script consumes it, but reveals the missing MOB_CREATEITEMS external. The updated checker rejects this trace.
+- work/stash-return-fixed: a diagnostic-only attempt to call that external with vm.call_function crashed because that API jumps to script bytecode, not native externals. Removed the incorrect test invocation. This executable was never installed in the playable app; validation now uses the quest's actual external-call instruction.
+
+The reusable runner is tests/run_archolos_stash.py. Modes: fresh creates a new game; stash tests normal approach/focus/opening on an accepted-quest save; return additionally transfers the box through Npc::addItem and calls the existing return script; repair preserves the player's location and restores only entries supplied in an explicit local recovery file. All modes write to new directories, verify source hashes and validate their output saves. Return is a script/inventory integration check, not full physical conversation replay. Its assertion also requires the follow-up broken box to be created in KM_VRAZKA. An initial candidate incorrectly tested whether the item symbol already held an initialized instance; the corrected implementation checks its declared C_ITEM ancestry so never-before-created items work.
+
+Recovery entries are extracted from the installed ship containers' whitespace-prefixed tokens, held in work/ship-missing-items.txt outside Git. The diagnostic repair rejects ambiguous target names, invalid items and any item already present, and never automatically runs from the normal launcher. The recovered ship save does not reconstruct arbitrary already initialized mainland containers. A new game is the clean baseline for complete world loot after this parsing fix.
+
+
+Additional acceptance:
+- work/stash-return-verified passes: reloaded boards focus/open, box transfer gives one box, the return script consumes it and creates exactly one broken box in KM_VRAZKA; no unsupported MOB_CREATEITEMS call remains. 900 frames, normal exit.
+- work/ship-recovery-final generates the five repaired inventories from the original slot 9. Normal timer execution during this donor run also changes a journal entry, so that whole generated save is deliberately not delivered. tests/recover_archolos_containers.py merges only the five audited inventory ZIP entries into the untouched source, renames the save, and verifies every other gameplay entry remains byte-identical. Player/NPC inventories, quest progression, script variables, position and world state are preserved exactly in recovered.sav.
+
+- work/stash-recovery-reload: exact merged recovery loads, naturally changes the stash flag from 1 to 2, raises the boards, finds their focus label, opens the inventory and creates a valid private save. The first checker matched the initial hidden-board inventory dump; its regex now targets the explicit final boards trace, and rechecking the captured run passes.
+- work/dialog-stash-regression: XP +50 notification, automatic Willem greeting and both exits pass after the load/runtime changes.
+
+Installation: tested SHA-256 9e41794d68231c5a07a72423c909ee8139c8c013df02261579549944896a184f in both diagnostic and playable bundles. Previous playable executable: work/Gothic2Notr-before-stash-loot-fix. The exact recovered copy is installed as work/playable/save_slot_10.sav, titled “Archolos loot recovery”; slots 1–9 retain their original hashes. The source is the user's slot 9. No item is inserted into the player's inventory and no quest is force-completed in this delivered recovery.
+
+Release build, whitespace checks and Python syntax checks pass. No cursor changes or upstream pushes. Next: user continues Vrazka's quest from the recovery or a new game; full quest-triggered ship exit and later campaign progression remain unverified. A new game is recommended for a completely corrected distribution of initial loot across already initialized world areas; the recovery is limited to the five audited ship containers.

@@ -4,6 +4,8 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
+#include <iomanip>
 
 #include <Tempest/Except>
 #include <Tempest/Painter>
@@ -1243,6 +1245,57 @@ void MainWindow::render(){
       }
     const bool sampling = profileReady && profileEntry-loadedAt>=10000;
     if(sampling && profileAt==0) {
+      if(std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) {
+        auto& w = *Gothic::inst().world();
+        auto& vm = w.script().getVm();
+        auto& pl = *w.player();
+        Log::i("[STASH_PROBE] begin flag=",vm.find_symbol_by_name("Q101_VRAZKACHEST")->get_int());
+        if(auto path=std::getenv("OPENGOTHIC_STASH_REPAIR_FILE")) {
+          std::ifstream input(path);
+          std::string target, item;
+          size_t count=0;
+          while(input >> std::quoted(target) >> item >> count) {
+            Interactive* found=nullptr;
+            for(uint32_t i=0;auto mob=w.mobsiById(i);++i)
+              if(mob->isContainer() && (mob->tag()==target || mob->displayName()==target)) {
+                if(found!=nullptr)
+                  throw std::runtime_error("Ambiguous container repair target");
+                found=mob;
+                }
+            if(found==nullptr || count==0 || vm.find_symbol_by_name(item)==nullptr)
+              throw std::runtime_error("Invalid container repair entry");
+            auto id=vm.find_symbol_by_name(item)->index();
+            if(found->inventory().itemCount(id)!=0)
+              throw std::runtime_error("Repair would duplicate an existing item");
+            found->inventory().addItem(id,count,w);
+            Log::i("[STASH_PROBE] restored target=",target," item=",item," count=",count);
+            }
+          if(!input.eof())
+            throw std::runtime_error("Invalid container repair file");
+          }
+
+        for(uint32_t i=0;auto mob=w.mobsiById(i);++i) {
+          auto p = mob->position();
+          if(p.x<-35000 && p.x>-45000 && p.z<-150000 && p.z>-160000) {
+            Log::i("[STASH_PROBE] mob=",mob->tag()," name=",mob->displayName()," y=",p.y);
+            for(auto it=mob->inventory().iterator(Inventory::T_Inventory);it.isValid();++it)
+              Log::i("[STASH_PROBE] item=",vm.find_symbol_by_index(uint32_t(it->clsId()))->name()," count=",it.count());
+            }
+          }
+        auto fabio=w.findNpcByInstance(vm.find_symbol_by_name("NONE_5_FABIO")->index());
+        if(fabio) {
+          Log::i("[STASH_PROBE] Fabio gold=",fabio->inventory().goldCount());
+          for(auto it=fabio->inventory().iterator(Inventory::T_Ransack);it.isValid();++it)
+            Log::i("[STASH_PROBE] Fabio item=",vm.find_symbol_by_index(uint32_t(it->clsId()))->name()," count=",it.count());
+          }
+        pl.closeWeapon(true);
+        auto wp=w.findPoint("SHIP_BEGINNING_AMULET",false);
+        if(wp && std::getenv("OPENGOTHIC_STASH_KEEP_POSITION")==nullptr) {
+          pl.setPosition(wp->position());
+          pl.setDirection(wp->direction());
+          Log::i("[STASH_PROBE] approached waypoint");
+          }
+        }
       if(std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr) {
         auto& w = *Gothic::inst().world();
         auto& pl = *Gothic::inst().player();
@@ -1507,7 +1560,56 @@ void MainWindow::render(){
       const auto p=Gothic::inst().player()->position();
       Log::i("[GATE_INPUT] frame=",profileFrames," pos=",p.x,",",p.y,",",p.z," collision=",Gothic::inst().player()->hasCollision());
       }
-    if(sampling && ++profileFrames==((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))) {
+    if(sampling && std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr && profileFrames==300) {
+      auto& w=*Gothic::inst().world();
+      auto& pl=*w.player();
+      auto flag=w.script().getVm().find_symbol_by_name("Q101_VRAZKACHEST")->get_int();
+      Log::i("[STASH_PROBE] end flag=",flag);
+      for(uint32_t i=0;auto mob=w.mobsiById(i);++i)
+        if(mob->displayName()=="Examine the boards") {
+          Log::i("[STASH_PROBE] boards y=",mob->position().y);
+          if(flag==2 && std::getenv("OPENGOTHIC_STASH_KEEP_POSITION")==nullptr) {
+            auto pos=mob->position();
+            pos.y=w.findPoint("SHIP_BEGINNING_AMULET",false)->position().y;
+            pos.z+=100;
+            pl.setPosition(pos);
+            pl.setDirection(mob->position()-pos);
+            }
+          }
+      }
+    if(sampling && std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr && profileFrames==350 && std::getenv("OPENGOTHIC_STASH_KEEP_POSITION")==nullptr) {
+      auto& w=*Gothic::inst().world();
+      auto f=w.findFocus(Focus());
+      Log::i("[STASH_PROBE] focus=",f.displayName());
+      if(f.interactive && f.displayName()=="Examine the boards")
+        inventory.open(*w.player(),*f.interactive);
+      }
+    if(sampling && std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr && profileFrames==650) {
+      Log::i("[STASH_PROBE] chest_ui=",int(inventory.isOpen()));
+      if(std::getenv("OPENGOTHIC_STASH_RETURN")!=nullptr && inventory.isOpen()==InventoryMenu::State::Chest) {
+        auto& w=*Gothic::inst().world();
+        auto& pl=*w.player();
+        auto& vm=w.script().getVm();
+        auto id=vm.find_symbol_by_name("ITMIS_Q101_VRAZKACHEST")->index();
+        for(uint32_t i=0;auto mob=w.mobsiById(i);++i)
+          if(mob->displayName()=="Examine the boards")
+            pl.addItem(id,*mob,1);
+        auto vrazka=w.findNpcByInstance(vm.find_symbol_by_name("NONE_14_VRAZKA")->index());
+        Log::i("[STASH_PROBE] box_taken=",pl.inventory().itemCount(id));
+        if(vrazka) {
+          const auto broken=vm.find_symbol_by_name("ITMIS_Q101_VRAZKACHEST_BROKEN")->index();
+          const auto before=w.hasItems("KM_VRAZKA",broken);
+          w.script().invokeState(vrazka->handlePtr(),pl.handlePtr(),"DIA_VRAZKA_Q101_GOTCHEST_INFO");
+          Log::i("[STASH_PROBE] followup_created=",w.hasItems("KM_VRAZKA",broken)-before);
+
+          Log::i("[STASH_PROBE] box_after_return=",pl.inventory().itemCount(id));
+          }
+        }
+      inventory.close();
+      }
+    if(sampling && std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr && profileFrames==750)
+      saveGame("save_slot_2.sav","Archolos loot recovery");
+    if(sampling && ++profileFrames==((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,

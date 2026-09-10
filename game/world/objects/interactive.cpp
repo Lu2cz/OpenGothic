@@ -642,9 +642,14 @@ float Interactive::qDistTo(const Npc &npc, const Interactive::Pos &to) const {
   }
 
 void Interactive::implAddItem(std::string_view name) {
+  const auto first = name.find_first_not_of(" \t\r\n");
+  if(first==std::string_view::npos)
+    return;
+  name = name.substr(first, name.find_last_not_of(" \t\r\n")-first+1);
   size_t sep = name.find(':');
   if(sep!=std::string::npos) {
     auto itm = name.substr(0,sep);
+    itm = itm.substr(0,itm.find_last_not_of(" \t\r\n")+1);
     long count = std::strtol(name.data()+sep+1,nullptr,10);
     if(count>0)
       invent.addItem(itm,size_t(count),world);

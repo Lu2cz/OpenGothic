@@ -202,6 +202,18 @@ bool DirectMemory::isRequired(zenkit::DaedalusScript& vm) {
   }
 
 void DirectMemory::tick(uint64_t dt) {
+  memGame.TIMESTEP = floatBitsToInt(float(dt));
+  if(restoreQuestCallbacks) {
+    restoreQuestCallbacks = false;
+    // Saves restore script globals, but not LeGo's allocated callback handles.
+    // Re-register the mod's recurring quest dispatcher without rerunning world
+    // startup or resetting NPC routines. One-shot callback persistence is separate.
+    if(auto init = vm.find_symbol_by_name("INIT_QUESTSEVENTSMANAGER")) {
+      vm.call_function("MEM_InitAll");
+      vm.call_function(init);
+      }
+    }
+
   //TODO: propper hook-engine
   if(auto* sym = vm.find_symbol_by_name("_FF_Hook")) {
     vm.call_function(sym);

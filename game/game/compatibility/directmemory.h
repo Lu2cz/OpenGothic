@@ -21,6 +21,7 @@ class DirectMemory {
 
     // hooks
     void        tick(uint64_t dt);
+    void        onLoad() { restoreQuestCallbacks = true; }
     void        eventPlayAni(std::string_view ani);
 
   private:
@@ -55,6 +56,8 @@ class DirectMemory {
     zenkit::DaedalusVm& vm;
     Mem32               mem32;
     Cpu32               cpu;
+
+    bool        restoreQuestCallbacks = false;
 
     uint32_t    versionHint     = 504628679; // G2
     //int32_t     invMaxItems     = 9;
