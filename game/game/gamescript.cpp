@@ -1116,7 +1116,7 @@ int GameScript::invokeState(Npc* npc, Npc* oth, Npc* vic, ScriptFn fn) {
   return ret;
   }
 
-void GameScript::invokeItem(Npc *npc, ScriptFn fn) {
+void GameScript::invokeItem(Npc *npc, Item& item, ScriptFn fn) {
   if(fn==size_t(-1) || fn == 0)
     return;
   auto functionSymbol = vm.find_symbol_by_index(uint32_t(fn.ptr));
@@ -1125,6 +1125,7 @@ void GameScript::invokeItem(Npc *npc, ScriptFn fn) {
     return;
 
   ScopeVar self(*vm.global_self(), npc->handlePtr());
+  ScopeVar currentItem(*vm.global_item(), item.handlePtr());
   vm.call_function<void>(functionSymbol);
   }
 
