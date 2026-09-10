@@ -8,7 +8,7 @@ Workspace and user-facing evidence: `/Users/lu2/Documents/Codex/2026-09-09/https
 
 ## Current milestone: Trialogue speaker labels and exact subtitle lookup
 
-Forest and captain replays now display the script-selected speaker, and empty cutscene output no longer displays an unrelated line. Normal-duration forest dialogue returns control and saves. New Game is recommended for a clean loot baseline; original saves remain intact. Full cutscene choreography and campaign completion remain unverified.
+Forest and captain replays now display the script-selected speaker, and empty cutscene output no longer displays an unrelated line. Normal-duration forest dialogue returns control and saves. New Game is recommended for a clean loot baseline; all previous saves were subsequently deleted at the user’s request. Full cutscene choreography and campaign completion remain unverified.
 
 # Archolos: first performance milestone
 
@@ -424,3 +424,15 @@ Final acceptance: work/trialog-forest-final replays at normal voice durations (n
 Installed in both app bundles with SHA-256 615ae8183a8599f88ddec62f10de18943ddcb1239e1de5d24ca9240da0db888f. Previous playable binary preserved at work/Gothic2Notr-before-trialogue-fixes. All fifteen user saves retain their recorded hashes. Release build, whitespace checks, Python syntax checks and the focused lookup regression pass. The launcher remains unchanged. Evidence: outputs/archolos-trialogue-fix.json and outputs/archolos-trialogue-fix.patch (includes opt-in dialog tracing and the local ZenKit dependency patch).
 
 Next: clean-playthrough progression toward Silbach, further dialogue and world-transition coverage. Old saves remain useful for targeted testing; no recovery save is produced for this batch.
+
+## Save reset requested by the user, 10 September 2026
+
+The user explicitly requested deletion of all saves. Deleted all 145 Archolos save files in this workspace: 15 playable slots and 130 benchmark, recovery, backup and source copies, totalling 3,400,164,289 bytes. A ZIP-header scan found no additional renamed save archives; a final scan found no remaining .sav files. Game data, installers, source, compiled apps, settings, logs and reports remain intact. No new save backup was retained.
+
+Earlier preservation statements describe the historical tests, not the current filesystem. Regression runners still exist, but their old source checkpoints must now be regenerated from a new game before replay. Start New Game with the existing launcher. Deletion inventory: outputs/archolos-save-deletion.json.
+
+## Current-upstream migration assessment, 10 September 2026
+
+Fetched upstream origin/master at 711a69cb (75 commits beyond our v0.92 starting revision 2855fa51) in /Users/lu2/projects/OpenGothic. A git merge-tree trial against our functional milestone 2089182a leaves both checkouts unchanged. Git follows the game/ -> common/ source reorganization and automatically merges most touched engine code. Two unresolved paths are reported: common/world/objects/item.cpp (new bboxMesh/addDynamicObj API versus our older bbox()/dynamicObj spelling) and lib/Tempest (the newer submodule commit is not checked out locally and needs deliberate dependency migration). This is a source-level feasibility check, not a compiled or tested migration.
+
+Recommendation: create a separate branch/check-out based on current upstream, carry the final production fixes and needed tests forward, adapt to current engine/dependency APIs, then rebuild and regenerate regression checkpoints from a fresh game. Retain the working v0.92 app as the fallback until the newer build passes. Review instrumentation separately instead of treating every diagnostic/revert commit as production work. ZenKit and Tempest local changes must be included deliberately. A GitHub fork remains optional; no fork, branch migration, upstream push or PR was created by this assessment.
