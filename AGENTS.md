@@ -10,3 +10,5 @@
 - Read `ARCHOLOS_DEVELOPMENT.md` before continuing. Update it at verified milestones with cause, change, tests, limitations, and next steps; keep the user-facing status report in sync. Ship-bar, dialogue/XP-notification, recipe, and journal-scrolling regression checks are available under tests/.
 
 - Cursor changes were reverted after the user reported broken mouse look. Leave cursor behavior alone until explicitly requested again.
+
+- Beach milestone: dropped-torch collision mesh selection and stale movement in TELEPORTNPCTOWP are fixed locally. tests/run_archolos_captain.py now requires Ezekiel seated at departure completion; tests/run_archolos_beach.py covers sustained sitting, torch gravity, fresh corpse loot and private save/reload. User slot 13 (“Archolos beach recovery”) preserves slot 12 outside Ezekiel data/visual and Urs inventory. All prior saves are preserved. Next: beach dialogue and the route to Silbach. Recovery remains limited; other old mainland loot and already-floating torches are not retroactively repaired.

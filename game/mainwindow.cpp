@@ -1233,6 +1233,10 @@ void MainWindow::render(){
     static unsigned dialogProbeRounds=0;
     static bool dialogProbePending=false;
     static bool captainProbeSaved=false;
+    static bool beachProbeSaved=false;
+    static size_t beachTorchCount=0;
+    static Item* beachTorch=nullptr;
+    static float beachTorchStartY=0;
     const auto profileNow = [] {
       return std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
       };
@@ -1247,6 +1251,50 @@ void MainWindow::render(){
       }
     const bool sampling = profileReady && profileEntry-loadedAt>=10000;
     if(sampling && profileAt==0) {
+      if(auto mode=std::getenv("OPENGOTHIC_BEACH_PROBE")) {
+        auto& w = *Gothic::inst().world();
+        auto& vm = w.script().getVm();
+        if(std::string_view(mode)=="repair") {
+          auto* n = w.findNpcByInstance(vm.find_symbol_by_name("NONE_3_EZEKIEL")->index());
+          auto* wp = n->currentTaPoint();
+          if(wp==nullptr || wp->name!="PART_13_DARRYL_DEAD" ||
+             vm.find_symbol_by_name("Q101_CAPTAIN_CUTSCENEENABLE")->get_int()!=11)
+            throw std::runtime_error("Beach recovery requires Ezekiel's existing Pray routine");
+          n->resumeAiRoutine();
+          n->attachToPoint(nullptr);
+          n->setPosition(wp->position());
+          n->setDirection(wp->direction());
+          Log::i("[BEACH_PROBE] recovered Ezekiel's existing routine");
+          for(auto entry : {std::pair{"ITSC_LIGHTHEAL",size_t(1)},std::pair{"ITMI_GOLD",size_t(13)}}) {
+            auto id=vm.find_symbol_by_name(entry.first)->index();
+            Interactive* corpse=nullptr;
+            for(uint32_t i=0;auto mob=w.mobsiById(i);++i)
+              if(mob->tag()=="Q101_URS_BODY") {
+                if(corpse!=nullptr)
+                  throw std::runtime_error("Ambiguous corpse recovery target");
+                corpse=mob;
+                }
+            if(corpse==nullptr || corpse->inventory().itemCount(id)!=0)
+              throw std::runtime_error("Corpse recovery would duplicate an item");
+            corpse->inventory().addItem(id,entry.second,w);
+            }
+          }
+        for(uint32_t i=0;auto mob=w.mobsiById(i);++i) {
+          if(mob->tag()!="Q101_URS_BODY")
+            continue;
+          for(auto it=mob->inventory().iterator(Inventory::T_Inventory);it.isValid();++it)
+            Log::i("[BEACH_PROBE] corpse item=",vm.find_symbol_by_index(uint32_t(it->clsId()))->name()," count=",it.count());
+          }
+        if(std::string_view(mode)!="fresh") {
+          auto id=vm.find_symbol_by_name("ITLSTORCHBURNING")->index();
+          while(w.findItemByInstance(id,beachTorchCount)!=nullptr)
+            ++beachTorchCount;
+          auto& pl = *w.player();
+          pl.closeWeapon(true);
+          pl.setTorch(true);
+          Log::i("[BEACH_PROBE] torch equipped=",pl.isUsingTorch());
+          }
+        }
       if(std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr) {
         auto& w = *Gothic::inst().world();
         auto& vm = w.script().getVm();
@@ -1627,11 +1675,11 @@ void MainWindow::render(){
     if(sampling && std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr && !captainProbeSaved && profileFrames%300==0) {
       auto& w = *Gothic::inst().world();
       auto& vm = w.script().getVm();
-      for(auto name : {"NONE_7_RUPERT","NONE_1_JORN"}) {
+      for(auto name : {"NONE_7_RUPERT","NONE_1_JORN","NONE_3_EZEKIEL"}) {
         auto n = w.findNpcByInstance(vm.find_symbol_by_name(name)->index());
         if(n!=nullptr) {
           auto p=n->position();
-          Log::i("[CAPTAIN_PROBE] npc=",name," pos=",p.x,",",p.y,",",p.z," bs=",int(n->bodyStateMasked()));
+          Log::i("[CAPTAIN_PROBE] npc=",name," pos=",p.x,",",p.y,",",p.z," bs=",int(n->bodyStateMasked())," wp=",n->handle().wp);
           }
         }
       Log::i("[CAPTAIN_PROBE] camera_name=",w.currentCs()!=nullptr ? w.currentCs()->name() : "none");
@@ -1651,7 +1699,57 @@ void MainWindow::render(){
         saveGame("save_slot_2.sav","Captain sequence test");
         }
       }
-    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u))))) {
+    if(sampling && std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr) {
+      auto& w = *Gothic::inst().world();
+      auto& vm = w.script().getVm();
+      const bool fresh=std::string_view(std::getenv("OPENGOTHIC_BEACH_PROBE"))=="fresh";
+      if(beachProbeSaved) {
+        Log::i("[BEACH_PROBE] save finalized");
+        Tempest::SystemApi::exit();
+        }
+      if(!fresh) {
+        if(profileFrames==30)
+          player.onKeyPressed(KeyCodec::Weapon,Event::K_NoKey,KeyCodec::Mapping(0));
+        if(profileFrames==31)
+          player.clearInput();
+        if(profileFrames==120)
+          w.player()->closeWeapon(true);
+        if(beachTorch==nullptr) {
+          beachTorch=w.findItemByInstance(vm.find_symbol_by_name("ITLSTORCHBURNING")->index(),beachTorchCount);
+          if(beachTorch!=nullptr) {
+            beachTorchStartY=beachTorch->position().y;
+            Log::i("[BEACH_PROBE] torch spawned dynamic=",beachTorch->isDynamic()," y=",beachTorchStartY);
+            }
+          }
+        if(profileFrames%120==0) {
+          auto* n = w.findNpcByInstance(vm.find_symbol_by_name("NONE_3_EZEKIEL")->index());
+          auto* wp = n->currentWayPoint();
+          auto* ta = n->currentTaPoint();
+          auto p = n->position();
+          Log::i("[BEACH_PROBE] frame=",profileFrames," ezekiel=",p.x,",",p.y,",",p.z,
+                 " sitting=",(n->bodyStateMasked()&BS_MAX)==(BS_SIT&BS_MAX)," wp=",n->handle().wp,
+                 " current=",wp ? wp->name : "none"," routine=",ta ? ta->name : "none");
+          if(beachTorch) {
+            auto p = beachTorch->position();
+            auto ground = w.physic()->landRay(p+Tempest::Vec3(0,50,0));
+            Log::i("[BEACH_PROBE] torch frame=",profileFrames," fall=",beachTorchStartY-p.y,
+                   " ground_distance=",p.y-ground.v.y," ground_hit=",ground.hasCol," held=",w.player()->isUsingTorch());
+            }
+          }
+        }
+      if(profileFrames==(fresh ? 180u : 1200u)) {
+        auto shot = renderer.screenshoot(cmdId);
+        device.readPixels(textureCast<const Texture2d&>(shot)).save("beach-complete.png");
+        if(fresh) {
+          Log::i("[BEACH_PROBE] fresh loot complete");
+          Tempest::SystemApi::exit();
+          } else {
+          beachProbeSaved=true;
+          saveGame("save_slot_2.sav","Beach compatibility test");
+          }
+        }
+      }
+    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,

@@ -170,6 +170,7 @@ DirectMemory::DirectMemory(GameScript& owner, zenkit::DaedalusVm& vm) : gameScri
     if(npcRef==nullptr || npcRef->user_ptr==nullptr)
       return;
     auto& npc = *reinterpret_cast<Npc*>(npcRef->user_ptr);
+    npc.clearGoTo();
     npc.setPosition (wp->position());
     npc.setDirection(wp->direction());
     });

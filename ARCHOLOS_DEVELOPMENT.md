@@ -6,9 +6,9 @@ Working branch: `archolos/performance-v092`, based on OpenGothic v0.92. The newe
 
 Workspace and user-facing evidence: `/Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues`. Launcher and reports are under `outputs`; proprietary game data, saves, benchmark runs, and extraction tools are under `work` and are not committed.
 
-## Current milestone: Captain cutscene and scripted departure
+## Current milestone: Beach routines and dropped torches
 
-The latest installed milestone restores the fade animation timer after loading and native jump handling for scripted flying transitions. The full captain/departure replay reaches the beach with a normal camera and passes a fresh-process menu save round trip. See the final milestone for tested branches and remaining limits; full campaign compatibility remains unverified.
+Scripted teleports now cancel stale NPC travel, so Ezekiel reaches his sitting routine after departure. Dropped torches use their supplied collision mesh and fall normally. Slot 13 (“Archolos beach recovery”) preserves slot 12’s progression while recovering Ezekiel and Urs’s omitted loot. See the final milestone for tests and limits; full campaign compatibility remains unverified.
 
 # Archolos: first performance milestone
 
@@ -355,3 +355,40 @@ Final regressions: `work/gate-captain-closed` blocks the stairs; `work/gate-capt
 Installed in both bundles with SHA-256 `542b758243e8814d6925e54678509d0add889ca0fb3370f8d32683f49790aedf`. Previous playable executable is preserved at `work/Gothic2Notr-before-captain-fix`. Tempest local diagnostic checkpoint: `60b734c`. The user can load their existing pre-Jorn save (tested slot 11) using the unchanged launcher; no new game or recovery patch is needed for this fix. No private test save is copied into the playable directory.
 
 Next: normal story progression from the beach and broader dialogue/quest/world-transition checks. Only the first captain answer and the intervention branch are covered by this full replay; the other narrative branch is not yet verified. Cursor work remains deferred. All commits are local; nothing is pushed.
+
+
+## Dropped torches, Ezekiel on the beach, and Urs loot, 10 September 2026
+
+The user reported a torch hanging in mid-air after drawing a weapon, Ezekiel leaving the beach instead of sitting beside a corpse, and missing loot from the corpse they called Ulf. Installed data identifies the corpse as Urs (`Q101_URS_BODY`). User slot 12 (“ch1”) is preserved as work/beach-player-source.sav with SHA-256 31d6a9e1dfb9714e7d5ae40ddb29153b0e8086a3b39cb982d132edb802d7f9f9. Diagnostics use private copies. The user closed the playable app when asked to avoid resource contention.
+
+### Causes and changes
+
+1. **Torch physics:** ItemTorchBurning already supplies the burned-torch mesh as its collision shape because its displayed visual is a ZEN composition. Item::setPhysicsEnable(const ProtoMesh*) ignored that argument and checked the displayed mesh instead; the displayed mesh is absent, so the dropped torch received no rigid body. Use the supplied mesh and its bounds. Drawing a weapon now drops a physically simulated torch; Bullet can deactivate the body normally after it settles. This is the shared mesh-based item-physics initializer, not an Archolos item-name patch.
+2. **Ezekiel walking away:** the saved routine table correctly contains Pray/PART_13_DARRYL_DEAD, but the active state and navigation still target SHIP_EZEKIEL_02/FP_SHIP_IDLE_01. The native TELEPORTNPCTOWP adapter moved the NPC without cancelling ongoing travel. Npc::tick services travel before its AI queue, so the queued AI_ContinueRoutine waited for the old trip to finish. Clear the active navigation before the teleport, allowing the existing queued routine continuation to execute. The same compatibility adapter serves other callers. No NPC name, quest flag, routine change or forced sitting is added to production code.
+3. **Urs loot:** installed ARCHOLOS_MAINLAND.ZEN specifies `ItMi_Pocket:1, itsc_lightheal:1, itmi_gold:13`. The earlier whitespace parser fix covers new games. Old saves retain the missing second and third entries because these world containers were already initialized. No new loot-parser change is needed. Recovery is explicitly limited to this corpse and Ezekiel; other omitted loot in already initialized old saves remains a limitation.
+
+### Diagnosis evidence and excluded attempts
+
+- work/beach-before: copied completed-departure save shows Ezekiel walking toward the ship despite his beach schedule; dropped torch is static at roughly hand height. This run timed out while the playable app was also running. Its trace establishes the symptoms, not a passing completed test or a performance result.
+- work/beach-torch-resume: corrected bounds make the torch fall to the ground. A diagnostic direct resume at frame 240 changes Ezekiel to the correct state, but he is already far offshore and cannot return. This is an isolation experiment, not a complete fix.
+- work/beach-clear-goto: clearing only navigation releases the queued routine change. A prototype attempted vm.call_function on TELEPORTNPCTOWP, which bypasses ZenKit’s native BL override and therefore did not replay the intended teleport. That misleading replay was removed. Neither prototype is accepted as end-to-end verification. Final proof uses the real departure script.
+
+### Repeatable acceptance
+
+- tests/run_archolos_captain.py now also asserts that Ezekiel has reached his beach waypoint and is sitting at departure completion. work/captain-beach-navigation replays the actual Jorn/captain/Timo choices and native script calls with phrase skipping enabled, reaches shore, restores camera/control and finalizes a valid private save. Ezekiel is seated at (-46922.80, -1903.86, -144937.81). The previous milestone separately verified full-duration voices; this run does not claim another full-duration replay.
+- tests/run_archolos_beach.py supports observe (no NPC repair), repair (explicit private donor generation), and fresh (new-game loot audit). It draws a weapon through PlayerControl after attaching a torch, detects the new dropped item, checks its physical fall and ground contact, requires sustained stationary sitting, and waits for save finalization. Preparation attaches the torch directly; it does not replay selecting it in the inventory.
+- work/beach-after-departure: fresh-process load of the naturally completed departure save; Ezekiel remains seated, and the torch falls about 80 cm and rests with its center about 16 cm above the ground. Valid save, normal exit, source hash unchanged.
+- work/beach-player-repair: private copy of slot 12; resume only Ezekiel’s already selected Pray routine at its existing waypoint and restore one missing healing scroll and 13 gold in Urs. The pouch is not refilled, no quest variable is forced, and no item is inserted into the player’s inventory. Seated NPC, torch drop and loot checks pass; a private donor save finishes.
+
+The one-time work/merge-beach-recovery.py validates the preserved source hash and entity identities, then copies only NPC 3’s data/visual and mobsi 312’s inventory from the donor into the original slot-12 ZIP. It renames the copy “Archolos beach recovery”. All other entries—including player state, inventory, quest/script state, other NPCs and world state—are byte-identical. Recovery SHA-256: 17646fc766baef446486fc3be034ef86ea03accc7cf522467d27df3400de209c. Audit: work/beach-recovery-audit.json.
+
+- work/beach-recovery-reload: the exact merged recovery loads without a repair probe; all three corpse items are present, Ezekiel remains stationary and seated, the newly dropped torch lands, and another valid private save finalizes. Original and merged source hashes remain unchanged.
+- The first fresh-game checker unnecessarily expected a save during the opening scene, when saving is intentionally blocked. It verified the loot but was excluded from full acceptance. The checker now treats fresh mode as a loot audit and exits without attempting an ineligible save. This diagnostic-only correction does not change normal saving or the production fixes.
+
+- work/beach-fresh-loot-final passes: actual new game has pouch, Heal Light Wounds scroll and 13 gold through the normal inventory iterator, and exits cleanly. No original world archive is edited.
+
+Final installation: both app bundles contain executable SHA-256 `0c0b88b54c3e315c95bbbbe6169d9517a5c75959dfbec600f0fec2f0a51e13c3`. The previous playable binary is preserved as work/Gothic2Notr-before-beach-fixes. Added “Archolos beach recovery” in slot 13; all twelve prior saves retain their hashes. The recovery comes from the user's slot 12 and was verified in a fresh process before delivery. The original slot 12 remains available.
+
+Release build, whitespace and runner syntax checks pass. The only final rebuild after the successful recovery reload changes the opt-in fresh-test exit path; production behavior is unchanged. No cursor edits or upstream pushes. The two production changes are one line in TELEPORTNPCTOWP and use of the supplied collision-mesh bounds in Item. Production diff: outputs/archolos-beach-fixes.patch; evidence: outputs/archolos-beach-fixes.json.
+
+Next: continue beach dialogue and the route toward Silbach from slot 13. Full campaign/world-transition coverage remains unverified. Already-floating torches in older saves are not retroactively simulated; new torch drops use the fix. The corpse recovery repairs only Urs, not every old mainland inventory. Other teleports that bypass TELEPORTNPCTOWP are outside this specific navigation fix.

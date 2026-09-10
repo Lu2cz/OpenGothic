@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import zipfile
@@ -36,6 +37,9 @@ try:
     assert "[CAPTAIN_PROBE] save finalized" in trace, "Save did not finish"
     assert "camera=0 dialogue=0 flag=11 fade=0 alpha=0 tria=0" in trace
     assert "[CAPTAIN_PROBE] registered animation tick" not in trace, "Test injected the fix"
+    ezekiel = re.findall(r"npc=NONE_3_EZEKIEL pos=([^ ]+) bs=(\d+) wp=(\S+)", trace)
+    assert ezekiel and int(ezekiel[-1][1]) & 31 == 11, "Ezekiel did not sit after departure"
+    assert ezekiel[-1][2] == "PART_13_DARRYL_DEAD", "Ezekiel retained his ship routine"
     with zipfile.ZipFile(out / "save_slot_2.sav") as z:
         assert z.testzip() is None
         assert b"Captain sequence test" in z.read("header")
