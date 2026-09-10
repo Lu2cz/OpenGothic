@@ -240,3 +240,38 @@ Replacement https://github.com/Try/Tempest/pull/100 is open and also reports Lin
 Assessment: a useful lead about startup/focus/hover cursor state, with no verified drop-in macOS solution. Our macOS backend still handles native hide/show and cursor warping separately. In this checkout ordinary mouse-move camera input is fullscreen-gated, while dragging has its own enabled path. These interactions require reproduction and actual camera-motion tests before any further cursor change is installed. No cursor source changes or app replacements were made for this review. The user authorized investigating this link; installation of an unverified cursor candidate is not part of the review.
 
 Next gameplay checks, in priority order: actual cooking (ingredients consumed, meal produced, progression updated), completing the opening quest and opening the ship gate through the quest's real script, then natural travel/chapter/world transitions with save checkpoints. These are unverified flows, not confirmed new failures. Known lower-priority compatibility gaps include LOG_MOVETOTOP ordering, LeGo notification styling, and unsupported legacy runtime hooks. Reproduce a player-visible consequence before broad compatibility work.
+
+
+## Open Lock spell blocker, 10 September 2026
+
+The user confirms actual cooking works and asks that cursor behavior remain unchanged. Their next natural opening-quest blocker is targeting a chest with Open Lock equipped. The current user save is work/playable/save_slot_7.sav; all diagnostics use private copies.
+
+Reproduction and isolation:
+- work/lock-before: at the saved position, unarmed focus is Chest / Q101_CHEST_01, lock code LLL, uncracked. Drawing the existing spell gives Mage state / spell 103, but focus becomes empty. Casting raises the same unbound OCNPC.FOCUS_VOB error present in the user's normal log.
+- Installed v1.2.11 bytecode confirms SPELL_PICKLOCK uses target type 128, focus collection, range 550 and azimuth 20. SPELL_LOGIC_PICKLOCK accesses native oCNpc focus and oCMobLockable memory. The v1.2.7 reference is broadly consistent, but its cast-delay tail differs from installed bytecode.
+- work/lock-focus-only: adding locked-object targeting selects Q101_CHEST_01 with the spell drawn. Casting still fails on OCNPC.FOCUS_VOB, proving targeting alone is insufficient.
+- work/lock-native-cast: the native compatibility adapter unlocks the chest through the NPC investment/cast animation flow; one scroll and one mana are consumed, and the normal chest inventory opens. 900 frames, normal exit, source save unchanged.
+
+Production changes:
+- Add the mod's locked-interactive target type. Use the active spell's range/azimuth for this type and filter to locked containers/doors. Existing ordinary spell, NPC, item and bow focus paths retain their policies.
+- Adapt SPELL_LOGIC_PICKLOCK in DirectMemory to native focus and lock state. Honor the code length and script mana-cost constant, reject invalid/unlocked targets, stop if the target changes, issue the existing unlock notice/sounds and perception event, and use the existing cracked flag that is already serialized. NPC casting and scroll consumption remain in their existing engine paths. No quest variable, chest inventory or game archive is patched.
+
+Limits: this adapter is for player Open Lock casts. Per-cast progress does not combine with partial conventional lockpicking, so the hybrid achievement is not implemented. It uses the engine spell definition's investment interval rather than the original script's randomized delay. General native oCNpc/oCMobLockable memory emulation and every theft-reaction hook remain outside this fix. These limits do not prevent the reproduced three-step ship chest unlock.
+
+
+Final acceptance checks:
+- work/lock-player-cast: the actual PlayerControl action/forward inputs perform the cast. Turning away, zero mana and an already cracked target are rejected through the mana-dispatch path before the valid cast. The valid cast unlocks the real chest, consumes exactly one scroll and one mana, and opens InventoryMenu::Chest. A private slot 2 is saved; existing quest payloads remain byte-identical. No script exception or translation failure occurs in the measured flow.
+- work/lock-reload: a fresh process loads that newly saved slot, finds Q101_CHEST_01 cracked and opens its normal chest inventory. No recast or save patch is used.
+
+`tests/run_archolos_lock.py` is the repeatable check. Use the player's supplied pre-chest save, local game data and a new output directory. It preserves source hashes, checks real runtime traces and private save integrity, and enforces a timeout. With `--mode reload`, pass the cast run's save_slot_2.sav and another new output directory. Rejected-target checks call the normal script mana dispatcher; the successful cast uses real PlayerControl actions and the NPC animation/cast loop. Chest access uses InventoryMenu::open, including its usual interaction/lock checks. These are in-process integration checks, not physical keyboard replay.
+
+```sh
+rtk proxy python3 /Users/lu2/projects/OpenGothic-v092/tests/run_archolos_lock.py --executable work/ArcholosProfile.app/Contents/MacOS/Gothic2Notr --game work/archolos-game --save work/playable/save_slot_7.sav --output work/lock-next --mode cast
+```
+
+Player slot-7 SHA-256: `09e4ffadba119604a4896b53b2e2c73c543f69db26134da782c4f32d8fbdce72`. The user may continue to change their saves; future tests should use a matching pre-chest checkpoint. No user save was overwritten by these tests.
+
+
+Installed milestone: full PlayerControl cast, rejection checks, private save creation and fresh-process chest reload all pass. work/dialog-lock-regression also passes XP +50 delivery, automatic Willem greeting and two dialogue exits. Release build and whitespace checks pass. The tested executable is installed in ArcholosFast.app with SHA-256 `d8766a3a5895bf188ca9ed5ad9055d844ae625a09a20011b813ba49656251969`; previous executable preserved at work/Gothic2Notr-before-open-lock-fix. Launcher, user saves, proprietary data and cursor code are unchanged. Nothing is pushed upstream.
+
+Next acceptance: the user continues from their existing pre-chest save using the spell, then progresses through the remaining opening quest. Quest-triggered ship-bar opening and later campaign transitions remain unverified.

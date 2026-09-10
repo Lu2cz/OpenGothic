@@ -1,4 +1,6 @@
 #include "mainwindow.h"
+#include "world/objects/item.h"
+#include "world/objects/interactive.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -1222,6 +1224,9 @@ void MainWindow::render(){
     static double loadedAt=0, profileAt=0, profileMs[7]={};
     static uint32_t profileFrames=0, profileSkipped=0;
     static Npc* dialogProbeNpc=nullptr;
+    static Interactive* lockProbeTarget=nullptr;
+    static size_t lockProbeScroll=0, lockProbeCount=0;
+    static int lockProbeMana=0;
     static unsigned dialogProbeRounds=0;
     static bool dialogProbePending=false;
     const auto profileNow = [] {
@@ -1238,6 +1243,28 @@ void MainWindow::render(){
       }
     const bool sampling = profileReady && profileEntry-loadedAt>=10000;
     if(sampling && profileAt==0) {
+      if(std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr) {
+        auto& w = *Gothic::inst().world();
+        auto& pl = *Gothic::inst().player();
+        auto active = pl.inventory().activeWeapon();
+        Log::i("[LOCK_PROBE] loaded weapon=",int(pl.weaponState())," spell=",active ? active->spellId() : -1);
+        pl.closeWeapon(true);
+        auto plain = w.findFocus(Focus());
+        Log::i("[LOCK_PROBE] unarmed focus=",plain.displayName()," mob=",plain.interactive ? plain.interactive->tag() : "none");
+        lockProbeTarget = plain.interactive;
+        if(plain.interactive)
+          Log::i("[LOCK_PROBE] code=",plain.interactive->pickLockCode()," cracked=",plain.interactive->isCracked());
+        if(std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="reload") {
+          if(lockProbeTarget)
+            inventory.open(pl,*lockProbeTarget);
+          Log::i("[LOCK_PROBE] reload cracked=",lockProbeTarget && lockProbeTarget->isCracked()," chest_ui=",int(inventory.isOpen()));
+          inventory.close();
+          } else {
+          auto spell = w.script().getVm().find_symbol_by_name("SPL_PICKLOCK");
+          Log::i("[LOCK_PROBE] draw=",pl.drawSpell(spell->get_int()));
+          }
+
+        }
       if(std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr) {
         auto& script = Gothic::inst().world()->script();
         auto& vm = script.getVm();
@@ -1327,6 +1354,51 @@ void MainWindow::render(){
       Log::i("[ARCHOLOS_BEGIN] width=",swapchain.w()," height=",swapchain.h(),
              " scale=",Gothic::inst().settingsGetI("INTERNAL","vidResIndex"));
 
+      }
+    if(sampling && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))!="reload" && profileFrames==100) {
+      auto& w = *Gothic::inst().world();
+      auto& pl = *Gothic::inst().player();
+      auto f = w.findFocus(Focus());
+      auto active = pl.inventory().activeWeapon();
+      Log::i("[LOCK_PROBE] armed weapon=",int(pl.weaponState())," spell=",active ? active->spellId() : -1," focus=",f.displayName()," mob=",f.interactive ? f.interactive->tag() : "none");
+      if(active) {
+        lockProbeScroll = active->clsId();
+        lockProbeCount = pl.inventory().itemCount(lockProbeScroll);
+        }
+      lockProbeMana = pl.attribute(ATR_MANA);
+      auto& sc = w.script();
+      const float facing = pl.rotation();
+      pl.setDirection(facing+180);
+      Log::i("[LOCK_PROBE] away_rejected=",sc.invokeMana(pl,nullptr,0)==SPL_SENDSTOP);
+      pl.setDirection(facing);
+      pl.changeAttribute(ATR_MANA,-lockProbeMana,false);
+      Log::i("[LOCK_PROBE] no_mana_rejected=",sc.invokeMana(pl,nullptr,0)==SPL_SENDSTOP);
+      pl.changeAttribute(ATR_MANA,lockProbeMana,false);
+      if(lockProbeTarget) {
+        lockProbeTarget->setAsCracked(true);
+        Log::i("[LOCK_PROBE] unlocked_rejected=",sc.invokeMana(pl,nullptr,0)==SPL_SENDSTOP);
+        lockProbeTarget->setAsCracked(false);
+        }
+      player.onKeyPressed(KeyCodec::ActionGeneric,Event::K_NoKey,KeyCodec::Mapping(0));
+      player.onKeyPressed(KeyCodec::Forward,Event::K_W,KeyCodec::Mapping(0));
+      Log::i("[LOCK_PROBE] cast input held");
+      }
+    if(sampling && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))!="reload" && profileFrames==700) {
+      auto& pl = *Gothic::inst().player();
+      player.clearInput();
+      Log::i("[LOCK_PROBE] complete cracked=",lockProbeTarget && lockProbeTarget->isCracked(),
+             " scroll_used=",int(lockProbeCount)-int(pl.inventory().itemCount(lockProbeScroll)),
+             " mana_used=",lockProbeMana-pl.attribute(ATR_MANA));
+      pl.closeWeapon(true);
+      if(lockProbeTarget)
+        inventory.open(pl,*lockProbeTarget);
+      }
+    if(sampling && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))!="reload" && profileFrames==890) {
+      Log::i("[LOCK_PROBE] chest_ui=",int(inventory.isOpen()));
+      inventory.close();
+      auto& pl = *Gothic::inst().player();
+      pl.setInteraction(nullptr,true);
+      saveGame("save_slot_2.sav","Open Lock test");
       }
     if(sampling && dialogProbeNpc!=nullptr) {
       if(dialogs.isNpcInDialog(dialogProbeNpc)) {
@@ -1435,7 +1507,7 @@ void MainWindow::render(){
       const auto p=Gothic::inst().player()->position();
       Log::i("[GATE_INPUT] frame=",profileFrames," pos=",p.x,",",p.y,",",p.z," collision=",Gothic::inst().player()->hasCollision());
       }
-    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))) {
+    if(sampling && ++profileFrames==((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,

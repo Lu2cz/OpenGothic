@@ -7,6 +7,10 @@
 #include <charconv>
 
 #include "world/objects/npc.h"
+#include "world/objects/interactive.h"
+#include "world/objects/item.h"
+#include "world/world.h"
+#include "world/focus.h"
 #include "gothic.h"
 
 using namespace Tempest;
@@ -1867,6 +1871,50 @@ void DirectMemory::setupNpcFunctions() {
   }
 
 void DirectMemory::setupWorldFunctions() {
+  if(vm.find_symbol_by_name("SPELL_LOGIC_PICKLOCK")!=nullptr &&
+     vm.find_symbol_by_name("SPL_PICKLOCK")!=nullptr) {
+    // The script implements this using oCNpc/oCMobLockable memory and x86 hooks.
+    // Use native targeting/locks while leaving casting and scroll use to Npc.
+    vm.override_function("SPELL_LOGIC_PICKLOCK", [this, target=static_cast<Interactive*>(nullptr)](int mana) mutable -> int {
+      auto npc = gameScript.world().player();
+      if(npc==nullptr || vm.global_self()->get_instance()!=npc->handlePtr())
+        return SPL_SENDSTOP;
+      auto& world = npc->world();
+      auto focus = world.findFocus(*npc,Focus()).interactive;
+      if(focus==nullptr || !focus->isLocked())
+        return SPL_SENDSTOP;
+      if(focus->pickLockCode().empty()) {
+        if(auto msg = vm.find_symbol_by_name("PRINT_NEVEROPEN"))
+          Gothic::inst().onPrint(msg->get_string());
+        return SPL_SENDSTOP;
+        }
+      auto cost = vm.find_symbol_by_name("SPL_COST_PICKLOCK");
+      const int required = cost!=nullptr ? cost->get_int() : 1;
+      if(required<=0 || npc->attribute(ATR_MANA)<required)
+        return SPL_SENDSTOP;
+      if(mana==0) {
+        target = focus;
+        return SPL_NEXTLEVEL;
+        }
+      if(target!=focus)
+        return SPL_SENDSTOP;
+      if(mana%required!=0)
+        return SPL_RECEIVEINVEST;
+      world.sendPassivePerc(*npc,*npc,*npc,PERC_ASSESSUSEMOB);
+      npc->emitSoundEffect("PICKLOCK_SUCCESS",2500,true);
+      // ponytail: progress is per cast; partial conventional lockpicking and its
+      // hybrid achievement need shared per-lock progress before they can combine.
+      if(size_t(mana/required)>=focus->pickLockCode().size()) {
+        focus->setAsCracked(true);
+        npc->changeAttribute(ATR_MANA,-required,false);
+        if(auto msg = vm.find_symbol_by_name("PRINT_PICKLOCK_UNLOCK"))
+          Gothic::inst().onPrint(msg->get_string());
+        Gothic::inst().emitGlobalSound("MFX_PICKLOCK_CAST");
+        return SPL_SENDCAST;
+        }
+      return SPL_RECEIVEINVEST;
+      });
+    }
   const ptr32_t OCWORLD__SEARCHVOBBYNAME_G2 = 7865872;
   cpu.register_thiscall(OCWORLD__SEARCHVOBBYNAME_G2, [](ptr32_t pWorld, std::string vob) {
     Log::e("LeGo: OCWORLD__SEARCHVOBBYNAME_G2(", vob, ")");

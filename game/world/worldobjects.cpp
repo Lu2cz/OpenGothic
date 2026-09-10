@@ -743,7 +743,7 @@ Interactive* WorldObjects::findInteractive(const Npc &pl, Interactive* def, cons
     return def;
   if(owner.view()==nullptr)
     return nullptr;
-  if(!bool(opt.collectType&TARGET_TYPE_ALL))
+  if(!bool(opt.collectType&(TARGET_TYPE_ALL|TARGET_TYPE_MOB)))
     return nullptr;
 
   Interactive* ret  = nullptr;
@@ -1041,6 +1041,10 @@ static bool checkFlag(Interactive& i,WorldObjects::SearchFlg f){
 
 template<class T>
 static bool checkTargetType(T&, TargetType) { return true; }
+
+static bool checkTargetType(Interactive& i, TargetType t) {
+  return t!=TARGET_TYPE_MOB || ((i.isContainer() || i.isDoor()) && i.isLocked());
+  }
 
 static bool checkTargetType(Npc& n, TargetType t) {
   return n.isTargetableBySpell(t);

@@ -425,6 +425,14 @@ Focus World::findFocus(const Npc &pl, const Focus& def) {
   WorldObjects::SearchOpt optMob {policy.mob_range1,  policy.mob_range2,  policy.mob_azi,  collAlgo};
   WorldObjects::SearchOpt optItm {policy.item_range1, policy.item_range2, policy.item_azi, collAlgo, collType};
 
+  if(pl.weaponState()==WeaponState::Mage && collType==TARGET_TYPE_MOB) {
+    const auto* weapon = pl.inventory().activeWeapon();
+    const auto& spl = script().spellDesc(weapon->spellId());
+    WorldObjects::SearchOpt lockOpt {0.f,float(spl.target_collect_range),float(spl.target_collect_azi),collAlgo,collType};
+    auto lock = wobj.findInteractive(pl,def.interactive,lockOpt);
+    return lock ? Focus(*lock) : Focus();
+    }
+
   if(pl.weaponState()==WeaponState::NoWeapon) {
     // used only for dialogs it seems
     optNpc.rangeMax = std::max(optNpc.rangeMax, policy.npc_longrange);
