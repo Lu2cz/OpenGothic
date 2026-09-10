@@ -1235,6 +1235,9 @@ void MainWindow::render(){
     static bool dialogProbePending=false;
     static bool captainProbeSaved=false;
     static bool beachProbeSaved=false;
+    static bool cityProbeSaved=false;
+    static Tempest::Vec3 cityWalkStart;
+    static double cityMeasuredAt=0;
     static bool forestProbeSaved=false;
     static size_t beachTorchCount=0;
     static Item* beachTorch=nullptr;
@@ -1251,7 +1254,8 @@ void MainWindow::render(){
         Gothic::inst().world()->execTriggerEvent(TriggerEvent("SHIP_TRAPDOOR", "", TriggerEvent::T_Trigger));
       loadedAt = profileEntry;
       }
-    if(profileReady && std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr &&
+    if(profileReady && (std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ||
+                        std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr) &&
        (video.isActive() || chapter.isActive())) {
       Log::i("[RECIPE_PROBE] dismiss opening video=",video.isActive()," chapter=",chapter.isActive());
       KeyEvent escape(Event::K_ESCAPE);
@@ -1261,6 +1265,30 @@ void MainWindow::render(){
       }
     const bool sampling = profileReady && profileEntry-loadedAt>=10000;
     if(sampling && profileAt==0) {
+      if(auto mode=std::getenv("OPENGOTHIC_CITY_PROBE")) {
+        auto& w = *Gothic::inst().world();
+        auto& vm = w.script().getVm();
+        auto* pl = w.player();
+        if(std::string_view(mode)=="create") {
+          Log::i("[CITY_PROBE] begin story-helper preset");
+          vm.find_symbol_by_name("STORYHELPERMAINSTORYLINE_CHAPTER2")->set_int(2);
+          w.script().invokeState(pl->handlePtr(),pl->handlePtr(),"STORYHELPER_MAINSTORYLINE_CHAPTER2_COMMON");
+          auto* wp = w.findPoint("PARTM2_MARKET_06",false);
+          if(wp==nullptr)
+            throw std::runtime_error("City market waypoint missing");
+          pl->clearAiQueue();
+          pl->clearState(true);
+          pl->clearGoTo();
+          pl->setInteraction(nullptr);
+          pl->setPosition(wp->position());
+          pl->setDirection(wp->direction());
+          pl->updateTransform();
+          Gothic::inst().camera()->reset(pl);
+          w.setDayTime(12,0);
+          }
+        Log::i("[CITY_PROBE] ready world=",w.name()," chapter=",vm.find_symbol_by_name("KAPITEL")->get_int(),
+               " entered=",vm.find_symbol_by_name("CITYENTERED")->get_int());
+        }
       if(auto mode=std::getenv("OPENGOTHIC_BEACH_PROBE")) {
         auto& w = *Gothic::inst().world();
         auto& vm = w.script().getVm();
@@ -1781,6 +1809,43 @@ void MainWindow::render(){
           }
         }
       }
+    if(sampling && std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr) {
+      auto& w = *Gothic::inst().world();
+      auto* pl = w.player();
+      if(cityProbeSaved) {
+        Log::i("[CITY_PROBE] save finalized");
+        Tempest::SystemApi::exit();
+        }
+      if(profileFrames==90) {
+        cityWalkStart = pl->position();
+        player.onKeyPressed(KeyCodec::Forward,Event::K_W,KeyCodec::Mapping(0));
+        }
+      if(profileFrames==150) {
+        player.clearInput();
+        Log::i("[CITY_PROBE] walked=",(pl->position()-cityWalkStart).length());
+        }
+      if(profileFrames==200)
+        cityMeasuredAt = profileNow();
+      if(profileFrames==600) {
+        size_t nearby = 0;
+        w.detectNpc(pl->position(),2000,[&](Npc& npc) { if(&npc!=pl) ++nearby; });
+        const auto pos = pl->position();
+        Log::i("[CITY_PROBE] settled fps=",400000.0/(profileNow()-cityMeasuredAt)," nearby=",nearby,
+               " pos=",pos.x,",",pos.y,",",pos.z," camera=",w.currentCs()!=nullptr," dialogue=",dialogs.isActive());
+        if(dialogs.isActive())
+          for(uint32_t i=0;i<w.npcCount();++i) {
+            auto* npc = w.npcById(i);
+            if(npc!=nullptr && dialogs.isNpcInDialog(npc))
+              Log::i("[CITY_PROBE] dialogue participant=",npc->displayName());
+            }
+        if(w.currentCs()!=nullptr || dialogs.isActive())
+          throw std::runtime_error("City exploration is blocked by a scene");
+        auto shot = renderer.screenshoot(cmdId);
+        device.readPixels(textureCast<const Texture2d&>(shot)).save("city-exploration.png");
+        cityProbeSaved=true;
+        saveGame("save_slot_2.sav","CITY EXPLORATION - Chapter 2");
+        }
+      }
     if(sampling && std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr) {
       auto& w = *Gothic::inst().world();
       auto& vm = w.script().getVm();
@@ -1831,7 +1896,7 @@ void MainWindow::render(){
           }
         }
       }
-    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u))))))) {
+    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u))))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,
