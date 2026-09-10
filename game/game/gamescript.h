@@ -157,6 +157,7 @@ class GameScript final {
     std::string_view spellCastAnim(Npc& npc, Item&  fn);
     std::string_view messageFromSvm(std::string_view id,int voice) const;
     std::string_view messageByName (std::string_view id) const;
+    Npc&             dialogSpeaker(Npc& npc);
     uint32_t         messageTime   (std::string_view id) const;
 
     void     printNothingToGet();
@@ -187,7 +188,7 @@ class GameScript final {
     struct GlobalOutput : AiOuputPipe {
       explicit GlobalOutput(GameScript& owner):owner(owner){}
 
-      bool output   (Npc &npc, std::string_view text) override;
+      bool output   (Npc &npc, std::string_view text, Npc* speaker) override;
       bool outputSvm(Npc& npc, std::string_view text) override;
       bool outputOv (Npc& npc, std::string_view text) override;
       bool printScr (Npc& npc, int time, std::string_view msg, int x,int y, std::string_view font) override;

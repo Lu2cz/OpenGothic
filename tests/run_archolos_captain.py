@@ -20,7 +20,7 @@ shutil.copy2(save, out / "save_slot_1.sav")
 (out / "source.sha256").write_text(original)
 (out / "Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")
 env = {k: v for k, v in os.environ.items() if not k.startswith("OPENGOTHIC_")}
-env.update(OPENGOTHIC_PROFILE="1", OPENGOTHIC_CAPTAIN_PROBE="1")
+env.update(OPENGOTHIC_PROFILE="1", OPENGOTHIC_CAPTAIN_PROBE="1", OPENGOTHIC_TRIALOG_TRACE="1")
 if a.skip_dialogue:
     env["OPENGOTHIC_CAPTAIN_SKIP"] = "1"
 try:
@@ -33,6 +33,12 @@ try:
     for fn in ("DIA_JORN_Q101_WHATSUP_INFO", "DIA_JORN_Q101_WHATSUP_YES",
                "TRIA_CAPTAIN_Q101_JORNTRIALOG_1", "TRIA_CAPTAIN_Q101_TIMOTRIALOG_NOTNECESSARY"):
         assert "[CAPTAIN_PROBE] select " + fn in trace, "Missing dialogue choice: " + fn
+    assert "Go bother someone else." not in trace, "Empty dialogue selected an unrelated subtitle"
+    assert "_TRIA_Copy: Invalid NPC" not in trace, "Legacy speaker swapping still ran"
+    for message, speaker in (("TRIA_Jorn_Q101_JornTrialog_01_03", "Jorn"),
+                             ("TRIA_Timo_Q101_TimoTrialog_06_03", "Timo")):
+        assert re.search(r"output=" + re.escape(message) + r" actor=.*? label=" + speaker + r" running=", trace), message
+    assert re.search(r"output=TRIA_Captain_Q101_TimoTrialog_08_04 actor=(.+?) label=\1 running=", trace)
     assert "[CAPTAIN_PROBE] complete" in trace, "Cutscene did not return control"
     assert "[CAPTAIN_PROBE] save finalized" in trace, "Save did not finish"
     assert "camera=0 dialogue=0 flag=11 fade=0 alpha=0 tria=0" in trace

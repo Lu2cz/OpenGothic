@@ -15,8 +15,8 @@
 
 using namespace Tempest;
 
-bool DialogMenu::Pipe::output(Npc &npc, std::string_view text) {
-  return owner.aiOutput(npc,text);
+bool DialogMenu::Pipe::output(Npc &npc, std::string_view text, Npc* speaker) {
+  return owner.aiOutput(npc,text,speaker);
   }
 
 bool DialogMenu::Pipe::outputSvm(Npc &npc, std::string_view text) {
@@ -152,6 +152,25 @@ void DialogMenu::tick(uint64_t dt) {
         }
       }
     }
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr &&
+     state==State::Active && current.time==0 && !haveToWaitOutput()) {
+    static std::vector<size_t> answered;
+    auto& vm = Gothic::inst().world()->script().getVm();
+    for(size_t i=0;i<choice.size();++i) {
+      auto id=choice[i].scriptFn;
+      const auto& name=vm.find_symbol_by_index(id)->name();
+      if(std::find(answered.begin(),answered.end(),id)!=answered.end())
+        continue;
+      if(name=="TRIA_FABIO_Q102_JORNTRIALOG_QUESTION1" || name=="TRIA_FABIO_Q102_JORNTRIALOG_QUESTION2" ||
+         name=="TRIA_FABIO_Q102_JORNTRIALOG_QUESTION_END_NEXT" || name=="TRIA_FABIO_Q102_JORNTRIALOG_QUESTION_GOWITHJORN") {
+        answered.push_back(id);
+        Log::i("[FOREST_PROBE] select ",name);
+        dlgSel=i;
+        onSelect();
+        break;
+        }
+      }
+    }
   if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_CAPTAIN_SKIP")!=nullptr &&
      current.time>0 && current.time+500<current.msgTime)
     skipPhrase();
@@ -172,7 +191,7 @@ Size DialogMenu::processTextMultiline(Painter* p, int x, int y, int w, int h, st
   Size ret = {0,0};
   if(!isPl && other!=nullptr) {
     y += fnt.pixelSize();
-    auto txt  = other->displayName();
+    auto& txt = current.speaker;
     auto sz   = fnt.textSize(w,txt.data());
     if(p!=nullptr)
       fnt.drawText(*p,x+(w-sz.w)/2,y,txt.data());
@@ -250,7 +269,7 @@ bool DialogMenu::isNpcInDialog(const Npc* npc) const {
   return npc==pl || npc==other || npc==nullptr;
   }
 
-bool DialogMenu::aiOutput(Npc &npc, std::string_view msg) {
+bool DialogMenu::aiOutput(Npc &npc, std::string_view msg, Npc* speaker) {
   if(&npc!=pl && &npc!=other){
     Log::e("unexpected aiOutput call: ",msg.data());
     return true;
@@ -258,6 +277,15 @@ bool DialogMenu::aiOutput(Npc &npc, std::string_view msg) {
 
   if(current.time>0)
     return false;
+
+  current.speaker = (speaker!=nullptr ? speaker : &npc)->displayName();
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_TRIALOG_TRACE")!=nullptr) {
+    auto& vm = Gothic::inst().world()->script().getVm();
+    auto value = [&](const char* name) { auto s=vm.find_symbol_by_name(name); return s!=nullptr ? s->get_int() : 0; };
+    Log::i("[TRIALOG] output=",msg," actor=",npc.displayName()," label=",pl==&npc ? "player" : current.speaker,
+           " running=",value("TRIA_RUNNING")," self=",value("TRIA_SELF")," last=",value("TRIA_LAST"),
+           " text=",Gothic::inst().messageByName(msg));
+    }
 
   if(pl==&npc) {
     if(other!=nullptr)

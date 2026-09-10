@@ -23,6 +23,7 @@ class DirectMemory {
     void        tick(uint64_t dt);
     void        onLoad() { restoreQuestCallbacks = true; }
     void        eventPlayAni(std::string_view ani);
+    Npc&        dialogSpeaker(Npc& npc);
 
   private:
     using ptr32_t      = Mem32::ptr32_t;
@@ -58,6 +59,7 @@ class DirectMemory {
     Cpu32               cpu;
 
     bool        restoreQuestCallbacks = false;
+    std::weak_ptr<zenkit::DaedalusInstance> triaSelf, triaSpeaker;
 
     uint32_t    versionHint     = 504628679; // G2
     //int32_t     invMaxItems     = 9;

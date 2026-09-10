@@ -1234,6 +1234,7 @@ void MainWindow::render(){
     static bool dialogProbePending=false;
     static bool captainProbeSaved=false;
     static bool beachProbeSaved=false;
+    static bool forestProbeSaved=false;
     static size_t beachTorchCount=0;
     static Item* beachTorch=nullptr;
     static float beachTorchStartY=0;
@@ -1294,6 +1295,20 @@ void MainWindow::render(){
           pl.setTorch(true);
           Log::i("[BEACH_PROBE] torch equipped=",pl.isUsingTorch());
           }
+        }
+      if(std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr) {
+        auto& w = *Gothic::inst().world();
+        auto& vm = w.script().getVm();
+        auto jorn = w.findNpcByInstance(vm.find_symbol_by_name("NONE_1_JORN")->index());
+        auto fabio = w.findNpcByInstance(vm.find_symbol_by_name("NONE_5_FABIO")->index());
+        auto wp = w.findPoint("PART_13_NAV_11",false);
+        jorn->clearGoTo();
+        jorn->setPosition(wp->position());
+        fabio->clearGoTo();
+        fabio->setPosition(wp->position()+Tempest::Vec3(100,0,0));
+        w.player()->setPosition(wp->position()+Tempest::Vec3(0,0,120));
+        fabio->startDialog(*w.player());
+        Log::i("[FOREST_PROBE] started Fabio dialogue");
         }
       if(std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr) {
         auto& w = *Gothic::inst().world();
@@ -1699,6 +1714,35 @@ void MainWindow::render(){
         saveGame("save_slot_2.sav","Captain sequence test");
         }
       }
+    if(sampling && std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr) {
+      auto& w = *Gothic::inst().world();
+      auto& vm = w.script().getVm();
+      if(forestProbeSaved) {
+        Log::i("[FOREST_PROBE] save finalized");
+        Tempest::SystemApi::exit();
+        }
+      if(!forestProbeSaved && profileFrames%300==0) {
+        const int chosen=vm.find_symbol_by_name("Q102_JORNCHOSEN")->get_int();
+        const int running=vm.find_symbol_by_name("TRIA_RUNNING")->get_int();
+        Log::i("[FOREST_PROBE] frame=",profileFrames," camera=",w.currentCs()!=nullptr," dialogue=",dialogs.isActive(),
+               " chosen=",chosen," tria=",running);
+        if(profileFrames==300 || profileFrames==600) {
+          auto shot = renderer.screenshoot(cmdId);
+          device.readPixels(textureCast<const Texture2d&>(shot)).save(profileFrames==300 ? "forest-line-300.png" : "forest-line-600.png");
+          }
+        if(chosen && !running && !dialogs.isActive() && w.currentCs()==nullptr) {
+          for(auto name : {"NONE_1_JORN","NONE_5_FABIO"}) {
+            auto n = w.findNpcByInstance(vm.find_symbol_by_name(name)->index());
+            if(&w.script().dialogSpeaker(*n)!=n)
+              throw std::runtime_error("Trialogue speaker leaked after finish");
+            }
+          Log::i("[FOREST_PROBE] speaker reset verified");
+          Log::i("[FOREST_PROBE] complete");
+          saveGame("save_slot_2.sav","Forest dialogue test");
+          forestProbeSaved=true;
+          }
+        }
+      }
     if(sampling && std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr) {
       auto& w = *Gothic::inst().world();
       auto& vm = w.script().getVm();
@@ -1749,7 +1793,7 @@ void MainWindow::render(){
           }
         }
       }
-    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))) {
+    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u))))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,

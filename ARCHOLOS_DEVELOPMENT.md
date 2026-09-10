@@ -6,9 +6,9 @@ Working branch: `archolos/performance-v092`, based on OpenGothic v0.92. The newe
 
 Workspace and user-facing evidence: `/Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues`. Launcher and reports are under `outputs`; proprietary game data, saves, benchmark runs, and extraction tools are under `work` and are not committed.
 
-## Current milestone: Beach routines and dropped torches
+## Current milestone: Trialogue speaker labels and exact subtitle lookup
 
-Scripted teleports now cancel stale NPC travel, so Ezekiel reaches his sitting routine after departure. Dropped torches use their supplied collision mesh and fall normally. Slot 13 (“Archolos beach recovery”) preserves slot 12’s progression while recovering Ezekiel and Urs’s omitted loot. See the final milestone for tests and limits; full campaign compatibility remains unverified.
+Forest and captain replays now display the script-selected speaker, and empty cutscene output no longer displays an unrelated line. Normal-duration forest dialogue returns control and saves. New Game is recommended for a clean loot baseline; original saves remain intact. Full cutscene choreography and campaign completion remain unverified.
 
 # Archolos: first performance milestone
 
@@ -392,3 +392,35 @@ Final installation: both app bundles contain executable SHA-256 `0c0b88b54c3e315
 Release build, whitespace and runner syntax checks pass. The only final rebuild after the successful recovery reload changes the opt-in fresh-test exit path; production behavior is unchanged. No cursor edits or upstream pushes. The two production changes are one line in TELEPORTNPCTOWP and use of the supplied collision-mesh bounds in Item. Production diff: outputs/archolos-beach-fixes.patch; evidence: outputs/archolos-beach-fixes.json.
 
 Next: continue beach dialogue and the route toward Silbach from slot 13. Full campaign/world-transition coverage remains unverified. Already-floating torches in older saves are not retroactively simulated; new torch drops use the fix. The corpse recovery repairs only Urs, not every old mainland inventory. Other teleports that bypass TELEPORTNPCTOWP are outside this specific navigation fix.
+
+
+## Trialogue speaker labels and unrelated startup subtitles, 10 September 2026
+
+The user reported Fabio's badge during Jorn's lines in the forest village/cave discussion, plus “Go bother someone else” at the start of multiple cutscenes. A private copy of slot 14 reproduces both through the normal Fabio dialogue entry. The probe positions the three participants at the forest meeting waypoint; it does not replay the walk there or force the information function directly.
+
+### Causes and implementation
+
+- ZenKit's CutsceneLibrary::block_by_name used lower_bound without checking equality. Empty or absent IDs returned the next sorted block. The installed English OU.BIN's first block is DIA_11075_Hobo_JustInCase_03_01, with exactly “Go bother someone else.” TRIA_STARTEXT queues AI_OUTPUT(HERO, SELF, ""); the lookup turned that empty command into the unrelated subtitle. Require an exact match in the shared library. This repairs absent IDs everywhere, not just Archolos startup.
+- LeGo emits all non-player trialogue lines through the original dialogue partner, using TRIA_NEXT plus native oCNpc memory swaps to impersonate the next speaker. OpenGothic neither performs those swaps nor implements AI_WAITTILLEND. Reading TRIA_LAST at playback is unreliable: callbacks can already have advanced or finished. The failed candidate work/trialog-forest-native demonstrates this and was never installed in the playable app. Its experimental wait-marker implementation was removed completely.
+- The native adapter wraps TRIA_STARTEXT/TRIA_NEXT/TRIA_FINISH while executing their original script bodies. It records the selected invited NPC during queue construction. Each AI_Output stores its optional speaker in the existing serialized NPC-reference field otherwise unused by that action (victim). Dialogue playback snapshots that NPC's display name. Original dialogue partner, choice handling, output order and inventory identity remain intact. _TRIA_COPY becomes a no-op; no NPC identity or equipment is swapped. The adapter resets capture after finish, and player/ordinary lines retain their original speaker.
+- The installed v1.2.11 bytecode was checked against the v1.2.7 reference for the relevant LeGo functions. No speaker is inferred from voice-number suffixes: the forest _05_10 line is explicitly selected as Jorn by the script and is tested as such.
+
+### Evidence and scope
+
+- Asset-free CutsceneLibrary.exact_lookup regression: empty library, empty key, missing keys before/between/after valid keys, and exact hits. Before: 3 failed assertions; after: 7/7 pass. Local ZenKit commit f3d4962. The existing proprietary fixture cases are not needed for this test.
+- work/trialog-forest-before: both symptoms reproduced, scene completes and private save finalizes. Original slot 14 unchanged.
+- work/trialog-forest-queued: corrected introductory/choice/final-line labels, no unwanted startup text or _TRIA_Copy errors, normal camera return, valid private save and unchanged source hash. Phrase skipping enabled.
+
+- work/trialog-captain-final: actual Jorn/captain/Timo choices reach the beach with normal camera, Ezekiel seated, and a finalized valid private save. Jorn/Timo labels and absence of the spurious startup text pass; ordinary Jorn/player speech also retains its correct identity. Phrase skipping enabled. The initial checker incorrectly required the captain's display name to be “Captain”; the installed script names him Beckett. The corrected check requires his own displayed name to match the emitting actor, and all original progression/save/hash checks were rechecked against the same successful (exit-code-zero) run. No game changes were needed for that checker correction.
+
+This milestone concerns subtitle identity and exact text lookup. Full NPC visual impersonation, face/gesture routing and AI_WAITTILLEND/camera choreography remain incomplete. No generic queue-wait implementation is shipped. Mid-cutscene reloads and the full legacy heap/callback persistence remain outside the tested contract. No cursor changes or upstream pushes.
+
+### Starting a clean playthrough
+
+New Game in the current build is the cleanest baseline for future campaign testing. Inventories already initialized by the old whitespace parser remain serialized in older saves, even if the player never opened those containers. Only affected item lists lose entries; it is not every chest. Worlds first initialized after the parser fix use the corrected parser. Slot-10 and slot-13 recoveries repair specific entities, not the entire world. Reinstallation is unnecessary, and all existing saves remain available.
+
+Final acceptance: work/trialog-forest-final replays at normal voice durations (no phrase skipping), checks sixteen specific NPC lines plus player dialogue, selects the normal question/route choices, verifies capture reset for Jorn/Fabio, and finishes with camera=0, dialogue=0, chosen=1, tria=0 at frame 6900. Private save ZIP and source hash pass; game exits normally. Renderer-only snapshots were inspected for scene continuity; they exclude UI and are not pixel evidence of subtitle labels. Native app screenshot access timed out. Label assertions cover the exact name field used by the subtitle renderer.
+
+Installed in both app bundles with SHA-256 615ae8183a8599f88ddec62f10de18943ddcb1239e1de5d24ca9240da0db888f. Previous playable binary preserved at work/Gothic2Notr-before-trialogue-fixes. All fifteen user saves retain their recorded hashes. Release build, whitespace checks, Python syntax checks and the focused lookup regression pass. The launcher remains unchanged. Evidence: outputs/archolos-trialogue-fix.json and outputs/archolos-trialogue-fix.patch (includes opt-in dialog tracing and the local ZenKit dependency patch).
+
+Next: clean-playthrough progression toward Silbach, further dialogue and world-transition coverage. Old saves remain useful for targeted testing; no recovery save is produced for this batch.

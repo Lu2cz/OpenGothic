@@ -1877,6 +1877,45 @@ void DirectMemory::tickUi(uint64_t dt) {
   }
 
 void DirectMemory::setupNpcFunctions() {
+  auto start = vm.find_symbol_by_name("TRIA_STARTEXT");
+  auto next = vm.find_symbol_by_name("TRIA_NEXT");
+  auto finish = vm.find_symbol_by_name("TRIA_FINISH");
+  auto running = vm.find_symbol_by_name("TRIA_RUNNING");
+  auto invited = vm.find_symbol_by_name("TRIA_NPCPTR");
+  auto count = vm.find_symbol_by_name("TRIA_CPTR");
+  if(start!=nullptr && next!=nullptr && finish!=nullptr && running!=nullptr &&
+     invited!=nullptr && count!=nullptr && vm.find_symbol_by_name("_TRIA_COPY")!=nullptr) {
+    // LeGo swaps oCNpc memory to impersonate speakers. Keep native NPCs intact
+    // and capture the intended speaker when each output is queued instead.
+    // ponytail: this covers subtitle identity; visual swaps and wait timing remain unsupported.
+    vm.override_function("_TRIA_COPY", [](int, int) {});
+    vm.override_function("TRIA_STARTEXT", [this,start,running](int turn) {
+      // call_function intentionally executes the script body, bypassing this override.
+      const bool alreadyRunning = running->get_int()!=0;
+      vm.call_function(start,turn);
+      if(!alreadyRunning && running->get_int()!=0) {
+        triaSelf = vm.global_self()->get_instance();
+        triaSpeaker = triaSelf;
+        }
+      });
+    vm.override_function("TRIA_NEXT", [this,next,running,invited,count](std::shared_ptr<zenkit::INpc> npc) {
+      vm.call_function(next,npc);
+      if(npc==nullptr || running->get_int()==0)
+        return;
+      for(int i=0;i<count->get_int() && i<invited->count();++i) {
+        if(mem_ptrtoinst(ptr32_t(invited->get_int(uint16_t(i))))==npc) {
+          triaSpeaker = npc;
+          break;
+          }
+        }
+      });
+    vm.override_function("TRIA_FINISH", [this,finish]() {
+      vm.call_function(finish);
+      triaSelf.reset();
+      triaSpeaker.reset();
+      });
+    }
+
   const ptr32_t OCNPC__GETSLOTITEM = 7544720;
   cpu.register_thiscall(OCNPC__GETSLOTITEM, [](ptr32_t pHero, std::string slot) {
     Log::e("LeGo: OCNPC__GETSLOTITEM(", slot, ")");
@@ -1887,6 +1926,15 @@ void DirectMemory::setupNpcFunctions() {
   cpu.register_thiscall(OCNPC__EQUIPWEAPON, [](ptr32_t pHero, ptr32_t pItem) {
     Log::e("LeGo: OCNPC__EQUIPWEAPON(", pItem, ")");
     });
+  }
+
+Npc& DirectMemory::dialogSpeaker(Npc& npc) {
+  if(triaSelf.lock()!=npc.handlePtr())
+    return npc;
+  auto speaker = std::dynamic_pointer_cast<zenkit::INpc>(triaSpeaker.lock());
+  if(speaker==nullptr || speaker->user_ptr==nullptr)
+    return npc;
+  return *static_cast<Npc*>(speaker->user_ptr);
   }
 
 void DirectMemory::setupWorldFunctions() {

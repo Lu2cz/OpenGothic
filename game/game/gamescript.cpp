@@ -51,8 +51,10 @@ struct ScopeCtx final {
   };
 
 
-bool GameScript::GlobalOutput::output(Npc& npc, std::string_view text) {
-  return owner.aiOutput(npc,text,false);
+bool GameScript::GlobalOutput::output(Npc& npc, std::string_view text, Npc* speaker) {
+  if(speaker!=nullptr)
+    npc.setAiOutputBarrier(owner.messageTime(text),false);
+  return owner.aiOutput(speaker!=nullptr ? *speaker : npc,text,false);
   }
 
 bool GameScript::GlobalOutput::outputSvm(Npc &npc, std::string_view text) {
@@ -1326,6 +1328,10 @@ std::string_view GameScript::messageByName(std::string_view id) const {
   if(msg == nullptr)
     return "";
   return msg->text;
+  }
+
+Npc& GameScript::dialogSpeaker(Npc& npc) {
+  return dma!=nullptr ? dma->dialogSpeaker(npc) : npc;
   }
 
 uint32_t GameScript::messageTime(std::string_view id) const {
@@ -2886,7 +2892,12 @@ void GameScript::ai_output(std::shared_ptr<zenkit::INpc> selfRef, std::shared_pt
     target = findNpc(vm.global_other());
 
   if(self!=nullptr && target!=nullptr) {
-    self->aiPush(AiQueue::aiOutput(*target,outputname,aiOutOrderId));
+    auto action = AiQueue::aiOutput(*target,outputname,aiOutOrderId);
+    auto& speaker = dialogSpeaker(*self);
+    // AI_Output does not otherwise use victim; it already serializes an NPC reference.
+    if(&speaker!=self)
+      action.victim = &speaker;
+    self->aiPush(std::move(action));
     ++aiOutOrderId;
     }
   }
