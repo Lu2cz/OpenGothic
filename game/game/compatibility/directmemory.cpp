@@ -283,6 +283,76 @@ void DirectMemory::clearNpcFocus(Npc& npc) {
   npc.handle().focus_vob = 0;
   }
 
+void DirectMemory::resetWorldReferences() {
+  for(auto it=scriptReferences.begin(); it!=scriptReferences.end();) {
+    auto context = it->first.first;
+    if(!dynamic_cast<zenkit::INpc*>(context.get()) && !dynamic_cast<zenkit::IItem*>(context.get())) {
+      ++it;
+      continue;
+      }
+    auto* ref = vm.find_symbol_by_index(it->first.second);
+    const auto ptr = it->second;
+    if(ref!=nullptr && ptr!=0) {
+      const uint32_t stride = ref->type()==zenkit::DaedalusDataType::STRING ? sizeof(zString) : 4;
+      const uint32_t size = ((uint32_t(ref->count())*stride+Mem32::memAlign-1)/Mem32::memAlign)*Mem32::memAlign;
+      bindReference(ref,nullptr,mem32.regionType(ptr,size));
+      }
+    // Keep the virtual block as a deleted-native tombstone. A recreated world
+    // object must receive a fresh mapping rather than inherit this one.
+    auto node = scriptReferences.extract(it++);
+    node.key().first.reset();
+    scriptReferences.insert(std::move(node));
+    }
+  if(auto* lastMob = vm.find_symbol_by_name("G_PICKLOCK.LASTMOB"))
+    lastMob->set_int(0);
+  }
+
+void DirectMemory::beginWorldTransitionProbe(Npc& npc, Interactive& lock) {
+  auto* ref = vm.find_symbol_by_name("C_NPC.AIVAR");
+  auto context = npc.handlePtr();
+  auto it = scriptReferences.find({context,ref->index()});
+  if(it==scriptReferences.end()) {
+    const auto type = Mem32::Type(uint32_t(Mem32::Type::firstScriptReference)+uint32_t(scriptReferences.size()));
+    bindReference(ref,context,type);
+    auto ptr = mem32.alloc(uint32_t(ref->count())*4,type);
+    it = scriptReferences.emplace(std::make_pair(context,ref->index()),ptr);
+    }
+  worldProbeReference = it->second;
+  mem32.writeInt(worldProbeReference+99*4,0x1234);
+  if(mem32.readInt(worldProbeReference+99*4)!=0x1234)
+    throw std::runtime_error("World-transition probe could not bind native reference");
+
+  setNpcFocus(npc,&lock,int(lock.lockpickProgress()));
+  auto* lastMob = vm.find_symbol_by_name("G_PICKLOCK.LASTMOB");
+  lastMob->set_int(npc.handle().focus_vob);
+  clearNpcFocus(npc);
+
+  worldProbeTimer = mem32.alloc(64);
+  mem32.writeInt(worldProbeTimer+24,int32_t(gameScript.tickCount()));
+  persistenceProbeRoot = worldProbeTimer;
+  auto* cb = vm.find_symbol_by_name("TIMER_SETPAUSE");
+  vm.call_function("FF_APPLYEXTDATAGT",int32_t(cb->index()),1000,1,int32_t(worldProbeTimer));
+  Log::i("[WORLD_PROBE] source native_ref=1 lock_address=",lock.lockAddress," pending=1");
+  }
+
+void DirectMemory::checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock) {
+  if(worldProbeReference==0 || worldProbeTimer==0 ||
+     mem32.readInt(worldProbeReference+99*4)!=0 || mem32.readInt(worldProbeTimer+4)!=1)
+    throw std::runtime_error("World-transition reference/callback regression");
+  auto* lastMob = vm.find_symbol_by_name("G_PICKLOCK.LASTMOB");
+  if(lastMob->get_int()!=0)
+    throw std::runtime_error("World-transition retained stale lock focus");
+  if(returnedLock!=nullptr) {
+    setNpcFocus(npc,returnedLock,int(returnedLock->lockpickProgress()));
+    if(npc.handle().focus_vob==0)
+      throw std::runtime_error("World-transition could not bind returned lock");
+    Log::i("[WORLD_PROBE] returned_lock_progress=",returnedLock->lockpickProgress(),
+           " lock_address=",returnedLock->lockAddress);
+    clearNpcFocus(npc);
+    }
+  Log::i("[WORLD_PROBE] destroyed_ref=0 callback_dispatches=1 stale_focus=0");
+  }
+
 void DirectMemory::probeLockFocus(Npc& npc, Interactive& lock, bool restored) {
   auto check = [](bool ok) { if(!ok) throw std::runtime_error("Lock focus regression failed"); };
   const auto offset = vm.find_symbol_by_name("OCMOBLOCKABLE.BITFIELD")->offset_as_member();

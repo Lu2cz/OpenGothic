@@ -1277,6 +1277,8 @@ void MainWindow::render(){
     static bool captainProbeSaved=false;
     static bool beachProbeSaved=false;
     static bool cityProbeSaved=false;
+    static bool worldProbeTransitioned=false;
+    static bool worldProbeSaved=false;
     static unsigned musicProbeStage=0;
     static double musicProbeAt=0;
     static Tempest::Vec3 cityWalkStart;
@@ -1638,6 +1640,60 @@ void MainWindow::render(){
         Gothic::inst().player()->stopItemStateAnim();
         if(recipeRereadFrame!=0)
           Log::i("[RECIPE_PROBE] end");
+        }
+      }
+    if(sampling && std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) {
+      const auto mode = std::string_view(std::getenv("OPENGOTHIC_WORLD_PROBE"));
+      auto& w = *Gothic::inst().world();
+      auto& pl = *w.player();
+      if(!worldProbeTransitioned && profileFrames==30) {
+        const bool toSewers = mode=="to-sewers";
+        const bool verifyMainland = mode=="verify-mainland";
+        const char* expected = (toSewers || verifyMainland) ? "ARCHOLOS_MAINLAND.ZEN" : "ARCHOLOS_SEWERS.ZEN";
+        if(w.name()!=expected)
+          throw std::runtime_error("World-transition probe started in the wrong world");
+        Interactive* lock = nullptr;
+        for(uint32_t id=0;auto* mob=w.mobsiById(id);++id)
+          if(((toSewers || verifyMainland) && mob->tag()=="Q101_CHEST_01") || (!toSewers && !verifyMainland && (mob->isContainer() || mob->isDoor()))) {
+            lock=mob;
+            break;
+            }
+        if(lock==nullptr)
+          throw std::runtime_error("World-transition probe lock missing");
+        if(verifyMainland) {
+          if(lock->lockpickProgress()!=1)
+            throw std::runtime_error("World-transition restart lost native lockpick progress");
+          Log::i("[WORLD_PROBE] restart_lock_progress=1 world=",w.name());
+          worldProbeTransitioned=worldProbeSaved=true;
+          saveGame("save_slot_2.sav","World transition compatibility test");
+          }
+        else {
+        w.script().beginWorldTransitionProbe(pl,*lock);
+        worldProbeTransitioned=true;
+        const char* target = toSewers ? "ARCHOLOS_SEWERS.ZEN" : "ARCHOLOS_MAINLAND.ZEN";
+        Log::i("[WORLD_PROBE] native_change target=",target," synthetic=1");
+        w.triggerChangeWorld(target,"");
+          }
+        }
+      const char* destination = mode=="to-sewers" ? "ARCHOLOS_SEWERS.ZEN" : "ARCHOLOS_MAINLAND.ZEN";
+      if(worldProbeTransitioned && !worldProbeSaved && w.name()==destination && profileFrames>=180) {
+        Interactive* returnedLock = nullptr;
+        if(mode=="to-mainland")
+          for(uint32_t id=0;auto* mob=w.mobsiById(id);++id)
+            if(mob->tag()=="Q101_CHEST_01") {
+              returnedLock=mob;
+              break;
+              }
+        if(mode=="to-mainland" && (returnedLock==nullptr || returnedLock->lockpickProgress()!=1))
+          throw std::runtime_error("World-transition lost native lockpick progress");
+        w.script().checkWorldTransitionProbe(pl,returnedLock);
+        Log::i("[WORLD_PROBE] save world=",w.name());
+        worldProbeSaved=true;
+        saveGame("save_slot_2.sav","World transition compatibility test");
+        }
+      if(worldProbeSaved) {
+        Log::i("[WORLD_PROBE] save finalized");
+        Tempest::SystemApi::exit();
         }
       }
     const bool lockProbeAction = sampling && lockProbeActionFrame!=profileFrames;
@@ -2166,7 +2222,7 @@ void MainWindow::render(){
           }
         }
       }
-    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u))))))) {
+    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u))))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,

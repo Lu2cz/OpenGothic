@@ -29,7 +29,10 @@ class DirectMemory {
     bool        setMusicZone(std::string_view zone, uint8_t tags);
     void        setNpcFocus(Npc& npc, Interactive* focus, int pickLockProgress);
     void        clearNpcFocus(Npc& npc);
+    void        resetWorldReferences();
     void        probeLockFocus(Npc& npc, Interactive& lock, bool restored);
+    void        beginWorldTransitionProbe(Npc& npc, Interactive& lock);
+    void        checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock);
     void        probePersistence(bool finish);
     void        save(Serialize& out);
     void        load(Serialize& in);
@@ -70,6 +73,8 @@ class DirectMemory {
 
     bool        restoreQuestCallbacks = false;
     ptr32_t     persistenceProbeRoot = 0;
+    ptr32_t     worldProbeReference  = 0;
+    ptr32_t     worldProbeTimer      = 0;
     std::weak_ptr<zenkit::DaedalusInstance> triaSelf, triaSpeaker;
 
     uint32_t    versionHint     = 504628679; // G2
