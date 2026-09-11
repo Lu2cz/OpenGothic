@@ -1,32 +1,67 @@
-# Local Archolos development
+# Archolos on macOS
 
-- Commit changes locally. Do not push, open pull requests, or submit anything upstream unless the user explicitly requests it.
-- When giving launch instructions, provide one pasteable Terminal command, not the launcher script body:
-  `rtk proxy /bin/zsh "/Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues/outputs/Play-Archolos.command"`
-- Prefix shell commands with `rtk`; use `rtk proxy` for commands without a filter.
-- Preserve the original game data, installers, and playtest save. Run benchmarks using independent save copies, without concurrent builds or other benchmark runs.
-- Ship bars and the reproduced Willem dialogue-exit failure are fixed locally. The user confirmed recipe learning/document generation and XP notices. Journal scrolling required a second fix in the macOS modal event loop; use tests/run_archolos_modal.py, not the removed detached-dialog test. The same runner tests actual pause-menu saving and can re-save its own output to check reloads. The user also confirms actual cooking works. Open Lock targeting/casting at ship chest Q101_CHEST_01 is fixed locally; tests/run_archolos_lock.py covers cast, invalid targets and reload. Vrazka stash reveal and initial container whitespace parsing are now fixed locally; tests/run_archolos_stash.py covers fresh loot, reveal/open, hand-in and reload. The user can load “Archolos loot recovery” in slot 10; original slot 9 is preserved. Recovery covers only five ship containers. Arbitrary LeGo one-shot callback persistence and already initialized mainland loot remain limitations. Captain/departure progression now passes through normal Jorn and captain choices to the beach, with a normal camera and a fresh-process menu save round trip; tests/run_archolos_captain.py covers the first captain answer and Timo intervention branch. Next: beach story progression, broader dialogue and world transitions. Legacy trialogue presentation and arbitrary one-shot callback persistence remain incomplete. The user has confirmed that loading a save restores quest progression and inventory.
+## Goal
+Make Archolos playable from beginning to end on the target Mac: reliable story
+progression, saves, essential gameplay/UI/audio, and acceptable performance.
+Full Windows DLL or general LeGo/Ikarus parity is not required.
 
-- Read `ARCHOLOS_DEVELOPMENT.md` before continuing. Update it at verified milestones with cause, change, tests, limitations, and next steps; keep the user-facing status report in sync. Ship-bar, dialogue/XP-notification, recipe, and journal-scrolling regression checks are available under tests/.
+## Sources of truth
+- Roadmap and completion contract: https://github.com/Lu2cz/OpenGothic/issues/1
+- Board: https://github.com/users/Lu2cz/projects/1
+- Evidence, scope, acceptance and progress: the assigned GitHub issue.
+- Implementation: commits and pull requests in Lu2cz's forks.
+- Build/test/launch environment: docs/archolos/environment.md.
+- Initial compatibility audit: docs/archolos/lego-ikarus-audit.md (dated evidence).
+- ARCHOLOS_DEVELOPMENT.md is historical; read only relevant sections.
+Do not duplicate the backlog or completed-work history here.
 
-- Cursor changes were reverted after the user reported broken mouse look. Leave cursor behavior alone until explicitly requested again.
+## Starting an issue
+- Read this file, the assigned issue, and relevant linked evidence/code.
+- Check branch, worktree changes and pinned dependencies before editing.
+- Use one substantial issue per Codex task and isolated branch/worktree.
+- Base issue branches on origin/archolos/performance-v092 until migration lands.
+- Use explicit --repo Lu2cz/OpenGothic for gh issues/PRs; origin is our fork.
+- Record the task link/ID, branch and worktree in the issue when starting.
+- Keep one active implementation/test run initially; coordinate builds/game runs
+  and installation into shared app bundles. Do not spawn agents without a request.
+- Advance the assigned scope autonomously; record newly found unrelated work in
+  linked issues rather than expanding this task into a library-wide rewrite.
 
-- Beach milestone: dropped-torch collision mesh selection and stale movement in TELEPORTNPCTOWP are fixed locally. tests/run_archolos_captain.py now requires Ezekiel seated at departure completion; tests/run_archolos_beach.py covers sustained sitting, torch gravity, fresh corpse loot and private save/reload. User slot 13 (“Archolos beach recovery”) preserves slot 12 outside Ezekiel data/visual and Urs inventory. All prior saves are preserved. Next: beach dialogue and the route to Silbach. Recovery remains limited; other old mainland loot and already-floating torches are not retroactively repaired.
+## Engineering
+- Trace the real flow; fix shared causes when evidence supports them.
+- Reuse existing mechanisms; prefer the smallest correct implementation.
+- Distinguish confirmed failures, hypotheses and untested compatibility gaps.
+- Verify through real gameplay entry points and appropriate regression checks.
+- Static callers, absent warnings and synthetic checkpoints alone do not prove
+  gameplay correctness, visible rendering or campaign completion.
+- Installed scripts are 1.2.11; reference decompilation is 1.2.7, not exact source.
+- Snapshot mapping ABI changes require explicit version/compatibility review.
 
-- Trialogue milestone: exact ZenKit message lookup removes the unrelated startup subtitle. LeGo speaker selection is captured per AI_Output during script queue construction; native NPC identity remains intact. tests/run_archolos_forest.py covers all intro speakers, choices, reset and save; --full-dialogue retains normal voice durations. Captain regression also checks speaker labels. AI_WAITTILLEND/visual impersonation remain unsupported; the attempted marker implementation was removed and never shipped. Installed scripts name the captain Beckett, so tests must not hardcode “Captain” as his display name. New Game is recommended for globally clean initial loot; prior recoveries remain targeted only. All 15 user saves are preserved. Next: route toward Silbach and broader campaign coverage.
+## Boundaries and authorization
+- GitHub administration, issues, branches, pushes and PRs in Lu2cz's project forks
+  are authorized. Earlier local-only instructions are superseded for these forks.
+- Upstream submissions remain a separate user decision; do not send unsolicited
+  messages or PRs to Try/OpenGothic or other upstream projects.
+- Preserve user saves, original assets/installers and known-good binaries.
+- Use private save/config copies and new output directories for testing.
+- Do not commit game assets, personal saves, credentials or raw private logs.
+- Leave cursor behavior unchanged unless explicitly requested.
+- Defer Steam/GOG/Discord services and legacy Windows debug/renderer emulation;
+  gameplay LeGo View/Render UI remains in scope when demonstrated.
+- Prefix shell commands with rtk; use rtk proxy when raw output is needed.
+- Give the single launch command from the environment guide, not script contents.
 
-- User-requested save reset (10 September 2026): all 145 existing .sav files, including 15 playable slots and every test/recovery/source copy in the workspace, were deleted explicitly at the user's request. Historical notes about preserved slots no longer describe available files. Regenerate fresh checkpoints before running save-dependent regressions. Preserve future saves unless the user requests their deletion. Game data, builds and logs are intact.
+## Finishing and handing off
+- Update the issue with cause, commits/PR, verification and material limitations.
+- State whether the playable app was updated and identify its exact source/build.
+- Move the board status honestly: Backlog, Ready, In progress, Needs verification,
+  Done. Close only when acceptance is satisfied; pending player checks stay open.
+- Push meaningful checkpoints to the fork. Integrate verified fixes through a PR
+  targeting our working branch; do not replace the playable app before validation.
+- Leave a concise issue handoff if unfinished. Keep raw evidence local and link
+  reproducible instructions plus a public-safe summary.
 
-- Recipe callback milestone: bind and restore ITEM alongside SELF in shared GameScript::invokeItem for use/equip/unequip. The old direct USECOOKINGRECIPE probe masked missing inventory context; tests/run_archolos_recipe.py now uses Npc::useItem with null/stale ITEM and checks document persistence, learning, journal, stove condition and reread. Omit --save for a fresh game; opening videos are dismissed only in this opt-in probe. A new user slot 1 exists after the earlier save reset: preserve it. Rereading the recipe in an existing save should be sufficient.
-
-- City exploration checkpoint: playable slot 2 is `CITY EXPLORATION - Chapter 2`, a synthetic market/noon preset using the installed story helper. Preserve story slot 1 and city slot 2. tests/run_archolos_city.py --seed creates on a private copy; --save checks reload, walking, NPC population and save completion. The unchanged playable app successfully loads it (~36 FPS in a brief 1280x720 market sample). Campaign consistency is not claimed; generator lives only behind OPENGOTHIC_PROFILE plus OPENGOTHIC_CITY_PROBE.
-
-- KmLib music milestone: native gameplay Ogg tracks, day/night/combat zone selection, saved script overrides, fades and overlapping loops now work locally. Decode one track off-thread; discard obsolete requests. Tempest fb9fa22 fixes long sound duration overflow. tests/run_archolos_music.py --full covers the scenario; --expect-track validates reload selection. Final fresh recipe regression passes. Slot 3 is CITY EXPLORATION - Music, a copy of slot 2 with only its stale prologue music override cleared and label changed; preserve all three slots. Menu/platform services and initialization/music-zone gameplay hooks remain separate work. See the development log for limits and exact evidence.
-
-- Remaining KmLib milestone (11 September 2026): shared zone selection now calls the installed ONZONEMUSICCHANGEDHOOK with a scoped EDX/zString and full theme suffix; save/world initialization resets transient selection. Native menu 02.ogg uses the DLL overlap. Local stats/unlocks persist in Gothic.ini (KMLIB_STATS/KMLIB_ACHIEVEMENTS), independent of saves. tests/run_archolos_music.py --kmlib --menu covers menu/load/save/return; --settings carries private profile progress into subsequent runs. Final full scenario, override/stat reload and fresh recipe pass. Legacy draw-distance scaling, debug-console/menu metadata patches, platform publishing/Discord and wider campaign/world transitions remain unsupported/unverified. Do not describe this as full DLL parity. All three user saves remain preserved. Coverage: workspace outputs/archolos-kmlib-coverage.md; installation evidence: archolos-kmlib-rest-fix.json.
-
-- Menu overlap milestone: startup GAMESTART.WAV was a separate 43-second global SFX, missed by the original Ogg-only test. MenuRoot now owns vanilla startup audio; the Archolos custom music branch never starts it. tests/run_archolos_music.py --menu --kmlib --full rejects competing WAV/legacy/tail sources and checks Archolos background/logo loading. Screenshot confirms Archolos artwork already worked; fonts/layout/window title remain cosmetic differences. All three current saves preserved. Platform integrations explicitly deferred. See latest development log and workspace archolos-menu-audio-fix.json.
-
-- Hidden MessageBox diagnosed: LeGo NEW warns “This should never happen!” when HANDLESPOINTER is zero during INIT_QUESTSEVENTSMANAGER re-registration after load. Its fallback recreates the tables; private reload confirms two callback handles and normal load/walk/save. Full heap/one-shot callback persistence remains incomplete. No gameplay patch or message suppression shipped; temporary probes removed and original signed Profile restored. Evidence: workspace outputs/archolos-hidden-message-trace.txt and archolos-hidden-message-probe.patch.
-
-- Persistence milestone (latest): game/compatibility v1 now snapshots the Ikarus virtual heap, mutable constants/functions and script/native reference bindings. Final per-dispatch pending/consumed callback restart tests pass; deleted-object bindings and native NPC arrays survive, with no missing-table warning on snapshot loads. tests/run_archolos_city.py --persistence seed/reload/completed, --reject fingerprint/truncated and --save-failure cover state, rejection and preservation of an existing slot on serialization failure. Save uses a temporary sibling and successful rename. Existing saves remain loadable through the old fallback but cannot recover state never saved. Earlier milestone statements about arbitrary one-shot persistence are superseded within this tested snapshot scope; full LeGo APIs, unusual native contexts, distinct-ZEN transitions and campaign completion remain unverified. Bump compatibility version for mapping ABI changes; require identical scripts. Full music and fresh recipe regressions pass. All three user saves preserved. Read the latest development section and workspace outputs/archolos-persistence-explained.md before extending this format.
+## Maintaining this file
+Update only durable goals, constraints, workflow or authoritative reference links.
+Replace obsolete instructions; do not append debugging notes or milestone history.
+Keep this file around 80 lines or fewer. Use issues for changing project state.

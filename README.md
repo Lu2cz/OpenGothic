@@ -1,3 +1,25 @@
+# Archolos on macOS — OpenGothic fork
+
+Native compatibility work for The Chronicles of Myrtana: Archolos, preserving our
+playable v0.92-based OpenGothic branch. **Campaign completion is not yet verified.**
+
+- [Roadmap and goal](https://github.com/Lu2cz/OpenGothic/issues/1)
+- [Planning board](https://github.com/users/Lu2cz/projects/1)
+- [Issues and verification](https://github.com/Lu2cz/OpenGothic/issues)
+- [Persistent project instructions](AGENTS.md)
+- [Build, local test setup and launch](docs/archolos/environment.md)
+- [Initial LeGo/Ikarus coverage audit](docs/archolos/lego-ikarus-audit.md)
+- [Historical fixes and evidence](ARCHOLOS_DEVELOPMENT.md)
+
+Working branch: `archolos/performance-v092`. Baseline tag: `archolos-baseline-2026-09-11`.
+Tempest and ZenKit fixes are pinned to companion forks for reproducible checkout.
+Original game assets and personal saves are not distributed here.
+
+The original OpenGothic README follows. Its Gothic 2 completion/support claims do
+not establish Archolos compatibility for this fork.
+
+---
+
 ## OpenGothic
 Open source re-implementation of Gothic 2: Night of the Raven.
 

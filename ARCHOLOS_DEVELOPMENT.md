@@ -1,14 +1,10 @@
 # Local Archolos development log
 
-Update this file at each verified milestone with the symptom, cause or uncertainty, change, verification, and remaining work. Commit meaningful checkpoints locally; never push or submit upstream without the user's explicit instruction.
+ARCHIVED through the persistence milestone on 11 September 2026. Historical instructions, next steps and save paths below may be superseded. Do not append new milestones here. Current instructions: AGENTS.md. Current progress and acceptance: https://github.com/Lu2cz/OpenGothic/issues/1 and its linked issues. GitHub operations in the user-owned forks are now authorized.
 
 Working branch: `archolos/performance-v092`, based on OpenGothic v0.92. The newer upstream checkout is separate. Game scripts are installed v1.2.11; the reference decompilation is v1.2.7 and must not be treated as exact source.
 
 Workspace and user-facing evidence: `/Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues`. Launcher and reports are under `outputs`; proprietary game data, saves, benchmark runs, and extraction tools are under `work` and are not committed.
-
-## Current milestone: Native KmLib gameplay integration
-
-Menu soundtrack, shared zone gameplay notifications and persistent local achievement counters/unlocks are now implemented and installed. Menu/load/save/return, full music scenario, fresh-process override/counter restoration and fresh-game recipe regressions pass. Full external platform integration, legacy renderer/debug hooks and campaign completion remain outside verified coverage. See the latest dated section for exact evidence and limits.
 
 # Archolos: first performance milestone
 
