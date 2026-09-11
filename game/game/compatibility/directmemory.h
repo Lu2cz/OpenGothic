@@ -8,6 +8,9 @@
 #include "cpu32.h"
 #include "mem32.h"
 
+class Interactive;
+class Npc;
+
 class DirectMemory {
   public:
     DirectMemory(GameScript& owner, zenkit::DaedalusVm& vm);
@@ -24,6 +27,7 @@ class DirectMemory {
     void        eventPlayAni(std::string_view ani);
     Npc&        dialogSpeaker(Npc& npc);
     bool        setMusicZone(std::string_view zone, uint8_t tags);
+    void        setNpcFocus(Npc& npc, Interactive* focus, int pickLockProgress);
     void        probePersistence(bool finish);
     void        save(Serialize& out);
     void        load(Serialize& in);
@@ -82,7 +86,13 @@ class DirectMemory {
     ptr32_t     scriptVariables = 0;
     ptr32_t     scriptSymbols   = 0;
     std::multimap<std::pair<std::shared_ptr<zenkit::DaedalusInstance>,uint32_t>,ptr32_t> scriptReferences;
+    struct FocusVob {
+      Interactive* native  = nullptr;
+      ptr32_t      address = 0;
+      };
+    std::vector<FocusVob> focusVobs;
     void        bindReference(zenkit::DaedalusSymbol* ref, std::shared_ptr<zenkit::DaedalusInstance> context, Mem32::Type type);
+    auto        focusVob(Interactive& focus) -> ptr32_t;
     void        saveReference(Serialize& out, const std::shared_ptr<zenkit::DaedalusInstance>& instance);
     auto        loadReference(Serialize& in) -> std::shared_ptr<zenkit::DaedalusInstance>;
 

@@ -237,6 +237,36 @@ bool DirectMemory::isRequired(zenkit::DaedalusScript& vm) {
       vm.find_symbol_by_name("_^") != nullptr;
   }
 
+auto DirectMemory::focusVob(Interactive& focus) -> ptr32_t {
+  for(auto& i:focusVobs)
+    if(i.native==&focus)
+      return i.address;
+
+  auto* cls = vm.find_symbol_by_name("OCMOBLOCKABLE");
+  if(cls==nullptr || cls->class_size()==0)
+    return 0;
+
+  const auto address = mem32.alloc(cls->class_size(),"focused OCMOBLOCKABLE");
+  focusVobs.push_back({&focus,address});
+  return address;
+  }
+
+void DirectMemory::setNpcFocus(Npc& npc, Interactive* focus, int pickLockProgress) {
+  npc.handle().focus_vob = 0;
+  if(focus==nullptr)
+    return;
+
+  const auto address = focusVob(*focus);
+  auto* bitfield = vm.find_symbol_by_name("OCMOBLOCKABLE.BITFIELD");
+  if(address==0 || bitfield==nullptr)
+    return;
+
+  const auto at = address + ptr32_t(bitfield->offset_as_member());
+  const int32_t state = mem32.readInt(at);
+  mem32.writeInt(at,(state & int32_t(3)) | (pickLockProgress<<2) | (focus->isLocked() ? 1 : 0));
+  npc.handle().focus_vob = int32_t(address);
+  }
+
 void DirectMemory::saveReference(Serialize& out, const std::shared_ptr<zenkit::DaedalusInstance>& instance) {
   auto& w = gameScript.world();
   if(!instance) {
@@ -341,6 +371,7 @@ void DirectMemory::save(Serialize& out) {
 
 void DirectMemory::load(Serialize& in) {
   resetMusicZone();
+  focusVobs.clear();
   if(!in.setEntry("game/compatibility")) {
     restoreQuestCallbacks = true; // older saves have no heap to restore
     return;
@@ -420,8 +451,10 @@ void DirectMemory::load(Serialize& in) {
     // Distinct deleted native objects can resolve to null. Keep each address
     // bound to a tombstone, including across subsequent saves.
     scriptReferences.emplace(std::make_pair(context,id),ptr);
-    }
+  }
   mem32.validateCallbacks();
+  if(auto* lastMob = vm.find_symbol_by_name("G_PICKLOCK.LASTMOB"))
+    lastMob->set_int(0); // Native vob addresses are not valid after a reload.
   restoreQuestCallbacks = false;
   if(std::getenv("OPENGOTHIC_PERSISTENCE_PROBE")!=nullptr)
     persistenceProbeRoot = uint32_t(vm.find_symbol_by_name("MEM_INFOBOX.RES")->get_int());

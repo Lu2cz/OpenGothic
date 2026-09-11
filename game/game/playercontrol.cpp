@@ -1016,23 +1016,23 @@ void PlayerControl::processPickLock(Npc& pl, Interactive& inter, KeyCodec::Actio
     pickLockProgress = 0;
     const int32_t dex = Gothic::inst().version().game==2 ? pl.attribute(ATR_DEXTERITY) : (100 - pl.talentValue(TALENT_PICKLOCK));
     if(dex<=int32_t(script.rand(100)))  {
-      script.invokePickLock(pl,0,1);
+      script.invokePickLock(pl,0,1,int(pickLockProgress));
       pl.delItem(ItKE_lockpick,1);
       if(pl.inventory().itemCount(ItKE_lockpick)==0) {
         quitPicklock(pl);
         return;
         }
       } else {
-      script.invokePickLock(pl,0,0);
+      script.invokePickLock(pl,0,0,int(pickLockProgress));
       }
     } else {
     pickLockProgress++;
     if(pickLockProgress>=cmp.size()) {
-      script.invokePickLock(pl,1,1);
+      script.invokePickLock(pl,1,1,int(pickLockProgress));
       inter.setAsCracked(true);
       pickLockProgress = 0;
       } else {
-      script.invokePickLock(pl,1,0);
+      script.invokePickLock(pl,1,0,int(pickLockProgress));
       }
     }
   }

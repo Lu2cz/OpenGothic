@@ -1196,16 +1196,9 @@ int GameScript::invokeCond(Npc& npc, std::string_view func) {
   return vm.call_function<int>(fn);
   }
 
-void GameScript::invokePickLock(Npc& npc, int bSuccess, int bBrokenOpen) {
-  if(dma!=nullptr) {
-    // Native PlayerControl already changed the lock, consumed any broken pick and
-    // will serialize the result. The Archolos hook only rereads raw oCNpc fields.
-    const char* name = bSuccess ? "PRINT_PICKLOCK_SUCCESS" :
-                       bBrokenOpen ? "PRINT_PICKLOCK_BROKEN" : "PRINT_PICKLOCK_FAILURE";
-    if(auto message = vm.find_symbol_by_name(name))
-      Gothic::inst().onPrint(message->get_string());
-    return;
-    }
+void GameScript::invokePickLock(Npc& npc, int bSuccess, int bBrokenOpen, int pickLockProgress) {
+  if(dma!=nullptr)
+    dma->setNpcFocus(npc,npc.interactive(),pickLockProgress);
   auto fn   = vm.find_symbol_by_name("G_PickLock");
   if(fn==nullptr)
     return;

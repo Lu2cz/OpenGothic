@@ -140,7 +140,7 @@ class GameScript final {
     int  invokeManaRelease (Npc& npc, Npc* target, int mana);
     void invokeSpell(Npc& npc, Npc *target, Item&  fn);
     int  invokeCond (Npc& npc, std::string_view func);
-    void invokePickLock(Npc& npc, int bSuccess, int bBrokenOpen);
+    void invokePickLock(Npc& npc, int bSuccess, int bBrokenOpen, int pickLockProgress);
     void invokeRefreshAtInsert(Npc& npc);
     auto canNpcCollideWithSpell(Npc& npc, Npc* shooter, int32_t spellId) -> CollideMask;
 
