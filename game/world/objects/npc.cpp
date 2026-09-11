@@ -294,6 +294,9 @@ void Npc::load(Serialize &fin, size_t id, std::string_view directory) {
   fin.read(currentLookAtNpc,currentTarget,nearestEnemy);
 
   go2.load(fin);
+  if(fin.version()<56 && aiQueue.size()==0 && (go2.flag!=GT_No || waitTime>=owner.tickCount() ||
+                                                aniWaitTime>=owner.tickCount() || outWaitTime>owner.tickCount()))
+    aiActionTicket=aiQueue.takeTicket();
   fin.read(currentFp,currentFpLock);
   wayPath.load(fin);
 
@@ -340,6 +343,8 @@ void Npc::saveAiState(Serialize& fout) const {
 
   aiQueue.save(fout);
   aiQueueOverlay.save(fout);
+  if(fout.version()>55)
+    fout.write(aiActionTicket);
 
   fout.write(uint32_t(routines.size()));
   for(auto& i:routines) {
@@ -363,6 +368,8 @@ void Npc::loadAiState(Serialize& fin) {
 
   aiQueue.load(fin);
   aiQueueOverlay.load(fin);
+  if(fin.version()>55)
+    fin.read(aiActionTicket);
 
   uint32_t size=0;
   fin.read(size);
@@ -2417,6 +2424,8 @@ void Npc::nextAiAction(AiQueue& queue, uint64_t dt) {
   if(queue.size()==0)
     return;
   auto act = queue.pop();
+  if(&queue==&aiQueue)
+    aiActionTicket=act.ticket;
   switch(act.act) {
     case AI_None: break;
     case AI_LookAtNpc:{
@@ -2565,6 +2574,10 @@ void Npc::nextAiAction(AiQueue& queue, uint64_t dt) {
       }
     case AI_Wait:
       implAiWait(uint64_t(act.i0));
+      break;
+    case AI_WaitTillEnd:
+      if(act.target!=nullptr && act.target->isAiActionPending(act.watch))
+        queue.pushFront(std::move(act));
       break;
     case AI_StandUp:
     case AI_StandUpQuick: {
@@ -4534,6 +4547,20 @@ bool Npc::isAiBusy() const {
          outWaitTime>=owner.tickCount();
   }
 
+uint64_t Npc::aiWaitTicket() const {
+  auto ticket=aiQueue.lastTicket();
+  return ticket!=0 ? ticket : aiActionTicket;
+  }
+
+bool Npc::isAiActionPending(uint64_t ticket) const {
+  if(ticket==0)
+    return false;
+  if(aiQueue.hasTicket(ticket))
+    return true;
+  return aiActionTicket==ticket && (go2.flag!=GT_No || waitTime>=owner.tickCount() ||
+                                    aniWaitTime>=owner.tickCount() || outWaitTime>owner.tickCount());
+  }
+
 void Npc::clearAiQueue() {
   currentLookAt    = nullptr;
   currentLookAtNpc = nullptr;
@@ -4541,6 +4568,7 @@ void Npc::clearAiQueue() {
 
   aiQueue.clear();
   aiQueueOverlay.clear();
+  aiActionTicket = 0;
   aniWaitTime = 0;
   waitTime    = 0;
   faiWaitTime = 0;

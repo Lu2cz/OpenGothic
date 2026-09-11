@@ -273,6 +273,7 @@ void GameScript::initCommon() {
   bindExternal("ai_setwalkmode",                 &GameScript::ai_setwalkmode);
   bindExternal("ai_wait",                        &GameScript::ai_wait);
   bindExternal("ai_waitms",                      &GameScript::ai_waitms);
+  bindExternal("ai_waittillend",                 &GameScript::ai_waittillend);
   bindExternal("ai_aligntowp",                   &GameScript::ai_aligntowp);
   bindExternal("ai_gotowp",                      &GameScript::ai_gotowp);
   bindExternal("ai_gotofp",                      &GameScript::ai_gotofp);
@@ -3096,6 +3097,13 @@ void GameScript::ai_waitms(std::shared_ptr<zenkit::INpc> npcRef, int ms) {
   auto npc = findNpc(npcRef);
   if(npc!=nullptr && ms>0)
     npc->aiPush(AiQueue::aiWait(uint64_t(ms)));
+  }
+
+void GameScript::ai_waittillend(std::shared_ptr<zenkit::INpc> selfRef, std::shared_ptr<zenkit::INpc> targetRef) {
+  auto self   = findNpc(selfRef);
+  auto target = findNpc(targetRef);
+  if(self!=nullptr && target!=nullptr && self!=target)
+    self->aiPush(AiQueue::aiWaitTillEnd(*target,target->aiWaitTicket()));
   }
 
 void GameScript::ai_aligntowp(std::shared_ptr<zenkit::INpc> npcRef) {

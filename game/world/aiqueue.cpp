@@ -1,6 +1,7 @@
 #include "aiqueue.h"
 
 #include <limits>
+#include <stdexcept>
 #include "game/serialize.h"
 
 AiQueue::AiQueue() {
@@ -8,18 +9,25 @@ AiQueue::AiQueue() {
 
 void AiQueue::save(Serialize& fout) const {
   fout.write(uint32_t(aiActions.size()));
+  if(fout.version()>55)
+    fout.write(nextTicket);
   for(auto& i:aiActions){
     fout.write(uint32_t(i.act));
     fout.write(i.target,i.victim);
     fout.write(i.point,i.func,i.i0,i.i1,i.s0);
     if(i.act==AI_PrintScreen)
       fout.write(i.i2,i.s1);
+    if(fout.version()>55)
+      fout.write(i.ticket,i.watch);
     }
   }
 
 void AiQueue::load(Serialize& fin) {
   uint32_t size = 0;
   fin.read(size);
+  nextTicket=1;
+  if(fin.version()>55)
+    fin.read(nextTicket);
   aiActions.resize(size);
   for(auto& i:aiActions){
     fin.read(reinterpret_cast<uint32_t&>(i.act));
@@ -27,6 +35,19 @@ void AiQueue::load(Serialize& fin) {
     fin.read(i.point,i.func,i.i0,i.i1,i.s0);
     if(i.act==AI_PrintScreen)
       fin.read(i.i2,i.s1);
+    if(fin.version()>55)
+      fin.read(i.ticket,i.watch);
+    else
+      i.ticket=nextTicket++;
+    }
+  if(fin.version()>55) {
+    for(size_t i=0; i<aiActions.size(); ++i) {
+      if(aiActions[i].ticket==0 || aiActions[i].ticket>=nextTicket)
+        throw std::runtime_error("Invalid AI action ticket in save");
+      for(size_t r=0; r<i; ++r)
+        if(aiActions[r].ticket==aiActions[i].ticket)
+          throw std::runtime_error("Duplicate AI action ticket in save");
+      }
     }
   }
 
@@ -37,11 +58,14 @@ void AiQueue::clear() {
 void AiQueue::pushBack(AiAction&& a) {
   if(aiActions.size()>0) {
     if(aiActions.back().act==AI_LookAtNpc && a.act==AI_LookAtNpc) {
+      a.ticket = aiActions.back().ticket;
       aiActions.back() = a;
       return;
       }
     }
-  aiActions.push_back(a);
+  if(a.ticket==0)
+    a.ticket=nextTicket++;
+  aiActions.push_back(std::move(a));
   }
 
 void AiQueue::pushFront(AiQueue::AiAction&& a) {
@@ -56,6 +80,21 @@ AiQueue::AiAction AiQueue::pop() {
   auto act = std::move(aiActions.front());
   aiActions.pop_front();
   return act;
+  }
+
+uint64_t AiQueue::takeTicket() {
+  return nextTicket++;
+  }
+
+uint64_t AiQueue::lastTicket() const {
+  return aiActions.empty() ? 0 : aiActions.back().ticket;
+  }
+
+bool AiQueue::hasTicket(uint64_t ticket) const {
+  for(auto& i:aiActions)
+    if(i.ticket==ticket)
+      return true;
+  return false;
   }
 
 int AiQueue::aiOutputOrderId() const {
@@ -163,6 +202,14 @@ AiQueue::AiAction AiQueue::aiWait(uint64_t dt) {
   AiAction a;
   a.act  = AI_Wait;
   a.i0   = int(dt);
+  return a;
+  }
+
+AiQueue::AiAction AiQueue::aiWaitTillEnd(Npc& target, uint64_t ticket) {
+  AiAction a;
+  a.act    = AI_WaitTillEnd;
+  a.target = &target;
+  a.watch  = ticket;
   return a;
   }
 

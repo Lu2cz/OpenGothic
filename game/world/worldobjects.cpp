@@ -366,6 +366,7 @@ void WorldObjects::removeNpc(Npc& npc) {
   auto ptr = takeNpc(&npc);
   if(ptr==nullptr)
     return;
+  ptr->clearAiQueue();
   auto& point = owner.deadPoint();
   npc.attachToPoint(nullptr);
   npc.setPosition(point.position());

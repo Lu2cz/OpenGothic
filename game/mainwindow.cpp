@@ -28,6 +28,7 @@
 #include "utils/string_frm.h"
 #include "world/triggers/abstracttrigger.h"
 #include "world/objects/npc.h"
+#include "world/aiqueue.h"
 #include "game/serialize.h"
 #include "game/globaleffects.h"
 #include "utils/gthfont.h"
@@ -1287,6 +1288,7 @@ void MainWindow::render(){
     static Tempest::Vec3 worldProbeWalkStart;
     static double cityMeasuredAt=0;
     static bool forestProbeSaved=false;
+    static bool aiWaitProbeSaved=false;
     static size_t beachTorchCount=0;
     static Item* beachTorch=nullptr;
     static float beachTorchStartY=0;
@@ -1394,6 +1396,20 @@ void MainWindow::render(){
         w.player()->setPosition(wp->position()+Tempest::Vec3(0,0,120));
         fabio->startDialog(*w.player());
         Log::i("[FOREST_PROBE] started Fabio dialogue");
+        }
+      if(auto mode=std::getenv("OPENGOTHIC_AI_WAIT_PROBE")) {
+        auto& w = *Gothic::inst().world();
+        auto& self = *w.player();
+        auto* target = w.findNpcByInstance(w.script().getVm().find_symbol_by_name("NONE_1_JORN")->index());
+        if(target==nullptr || dialogs.isActive() || w.currentCs()!=nullptr)
+          throw std::runtime_error("AI wait persistence probe needs normal world control");
+        if(std::string_view(mode)=="seed") {
+          self.clearAiQueue();
+          target->clearAiQueue();
+          target->aiPush(AiQueue::aiWait(16000));
+          self.aiPush(AiQueue::aiWaitTillEnd(*target,target->aiWaitTicket()));
+          Log::i("[AI_WAIT_PROBE] seeded self_empty=",self.isAiQueueEmpty()," target_busy=",target->isAiBusy());
+          }
         }
       if(std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr) {
         auto& w = *Gothic::inst().world();
@@ -2071,6 +2087,34 @@ void MainWindow::render(){
           }
         }
       }
+    if(sampling) {
+      if(auto mode=std::getenv("OPENGOTHIC_AI_WAIT_PROBE")) {
+        auto& self = *Gothic::inst().world()->player();
+        if(std::string_view(mode)=="seed" && !aiWaitProbeSaved && profileFrames==30) {
+          if(self.isAiQueueEmpty())
+            throw std::runtime_error("AI wait persistence probe was not queued");
+          Log::i("[AI_WAIT_PROBE] save pending=1");
+          aiWaitProbeSaved=true;
+          saveGame("save_slot_2.sav","AI wait persistence test");
+          }
+        if(std::string_view(mode)=="reload" && profileFrames==0) {
+          if(self.isAiQueueEmpty())
+            throw std::runtime_error("AI wait was lost on reload");
+          Log::i("[AI_WAIT_PROBE] restored pending=1");
+          }
+        if(std::string_view(mode)=="reload" && !aiWaitProbeSaved && profileFrames==420) {
+          if(!self.isAiQueueEmpty())
+            throw std::runtime_error("AI wait did not finish after reload");
+          Log::i("[AI_WAIT_PROBE] complete");
+          aiWaitProbeSaved=true;
+          saveGame("save_slot_2.sav","AI wait persistence test");
+          }
+        if(aiWaitProbeSaved && Gothic::inst().checkLoading()==Gothic::LoadState::Idle) {
+          Log::i("[AI_WAIT_PROBE] save finalized");
+          Tempest::SystemApi::exit();
+          }
+        }
+      }
     if(sampling && std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr) {
       const auto musicProbe = std::getenv("OPENGOTHIC_MUSIC_PROBE");
       const bool musicFull = musicProbe!=nullptr && std::string_view(musicProbe)=="full";
@@ -2255,7 +2299,7 @@ void MainWindow::render(){
           }
         }
       }
-    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u))))))) {
+    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,

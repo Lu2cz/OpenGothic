@@ -28,6 +28,8 @@ class AiQueue {
       // Extended section, only for print-screen
       int               i2    =0;
       std::string       s1;
+      uint64_t          ticket=0;
+      uint64_t          watch =0;
       };
 
     void     save(Serialize& fout) const;
@@ -38,6 +40,9 @@ class AiQueue {
     void     pushBack (AiAction&& a);
     void     pushFront(AiAction&& a);
     AiAction pop();
+    uint64_t takeTicket();
+    uint64_t lastTicket() const;
+    bool     hasTicket(uint64_t ticket) const;
     int      aiOutputOrderId() const;
 
     void     onWldItemRemoved(const Item& itm);
@@ -55,6 +60,7 @@ class AiQueue {
     static AiAction aiPlayAnim(std::string_view ani);
     static AiAction aiPlayAnimBs(std::string_view ani, BodyState bs);
     static AiAction aiWait(uint64_t dt);
+    static AiAction aiWaitTillEnd(Npc& target, uint64_t ticket);
     static AiAction aiStandup();
     static AiAction aiStandupQuick();
     static AiAction aiGoToPoint(const WayPoint &to);
@@ -95,5 +101,5 @@ class AiQueue {
 
   private:
     std::deque<AiAction> aiActions;
+    uint64_t             nextTicket=1;
   };
-
