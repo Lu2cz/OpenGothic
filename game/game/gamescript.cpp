@@ -585,6 +585,23 @@ void GameScript::probePersistence(bool finish) {
     dma->probePersistence(finish);
   }
 
+bool GameScript::probeCaptainFixture(Npc& player, Npc& jorn) {
+  auto* infoSymbol=vm.find_symbol_by_name("DIA_JORN_Q101_HELLO");
+  auto* topicSymbol=vm.find_symbol_by_name("TOPIC_Q101");
+  if(infoSymbol==nullptr || topicSymbol==nullptr)
+    return false;
+  auto info=std::static_pointer_cast<zenkit::IInfo>(infoSymbol->get_instance());
+  if(info==nullptr || topicSymbol->get_string().empty())
+    return false;
+  DlgChoice choice;
+  choice.handle=info.get();
+  choice.scriptFn=uint32_t(info->information);
+  exec(choice,player,jorn);
+  player.clearAiQueue();
+  jorn.clearAiQueue();
+  return true;
+  }
+
 void GameScript::probeLockFocus(Npc& npc, Interactive& lock, bool restored) {
   if(dma)
     dma->probeLockFocus(npc,lock,restored);

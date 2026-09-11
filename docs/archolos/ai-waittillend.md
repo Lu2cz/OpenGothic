@@ -49,11 +49,32 @@ was built from this worktree and exercised without modifying source saves:
   and restart. Its `run.json` records the executable and chained save hashes; the
   original fixture is `5574d61f7aa31390b1db05d4b9f24cfa417ef5739ed9e548185dac9e17ac22ed`.
 
-The captain replay is still pending a regenerated, real pre-captain fixture. The
-available mainland save is not such a fixture, so no captain acceptance is claimed.
+The captain runner now accepts `--prepare` without `--save` to generate a private
+fresh ship fixture. It executes the initial Jorn info through the existing native
+choice dispatcher, clears the setup queues, and positions the participants at
+SHIP_JORN_02. This is synthetic prerequisite setup, not campaign validation.
+
+`issue6-captain-fixture-3/save_slot_2.sav` was generated on candidate
+`cec49f70e37e6ddf0db2334ee2501298ce6a4d4c706df20922ea55716ea5d474`.
+The normal replay in `issue6-captain-fixture-3-run` selected
+DIA_JORN_Q101_WHATSUP_INFO but had not selected its follow-up by the budget
+checkpoint. The coordinator stopped that private run; it is neither a passed
+captain test nor a proven new runtime regression. Next, inspect why the follow-up
+choice is unavailable, then rerun to the actual runner result. No tests remain
+running from this checkpoint. The fixture changes compile and remain opt-in.
 
 Candidate `4673359a853f41bb58bdd2eb78803ac0a5ba113fc094f5a69246d98a20a5c624`
 also passed the pending-wait seed/reload pair and the private edge matrix in
 `issue6-aiwait-edgefinal-{seed,reload}` and `issue6-aiwait-edges-final`.
 The legacy active-navigation migration and malformed-ticket rejection still need
-their own runnable fixtures.
+their own runtime checks. Four CRC-valid malformed private saves are prepared in
+`issue6-invalid-queue-fixtures-v2`: empty-zero-next, zero-ticket, invalid-active,
+and duplicate-ticket. Its manifest records source/variant hashes. The local
+coordinator generator is `outputs/issue6-coordination/prepare-invalid-queues.py`;
+it anchors the exact reviewed one-wait v56 fixture rather than guessing offsets.
+These variants have not yet been loaded by the game.
+
+Visual actor/camera staging remains a separate investigation in
+[#21](https://github.com/Lu2cz/OpenGothic/issues/21). World-render screenshots
+show an empty later camera shot even though required speech now plays; speaker
+logs alone do not establish visual correctness. PR #20 remains draft/uninstalled.

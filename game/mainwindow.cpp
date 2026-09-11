@@ -1276,6 +1276,7 @@ void MainWindow::render(){
     static unsigned dialogProbeRounds=0;
     static bool dialogProbePending=false;
     static bool captainProbeSaved=false;
+    static bool captainFixtureSaved=false;
     static bool beachProbeSaved=false;
     static bool cityProbeSaved=false;
     static bool worldProbeTransitioned=false;
@@ -1437,9 +1438,26 @@ void MainWindow::render(){
         auto& vm = w.script().getVm();
         auto npc = w.findNpcByInstance(vm.find_symbol_by_name("NONE_1_JORN")->index());
         auto pl = w.player();
-        pl->setPosition(npc->position()+Tempest::Vec3(120,0,0));
-        npc->startDialog(*pl);
-        Log::i("[CAPTAIN_PROBE] started Jorn dialogue");
+        if(std::string_view(std::getenv("OPENGOTHIC_CAPTAIN_PROBE"))=="prepare") {
+          auto* point=w.findPoint("SHIP_JORN_02",false);
+          if(npc==nullptr || point==nullptr || !w.script().probeCaptainFixture(*pl,*npc))
+            throw std::runtime_error("Captain fixture requires the fresh ship scene");
+          npc->clearAiQueue();
+          npc->setPosition(point->position());
+          pl->setPosition(point->position()+Tempest::Vec3(120,0,0));
+          Log::i("[CAPTAIN_PROBE] fixture ready");
+          captainFixtureSaved=true;
+          saveGame("save_slot_2.sav","Captain fixture");
+          } else {
+          auto* point=w.findPoint("SHIP_JORN_02",false);
+          if(npc==nullptr || point==nullptr)
+            throw std::runtime_error("Captain probe requires the ship scene");
+          npc->clearGoTo();
+          npc->setPosition(point->position());
+          pl->setPosition(point->position()+Tempest::Vec3(120,0,0));
+          npc->startDialog(*pl);
+          Log::i("[CAPTAIN_PROBE] started Jorn dialogue");
+          }
         }
       if(std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) {
         auto& w = *Gothic::inst().world();
@@ -2050,6 +2068,10 @@ void MainWindow::render(){
       saveGame("save_slot_2.sav","Archolos loot recovery");
     if(sampling && std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr && captainProbeSaved) {
       Log::i("[CAPTAIN_PROBE] save finalized");
+      Tempest::SystemApi::exit();
+      }
+    if(sampling && std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr && captainFixtureSaved) {
+      Log::i("[CAPTAIN_PROBE] fixture finalized");
       Tempest::SystemApi::exit();
       }
     if(sampling && std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr && !captainProbeSaved && profileFrames%300==0) {

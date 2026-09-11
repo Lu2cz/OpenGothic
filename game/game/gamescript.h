@@ -75,6 +75,7 @@ class GameScript final {
     void         saveVar(Serialize& fout);
     void         loadVar(Serialize& fin);
     void         probePersistence(bool finish);
+    bool         probeCaptainFixture(Npc& player, Npc& jorn);
     void         probeLockFocus(Npc& npc, Interactive& lock, bool restored);
     void         beginWorldTransitionProbe(Npc& npc, Interactive& lock);
     void         checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock);
