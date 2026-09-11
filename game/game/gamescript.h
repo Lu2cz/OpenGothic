@@ -76,6 +76,9 @@ class GameScript final {
     void         loadVar(Serialize& fin);
     void         probePersistence(bool finish);
     void         probeLockFocus(Npc& npc, Interactive& lock, bool restored);
+    void         beginWorldTransitionProbe(Npc& npc, Interactive& lock);
+    void         checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock);
+    void         verifyWorldTransitionProbe(Npc& npc);
     void         savePerc(Serialize& fout);
     void         loadPerc(Serialize& fin);
 

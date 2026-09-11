@@ -568,6 +568,10 @@ void World::triggerChangeWorld(std::string_view world, std::string_view wayPoint
   game.changeWorld(world,wayPoint);
   }
 
+bool World::triggerChangeLevel(std::string_view world, std::string* triggerName, std::string* startVob) {
+  return npcPlayer && wobj.triggerChangeLevel(*npcPlayer,world,triggerName,startVob);
+  }
+
 void World::setMobRoutine(gtime time, std::string_view scheme, int32_t state) {
   wobj.setMobRoutine(time,scheme,state);
   }

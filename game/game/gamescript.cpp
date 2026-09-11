@@ -589,6 +589,21 @@ void GameScript::probeLockFocus(Npc& npc, Interactive& lock, bool restored) {
     dma->probeLockFocus(npc,lock,restored);
   }
 
+void GameScript::beginWorldTransitionProbe(Npc& npc, Interactive& lock) {
+  if(dma)
+    dma->beginWorldTransitionProbe(npc,lock);
+  }
+
+void GameScript::checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock) {
+  if(dma)
+    dma->checkWorldTransitionProbe(npc,returnedLock);
+  }
+
+void GameScript::verifyWorldTransitionProbe(Npc& npc) {
+  if(dma)
+    dma->verifyWorldTransitionProbe(npc);
+  }
+
 void GameScript::loadVar(Serialize &fin) {
   std::string name;
   uint32_t sz=0;
@@ -704,6 +719,8 @@ void GameScript::loadPerc(Serialize& fin) {
   }
 
 void GameScript::resetVarPointers() {
+  if(dma!=nullptr)
+    dma->resetWorldReferences();
   for(uint32_t i=0;i<vm.symbols().size();++i){
     auto* s = vm.find_symbol_by_index(i); // never returns nullptr
     if(s->is_instance_of<zenkit::INpc>() || s->is_instance_of<zenkit::IItem>()){

@@ -29,7 +29,11 @@ class DirectMemory {
     bool        setMusicZone(std::string_view zone, uint8_t tags);
     void        setNpcFocus(Npc& npc, Interactive* focus, int pickLockProgress);
     void        clearNpcFocus(Npc& npc);
+    void        resetWorldReferences();
     void        probeLockFocus(Npc& npc, Interactive& lock, bool restored);
+    void        beginWorldTransitionProbe(Npc& npc, Interactive& lock);
+    void        checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock);
+    void        verifyWorldTransitionProbe(Npc& npc);
     void        probePersistence(bool finish);
     void        save(Serialize& out);
     void        load(Serialize& in);
@@ -70,6 +74,14 @@ class DirectMemory {
 
     bool        restoreQuestCallbacks = false;
     ptr32_t     persistenceProbeRoot = 0;
+    ptr32_t     worldProbeReference  = 0;
+    ptr32_t     worldProbeItems[2]   = {};
+    ptr32_t     worldProbeTimer      = 0;
+    ptr32_t     worldProbeRecurringTimer = 0;
+    uint32_t    worldProbeDispatches = 0;
+    uint32_t    worldProbeRecurringDispatches = 0;
+    uint32_t    worldProbeRecurringLastElapsed = 0;
+    uint64_t    worldProbeInventory  = 0;
     std::weak_ptr<zenkit::DaedalusInstance> triaSelf, triaSpeaker;
 
     uint32_t    versionHint     = 504628679; // G2
@@ -88,6 +100,7 @@ class DirectMemory {
     ptr32_t     scriptVariables = 0;
     ptr32_t     scriptSymbols   = 0;
     std::multimap<std::pair<std::shared_ptr<zenkit::DaedalusInstance>,uint32_t>,ptr32_t> scriptReferences;
+    auto        nativeReference(zenkit::DaedalusSymbol* ref, std::shared_ptr<zenkit::DaedalusInstance> context) -> ptr32_t;
     void        bindReference(zenkit::DaedalusSymbol* ref, std::shared_ptr<zenkit::DaedalusInstance> context, Mem32::Type type);
     auto        focusVob(Interactive& focus) -> ptr32_t;
     void        saveReference(Serialize& out, const std::shared_ptr<zenkit::DaedalusInstance>& instance);
@@ -128,6 +141,7 @@ class DirectMemory {
 
     ptr32_t     ASMINT_InternalStack = 0;
     ptr32_t     ASMINT_CallTarget    = 0;
+    ptr32_t     ASMINT_CallTargetPtr = 0;
     void        ASMINT_Init();
     void        ASMINT_CallMyExternal();
 

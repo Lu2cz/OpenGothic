@@ -370,6 +370,9 @@ auto GameSession::implChangeWorld(std::unique_ptr<GameSession>&& game,
     return std::move(game);
     }
 
+  if(vm->hasSymbolName("_LEGO_CHANGELEVELHOOKBEGIN"))
+    vm->getVm().call_function("_LEGO_CHANGELEVELHOOKBEGIN");
+
   HeroStorage hdata;
   if(auto hero = wrld->player())
     hdata.save(*hero);
@@ -405,6 +408,9 @@ auto GameSession::implChangeWorld(std::unique_ptr<GameSession>&& game,
 
   initScripts(wss.isEmpty());
   wrld->triggerOnStart(wss.isEmpty());
+
+  if(vm->hasSymbolName("_LEGO_CHANGELEVELHOOKEND"))
+    vm->getVm().call_function("_LEGO_CHANGELEVELHOOKEND");
 
   for(auto& i:visitedWorlds)
     if(i.compareName(wrld->name())){

@@ -82,6 +82,8 @@ class Mem32 {
     void    save(Serialize& out) const;
     void    load(Serialize& in, const std::function<void*(std::string_view,uint32_t)>& pinTarget);
     void    validateCallbacks() const;
+    ptr32_t pinAddress(std::string_view comment) const;
+    Type    nextScriptReferenceType() const;
     Type    regionType(ptr32_t address, uint32_t size) const;
     bool    isAllocation(ptr32_t address, uint32_t size, std::string_view comment) const;
 
