@@ -307,6 +307,13 @@ void DirectMemory::resetWorldReferences() {
     lastMob->set_int(0);
   }
 
+static uint64_t inventorySignature(const Npc& npc) {
+  uint64_t result = 0;
+  for(auto item=npc.inventory().iterator(Inventory::T_Inventory); item.isValid(); ++item)
+    result = (result*1000003) ^ (uint64_t(item->clsId())<<32) ^ item.count();
+  return result;
+  }
+
 void DirectMemory::beginWorldTransitionProbe(Npc& npc, Interactive& lock) {
   auto* ref = vm.find_symbol_by_name("C_NPC.AIVAR");
   auto context = npc.handlePtr();
@@ -330,15 +337,18 @@ void DirectMemory::beginWorldTransitionProbe(Npc& npc, Interactive& lock) {
   worldProbeTimer = mem32.alloc(64);
   mem32.writeInt(worldProbeTimer+24,int32_t(gameScript.tickCount()));
   worldProbeDispatches = 0;
+  worldProbeInventory = inventorySignature(npc);
   auto* cb = vm.find_symbol_by_name("TIMER_SETPAUSE");
   vm.call_function("FF_APPLYEXTDATAGT",int32_t(cb->index()),1000,1,int32_t(worldProbeTimer));
-  Log::i("[WORLD_PROBE] source native_ref=1 lock_address=",lock.lockAddress," pending=1");
+  Log::i("[WORLD_PROBE] source native_ref=1 inventory=",worldProbeInventory," lock_address=",lock.lockAddress," pending=1");
   }
 
 void DirectMemory::checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock) {
   if(worldProbeReference==0 || worldProbeTimer==0 || worldProbeDispatches!=1 ||
      mem32.readInt(worldProbeReference+99*4)!=0)
     throw std::runtime_error("World-transition reference/callback regression");
+  if(inventorySignature(npc)!=worldProbeInventory)
+    throw std::runtime_error("World-transition lost player inventory");
   auto* lastMob = vm.find_symbol_by_name("G_PICKLOCK.LASTMOB");
   if(lastMob->get_int()!=0)
     throw std::runtime_error("World-transition retained stale lock focus");
@@ -350,7 +360,8 @@ void DirectMemory::checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock
            " lock_address=",returnedLock->lockAddress);
     clearNpcFocus(npc);
     }
-  Log::i("[WORLD_PROBE] destroyed_ref=0 callback_dispatches=",worldProbeDispatches," stale_focus=0");
+  Log::i("[WORLD_PROBE] destroyed_ref=0 inventory=",worldProbeInventory,
+         " callback_dispatches=",worldProbeDispatches," stale_focus=0");
   }
 
 void DirectMemory::probeLockFocus(Npc& npc, Interactive& lock, bool restored) {

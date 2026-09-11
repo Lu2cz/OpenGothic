@@ -76,6 +76,7 @@ class DirectMemory {
     ptr32_t     worldProbeReference  = 0;
     ptr32_t     worldProbeTimer      = 0;
     uint32_t    worldProbeDispatches = 0;
+    uint64_t    worldProbeInventory  = 0;
     std::weak_ptr<zenkit::DaedalusInstance> triaSelf, triaSpeaker;
 
     uint32_t    versionHint     = 504628679; // G2

@@ -70,10 +70,10 @@ def run(name, save, mode, evidence):
 try:
     sewer = run("01-to-sewers", source, "to-sewers", (
         "zone_trigger=", "target=ARCHOLOS_SEWERS.ZEN", "save world=archolos_sewers.zen",
-        "destroyed_ref=0 callback_dispatches=1 stale_focus=0"))
+        "destroyed_ref=0 inventory=", "callback_dispatches=1 stale_focus=0"))
     mainland = run("02-to-mainland", sewer, "to-mainland", (
         "zone_trigger=", "target=ARCHOLOS_MAINLAND.ZEN", "save world=ARCHOLOS_MAINLAND.ZEN",
-        "returned_lock_progress=1", "destroyed_ref=0 callback_dispatches=1 stale_focus=0"))
+        "returned_lock_progress=1", "destroyed_ref=0 inventory=", "callback_dispatches=1 stale_focus=0"))
     run("03-restart-mainland", mainland, "verify-mainland", ("restart_lock_progress=1 world=ARCHOLOS_MAINLAND.ZEN",))
 finally:
     assert hashlib.sha256(source.read_bytes()).hexdigest() == source_hash, "Source save changed"
