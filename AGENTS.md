@@ -54,6 +54,8 @@ Do not duplicate the backlog or completed-work history here.
 ## Finishing and handing off
 - Update the issue with cause, commits/PR, verification and material limitations.
 - State whether the playable app was updated and identify its exact source/build.
+- Update README campaign progress when new story evidence is verified; date it and
+  link the issue. Keep synthetic exploration separate and avoid a running history.
 - Move the board status honestly: Backlog, Ready, In progress, Needs verification,
   Done. Close only when acceptance is satisfied; pending player checks stay open.
 - Push meaningful checkpoints to the fork. Integrate verified fixes through a PR
