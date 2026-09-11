@@ -4,10 +4,13 @@
 #include <cstdint>
 #include <functional>
 #include <type_traits>
+#include <string>
 
 #include <Tempest/Log>
 
 #include "game/compatibility/mem32instances.h"
+
+class Serialize;
 
 class Mem32 {
   private:
@@ -76,6 +79,10 @@ class Mem32 {
     void    writeInt (ptr32_t address, int32_t v);
     int32_t readInt  (ptr32_t address);
     void    copyBytes(ptr32_t src, ptr32_t dst, uint32_t size);
+    void    save(Serialize& out) const;
+    void    load(Serialize& in, const std::function<void*(std::string_view,uint32_t)>& pinTarget);
+    void    validateCallbacks() const;
+    Type    regionType(ptr32_t address, uint32_t size) const;
 
   private:
     enum Status:uint8_t {
@@ -93,7 +100,7 @@ class Mem32 {
       ptr32_t     address = 0;
       uint32_t    size    = 0;
       void*       real    = nullptr;
-      const char* comment = nullptr;
+      std::string comment;
       Status      status  = S_Unused;
       };
 
@@ -122,4 +129,3 @@ class Mem32 {
     std::vector<Region> region;
     std::unordered_map<Type, Callback> memMap;
   };
-

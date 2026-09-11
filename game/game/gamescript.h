@@ -72,6 +72,7 @@ class GameScript final {
     void         loadQuests(Serialize& fin);
     void         saveVar(Serialize& fout);
     void         loadVar(Serialize& fin);
+    void         probePersistence(bool finish);
     void         savePerc(Serialize& fout);
     void         loadPerc(Serialize& fin);
 

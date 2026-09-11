@@ -585,3 +585,35 @@ Evidence:
 No gameplay patch is shipped for this diagnosis. Initializing empty tables earlier would remove the warning without providing missing persistence. Treat full LeGo object/callback save restoration and actual world-transition consistency as the substantive follow-up, with pending one-shot callbacks and live script-object references as explicit test cases. Current ordinary quest/inventory save tests do not establish that broader guarantee.
 
 Temporary DEBUG-message code removed; Profile restored byte-for-byte to its signed menu-audio build, playable Fast executable never replaced, and all three current user saves retain their hashes. Build directory rebuilt from clean source to remove instrumentation. No new launch command or New Game is required. The unsupported-message line can still occur in the current playable build; its cause is now identified rather than silently suppressed.
+
+
+## LeGo/Ikarus save persistence, 11 September 2026
+
+### Cause and shared fix
+
+The preceding MessageBox diagnosis exposed actual missing state: normal saveSym excludes constants, mutable function variables and memory_instance bindings, and Mem32 had no serialization. LeGo keeps handle-table roots in writable constants and objects/callbacks in its virtual heap. Rebuilding two recurring callbacks could not recover arbitrary original objects or one-shots.
+
+Add optional game/compatibility snapshot version 1 through GameScript::saveVar/loadVar. Preserve used virtual regions at the same addresses, mutable INT/FLOAT/STRING constants, function variables, memory-instance bindings and reference-region metadata. Native pinned POD destinations and mapped VM callbacks are rebound in the new process; native NPC/item contexts resolve through restored world/inventory identity. Distinct deleted objects remain separate null bindings across subsequent saves. Free callback-owned buffers with the allocator. No raw macOS pointers are serialized.
+
+Validate the script fingerprint, version, fixed mapping addresses/types/sizes, region ranges/counts/size bounds, symbol IDs/types, duplicate reference types and pins. Stage allocation/map replacement. New-format loads skip legacy recurring-callback reconstruction. Old saves retain that recovery, including the original warning on first load; saving afterward preserves the state then present. Lost pre-update objects cannot be inferred. Actual world transitions retain their separate unverified status.
+
+Save through a temporary sibling file and rename after successful serialization and flush. A compatibility serialization error must not truncate an existing slot. This is protection against failed serialization, not a claim of complete power-loss durability.
+
+### Evidence
+
+- Before serialization, work/persistence-before-reload fails the linked-heap regression. The earlier hidden-message traces establish HANDLESPOINTER=0 after old-format load.
+- work/persistence-release-seed converts a private copy of user city slot 3 and schedules a real installed TIMER_SETPAUSE callback through FF_APPLYEXTDATAGT with one cycle, a data pointer and a 15,000-ms delay. It saves before the callback is due. No game scripts/assets are modified.
+- Final binary: work/persistence-exact-reload restores linked/resized allocations, a string, read/write mapping into HERO's native AIVAR array, and two distinct removed-item references. Start count=0; exactly one direct dispatch at elapsed=15004; finish count=1. work/persistence-exact-completed reloads that output: start/finish count=1, no new dispatch. Both save successfully, have 12–13 nearby NPCs, normal camera/dialogue and ~59.5–59.9 FPS. Neither reload emits MEM_MESSAGEBOX. Per-dispatch counting catches duplicate calls even within one frame; temporary PERSISTENCE_DEBUG logs are removed.
+- tests/run_archolos_city.py --persistence seed/reload/completed is the reproducible check; chain save_slot_2.sav outputs. Native member writes are immediately restored and all probes use private saves/configs. The installed script body is used for the callback because unsafe_call bypasses override_function; earlier override/paused-flag harness attempts were corrected and are not acceptance evidence.
+- work/persistence-acceptance-fingerprint and -truncated: --reject refuses altered fingerprints and truncated entries via normal load errors, never enters the world or creates another save. Private processes are terminated by the rejection runner after observing the expected error.
+- work/persistence-acceptance-save-failure: --save-failure injects a serializer exception; the preexisting target remains byte-identical, with no temporary file left.
+- work/persistence-acceptance-music: --menu --kmlib --full passes all 13 stages, music/volume/mute/cancellation/overlap, zone hooks/local services, load/save and menu return. work/persistence-acceptance-recipe passes fresh inventory learning, persistent document display, journal, stove and reread. These tests used the same gameplay implementation before the final probe-only move from per-tick observation to per-dispatch counting; the final binary then passed both refined restart tests.
+- One city snapshot adds 23,120,004 raw bytes / 1,729,561 compressed bytes (~1.65 MiB). Size grows with state; no long-campaign bound is claimed. Release build, runner syntax, whitespace checks and both app signatures pass. All three user save SHA-256 values remain unchanged.
+
+### Limits and next work
+
+This implements virtual-heap/callback save restoration, not complete LeGo/API/native engine parity. It does not recreate previously unsaved objects, migrate differing scripts, preserve unsupported native state, or prove every delayed quest/cutscene correct. Live native NPC-array and deleted-item bindings are tested; unusual inventory identities and other native contexts need broader coverage. Original bytecode/native operations that were unsupported remain unsupported. Do not automatically suppress errors or label all cutscenes fixed.
+
+Snapshot addresses depend on identical scripts and mapping ABI; bump the snapshot version for incompatible mapping changes. Older engine builds can ignore the extra entry and lose this state if they re-save. Current saves can be continued; fresh campaign testing avoids historical omissions. Next: actual transitions between distinct ZEN worlds, save/reload on both sides, then broader story progression. No platform integration or cursor changes.
+
+Installed Fast SHA-256 `a65b95d1ed0221d53632f94da1d97c55ba4e008d2947a5304f0efe48d0932ad5`; tested Profile `6ab21c0e1e13a0c84c567db5ba14bc16ae854fc846bea2af0172cb479752ce13`; executable bytes match before signature offset 26378704. Previous executable: work/Gothic2Notr-Fast-before-persistence. Evidence and user explanation: outputs/archolos-persistence-fix.json, outputs/archolos-persistence-fix.patch, outputs/archolos-persistence-explained.md. Local commits only.

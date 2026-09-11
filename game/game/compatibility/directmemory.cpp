@@ -14,6 +14,8 @@
 #include "world/focus.h"
 #include "gothic.h"
 #include "gamemusic.h"
+#include "game/serialize.h"
+#undef zError // miniz's zlib alias conflicts with the Gothic structure
 
 using namespace Tempest;
 using namespace Compatibility;
@@ -91,6 +93,35 @@ const std::string& DirectMemory::memory_instance::get_string(const zenkit::Daeda
 
 
 DirectMemory::DirectMemory(GameScript& owner, zenkit::DaedalusVm& vm) : gameScript(owner), vm(vm), cpu(*this, mem32) {
+  // Virtual pointers include bytecode/symbol addresses: accept snapshots only
+  // for the same script, including string literals and original constants.
+  scriptFingerprint = 14695981039346656037ull;
+  auto hash = [this](uint64_t value) {
+    for(unsigned i=0;i<8;++i) {
+      scriptFingerprint = (scriptFingerprint ^ (value & 255))*1099511628211ull;
+      value >>= 8;
+      }
+    };
+  for(auto& s : vm.symbols()) {
+    for(auto c : s.name()) hash(uint8_t(c));
+    hash(0); hash(uint32_t(s.type())); hash(s.count()); hash(s.address());
+    if(s.is_member()) { hash(s.offset_as_member()); continue; }
+    if(s.is_const()) {
+      for(uint16_t i=0;i<s.count();++i) {
+        if(s.type()==zenkit::DaedalusDataType::INT) hash(uint32_t(s.get_int(i)));
+        if(s.type()==zenkit::DaedalusDataType::FLOAT) hash(uint32_t(floatBitsToInt(s.get_float(i))));
+        if(s.type()==zenkit::DaedalusDataType::STRING) {
+          for(auto c : s.get_string(i)) hash(uint8_t(c));
+          hash(0);
+          }
+        }
+      }
+    }
+  for(uint32_t pc=0;pc<vm.size();) {
+    auto i = vm.instruction_at(pc);
+    hash(uint8_t(i.op)); hash(i.address); hash(i.symbol); hash(uint32_t(i.immediate)); hash(i.index);
+    pc += i.size;
+    }
   if(auto v = vm.find_symbol_by_name("Ikarus_Version")) {
     const int version = v->type()==zenkit::DaedalusDataType::INT ? v->get_int() : 0;
     Log::i("DMA mod detected: Ikarus v", version);
@@ -206,13 +237,275 @@ bool DirectMemory::isRequired(zenkit::DaedalusScript& vm) {
       vm.find_symbol_by_name("_^") != nullptr;
   }
 
+void DirectMemory::saveReference(Serialize& out, const std::shared_ptr<zenkit::DaedalusInstance>& instance) {
+  auto& w = gameScript.world();
+  if(!instance) {
+    out.write(uint8_t(0));
+    } else if(auto m = dynamic_cast<memory_instance*>(instance.get())) {
+    out.write(uint8_t(1),m->address);
+    } else if(auto npc = dynamic_cast<zenkit::INpc*>(instance.get())) {
+    auto id = w.npcId(static_cast<Npc*>(npc->user_ptr));
+    auto* live = w.npcById(id);
+    out.write(uint8_t(2),live && live->handlePtr()==instance ? id : uint32_t(-1));
+    } else if(auto item = dynamic_cast<zenkit::IItem*>(instance.get())) {
+    const auto id = w.itmId(item);
+    if(id!=uint32_t(-1)) {
+      out.write(uint8_t(3),id);
+      return;
+      }
+    for(uint32_t i=0;i<w.npcCount();++i) {
+      auto* itm = w.npcById(i)->getItem(item->symbol_index());
+      if(itm && itm->handlePtr().get()==item) {
+        out.write(uint8_t(4),i,uint32_t(item->symbol_index()));
+        return;
+        }
+      }
+    out.write(uint8_t(0)); // deleted native item
+    } else {
+    auto* sym = vm.find_symbol_by_index(instance->symbol_index());
+    if(!sym || sym->get_instance()!=instance)
+      throw std::runtime_error("Unsupported persistent native instance");
+    out.write(uint8_t(5),sym->index());
+    }
+  }
+
+auto DirectMemory::loadReference(Serialize& in) -> std::shared_ptr<zenkit::DaedalusInstance> {
+  uint8_t kind = 0;
+  uint32_t id = 0;
+  in.read(kind);
+  if(kind==0) return nullptr;
+  in.read(id);
+  auto& w = gameScript.world();
+  if(kind==1) return std::make_shared<memory_instance>(*this,id);
+  if(kind==2) {
+    auto* npc = w.npcById(id);
+    return npc ? npc->handlePtr() : nullptr;
+    }
+  if(kind==3) {
+    auto* item = w.itmById(id);
+    return item ? item->handlePtr() : nullptr;
+    }
+  if(kind==4) {
+    uint32_t cls = 0;
+    in.read(cls);
+    auto* npc = w.npcById(id);
+    auto* item = npc ? npc->getItem(cls) : nullptr;
+    return item ? item->handlePtr() : nullptr;
+    }
+  if(kind==5) {
+    auto* sym = vm.find_symbol_by_index(id);
+    if(sym && sym->get_instance()) return sym->get_instance();
+    }
+  throw std::runtime_error("Invalid persistent native reference");
+  }
+
+void DirectMemory::save(Serialize& out) {
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_PERSISTENCE_SAVE_FAILURE")!=nullptr)
+    throw std::runtime_error("Injected compatibility save failure");
+  out.setEntry("game/compatibility");
+  // ponytail: a complete virtual-memory snapshot requires identical scripts and
+  // mapping ABI. Bump this version when changing the native memory layout.
+  out.write(uint32_t(1),scriptFingerprint,scriptVariables,scriptSymbols,ASMINT_InternalStack,musicThemePtr);
+  std::vector<uint32_t> values, instances;
+  for(auto& s : vm.symbols()) {
+    if(s.is_member()) continue;
+    const auto t = s.type();
+    if(s.count()>0 && ((s.is_const() && (t==zenkit::DaedalusDataType::INT || t==zenkit::DaedalusDataType::FLOAT || t==zenkit::DaedalusDataType::STRING)) ||
+                      (t==zenkit::DaedalusDataType::FUNCTION && !s.is_const())))
+      values.push_back(s.index());
+    if(t==zenkit::DaedalusDataType::INSTANCE && dynamic_cast<memory_instance*>(vm.find_symbol_by_index(s.index())->get_instance().get()))
+      instances.push_back(s.index());
+    }
+  out.write(uint32_t(values.size()));
+  for(auto id : values) {
+    auto& s = *vm.find_symbol_by_index(id);
+    out.write(id);
+    for(uint16_t i=0;i<s.count();++i) {
+      if(s.type()==zenkit::DaedalusDataType::STRING) out.write(s.get_string(i));
+      else if(s.type()==zenkit::DaedalusDataType::FLOAT) out.write(s.get_float(i));
+      else out.write(s.get_int(i));
+      }
+    }
+  out.write(uint32_t(instances.size()));
+  for(auto id : instances) {
+    out.write(id);
+    saveReference(out,vm.find_symbol_by_index(id)->get_instance());
+    }
+  mem32.save(out);
+  out.write(uint32_t(scriptReferences.size()));
+  for(const auto& [ref,ptr] : scriptReferences) {
+    out.write(ref.second,ptr);
+    saveReference(out,ref.first);
+    }
+  }
+
+void DirectMemory::load(Serialize& in) {
+  resetMusicZone();
+  if(!in.setEntry("game/compatibility")) {
+    restoreQuestCallbacks = true; // older saves have no heap to restore
+    return;
+    }
+  uint32_t version = 0;
+  uint64_t fingerprint = 0;
+  in.read(version,fingerprint);
+  if(version!=1 || fingerprint!=scriptFingerprint)
+    throw std::runtime_error("Incompatible script/compatibility snapshot");
+  uint32_t variables = 0, symbols = 0;
+  in.read(variables,symbols,ASMINT_InternalStack,musicThemePtr);
+  if(variables!=scriptVariables || symbols!=scriptSymbols)
+    throw std::runtime_error("Incompatible script memory addresses");
+  uint32_t count = 0;
+  in.read(count);
+  if(count>vm.symbols().size()) throw std::runtime_error("Invalid compatibility symbol count");
+  std::unordered_set<uint32_t> seen;
+  for(uint32_t n=0;n<count;++n) {
+    uint32_t id = 0;
+    in.read(id);
+    auto* s = vm.find_symbol_by_index(id);
+    if(!seen.insert(id).second || !s || s->is_member() || s->count()==0 ||
+       (!s->is_const() && s->type()!=zenkit::DaedalusDataType::FUNCTION) ||
+       !(s->type()==zenkit::DaedalusDataType::INT || s->type()==zenkit::DaedalusDataType::FLOAT ||
+         s->type()==zenkit::DaedalusDataType::STRING || (s->type()==zenkit::DaedalusDataType::FUNCTION && !s->is_const())))
+      throw std::runtime_error("Invalid compatibility symbol");
+    for(uint16_t i=0;i<s->count();++i) {
+      if(s->type()==zenkit::DaedalusDataType::STRING) {
+        uint32_t size = 0;
+        in.read(size);
+        if(size>16*1024*1024) throw std::runtime_error("Invalid compatibility string size");
+        std::string v(size,'\0');
+        in.readBytes(v.data(),size);
+        s->set_string(v,i);
+        }
+      else if(s->type()==zenkit::DaedalusDataType::FLOAT) { float v; in.read(v); s->set_float(v,i); }
+      else { int32_t v; in.read(v); s->set_int(v,i); }
+      }
+    }
+  in.read(count);
+  if(count>vm.symbols().size()) throw std::runtime_error("Invalid compatibility instance count");
+  seen.clear();
+  for(uint32_t n=0;n<count;++n) {
+    uint32_t id = 0;
+    in.read(id);
+    auto* s = vm.find_symbol_by_index(id);
+    if(!seen.insert(id).second || !s || s->is_member() || s->type()!=zenkit::DaedalusDataType::INSTANCE)
+      throw std::runtime_error("Invalid compatibility instance");
+    auto instance = loadReference(in);
+    if(!dynamic_cast<memory_instance*>(instance.get()))
+      throw std::runtime_error("Invalid compatibility instance binding");
+    s->set_instance(std::move(instance));
+    }
+  mem32.load(in,[this](std::string_view name,uint32_t size) -> void* {
+    if(name=="ASMINT_CallTarget" && size==sizeof(ASMINT_CallTarget)) return &ASMINT_CallTarget;
+    return nullptr;
+    });
+  scriptReferences.clear();
+  in.read(count);
+  if(count>100000) throw std::runtime_error("Invalid compatibility reference count");
+  std::unordered_set<Mem32::Type> boundTypes;
+  for(uint32_t n=0;n<count;++n) {
+    uint32_t id = 0, ptr = 0;
+    in.read(id,ptr);
+    auto context = loadReference(in);
+    auto* ref = vm.find_symbol_by_index(id);
+    if(!ref || !(ref->type()==zenkit::DaedalusDataType::INT || ref->type()==zenkit::DaedalusDataType::FLOAT || ref->type()==zenkit::DaedalusDataType::STRING))
+      throw std::runtime_error("Invalid compatibility binding");
+    const uint32_t stride = ref->type()==zenkit::DaedalusDataType::STRING ? sizeof(zString) : 4;
+    const uint32_t size = ((uint32_t(ref->count())*stride+Mem32::memAlign-1)/Mem32::memAlign)*Mem32::memAlign;
+    auto type = mem32.regionType(ptr,size);
+    if(type<Mem32::Type::firstScriptReference || !boundTypes.insert(type).second)
+      throw std::runtime_error("Invalid compatibility binding type");
+    bindReference(ref,context,type);
+    if((context || !ref->is_member()) && scriptReferences.contains({context,id}))
+      throw std::runtime_error("Duplicate compatibility reference");
+    // Distinct deleted native objects can resolve to null. Keep each address
+    // bound to a tombstone, including across subsequent saves.
+    scriptReferences.emplace(std::make_pair(context,id),ptr);
+    }
+  mem32.validateCallbacks();
+  restoreQuestCallbacks = false;
+  if(std::getenv("OPENGOTHIC_PERSISTENCE_PROBE")!=nullptr)
+    persistenceProbeRoot = uint32_t(vm.find_symbol_by_name("MEM_INFOBOX.RES")->get_int());
+  Log::i("[COMPATIBILITY] Restored virtual heap and script bindings");
+  }
+
+void DirectMemory::probePersistence(bool finish) {
+  const auto mode = std::string_view(std::getenv("OPENGOTHIC_PERSISTENCE_PROBE"));
+  const bool seed = mode=="seed", completed = mode=="completed";
+  auto* root = vm.find_symbol_by_name("MEM_INFOBOX.RES");
+  if(!finish && seed) {
+    auto ptr = mem32.alloc(64);
+    auto child = mem32.alloc(8);
+    mem32.writeInt(child,0x7654321);
+    child = mem32.realloc(child,128);
+    mem32.writeInt(ptr,0x1234abcd);
+    mem32.writeInt(ptr+8,int32_t(child));
+    mem32.writeInt(ptr+12,vm.find_symbol_by_name("_TIMER_PAUSED")->get_int());
+    zString str = {};
+    memAssignString(str,"Archolos persistent string");
+    *static_cast<zString*>(mem32.derefv(ptr+32,sizeof(zString))) = str;
+    auto* ref = vm.find_symbol_by_name("C_NPC.AIVAR");
+    auto context = gameScript.world().player()->handlePtr();
+    auto type = Mem32::Type(uint32_t(Mem32::Type::firstScriptReference)+uint32_t(scriptReferences.size())+1);
+    bindReference(ref,context,type);
+    auto mapped = mem32.alloc(uint32_t(ref->count())*4,type);
+    scriptReferences.emplace(std::make_pair(context,ref->index()),mapped);
+    mem32.writeInt(ptr+16,int32_t(mapped));
+    // Two removed objects must retain distinct null bindings after reload.
+    auto* itemValue = vm.find_symbol_by_name("C_ITEM.VALUE");
+    for(uint32_t off : {20u,28u}) {
+      auto* gold = vm.find_symbol_by_name("ITMI_GOLD");
+      auto original = gold->get_instance();
+      auto removed = vm.allocate_instance<zenkit::IItem>(gold);
+      gold->set_instance(original);
+      type = Mem32::Type(uint32_t(Mem32::Type::firstScriptReference)+uint32_t(scriptReferences.size())+1);
+      bindReference(itemValue,removed,type);
+      auto address = mem32.alloc(4,type);
+      scriptReferences.emplace(std::make_pair(removed,itemValue->index()),address);
+      mem32.writeInt(ptr+off,int32_t(address));
+      }
+    root->set_int(int32_t(ptr));
+    }
+  auto ptr = uint32_t(root->get_int());
+  persistenceProbeRoot = ptr;
+  if(seed && finish) {
+    auto cb = vm.find_symbol_by_name("TIMER_SETPAUSE");
+    mem32.writeInt(ptr+24,int32_t(gameScript.tickCount()));
+    vm.call_function("FF_APPLYEXTDATAGT",int32_t(cb->index()),15000,1,int32_t(ptr));
+    }
+  if(mem32.readInt(ptr)!=0x1234abcd || mem32.readInt(uint32_t(mem32.readInt(ptr+8)))!=0x7654321)
+    throw std::runtime_error("Persistence lost linked heap objects");
+  std::string str;
+  memFromString(str,*mem32.deref<zString>(ptr+32));
+  if(str!="Archolos persistent string") throw std::runtime_error("Persistence lost string");
+  auto* ref = vm.find_symbol_by_name("C_NPC.AIVAR");
+  auto context = gameScript.world().player()->handlePtr();
+  auto mapped = uint32_t(mem32.readInt(ptr+16));
+  auto value = ref->get_int(99,context.get());
+  if(mem32.readInt(mapped+99*4)!=value) throw std::runtime_error("Persistence lost native array read");
+  mem32.writeInt(mapped+99*4,value^0x1234);
+  if(ref->get_int(99,context.get())!=(value^0x1234)) throw std::runtime_error("Persistence lost native array write");
+  mem32.writeInt(mapped+99*4,value);
+  for(uint32_t off : {20u,28u}) {
+    auto address = uint32_t(mem32.readInt(ptr+off));
+    if(mem32.readInt(address)!=0) throw std::runtime_error("Persistence lost deleted-object binding");
+    if(!seed) {
+      mem32.writeInt(address,1234);
+      if(mem32.readInt(address)!=0) throw std::runtime_error("Persistence wrote a deleted object");
+      }
+    }
+  auto count = mem32.readInt(ptr+4);
+  if(count!=((completed || (finish && !seed)) ? 1 : 0))
+    throw std::runtime_error("Persistence callback count/timing mismatch");
+  Log::i("[PERSISTENCE_PROBE] phase=",finish ? "finish" : "start"," count=",count);
+  }
+
 void DirectMemory::tick(uint64_t dt) {
   memGame.TIMESTEP = floatBitsToInt(float(dt));
   if(restoreQuestCallbacks) {
     restoreQuestCallbacks = false;
-    // Saves restore script globals, but not LeGo's allocated callback handles.
+    // Legacy saves restore script globals, but lack allocated callback handles.
     // Re-register the mod's recurring quest dispatcher without rerunning world
-    // startup or resetting NPC routines. One-shot callback persistence is separate.
+    // startup or resetting NPC routines. Lost one-shots cannot be recovered.
     if(auto init = vm.find_symbol_by_name("INIT_QUESTSEVENTSMANAGER")) {
       vm.call_function("MEM_InitAll");
       vm.call_function(init);
@@ -626,7 +919,7 @@ void DirectMemory::setupEngineMemory() {
   std::memcpy(menuName, initialMenu.data(), initialMenu.size());
 
   const ptr32_t ZERRPTR = 9231568;
-  mem32.alloc(ZERRPTR, sizeof(zError));
+  mem32.alloc(ZERRPTR, sizeof(Compatibility::zError));
 
   const ptr32_t LODENABLED = 8596020;
   mem32.alloc(LODENABLED, 4, "LODENABLED"); // can always ignore that
@@ -1226,6 +1519,34 @@ void DirectMemory::setupMemoryFunctions() {
   vm.override_function("MEM_Realloc", [this](int address, int oldsz, int size) { return mem_realloc(address,oldsz,size); });
   }
 
+void DirectMemory::bindReference(zenkit::DaedalusSymbol* ref, std::shared_ptr<zenkit::DaedalusInstance> context, Mem32::Type type) {
+  const bool string = ref->type()==zenkit::DaedalusDataType::STRING;
+  if(string) {
+    mem32.setCallbackR(type, [this,ref,context](zString& value, uint32_t i) {
+      if(ref->is_member() && !context) { memAssignString(value,""); return; }
+      memAssignString(value,ref->get_string(uint16_t(i),context.get()));
+      });
+    mem32.setCallbackW(type, [this,ref,context](zString& value, uint32_t i) {
+      if(ref->is_member() && !context) return;
+      std::string text;
+      memFromString(text,value);
+      ref->set_string(text,uint16_t(i),context.get());
+      });
+    } else {
+    mem32.setCallbackR(type, [ref,context](int32_t& value, uint32_t i) {
+      if(ref->is_member() && !context) { value=0; return; }
+      value = ref->type()==zenkit::DaedalusDataType::FLOAT ?
+        floatBitsToInt(ref->get_float(uint16_t(i),context.get())) : ref->get_int(uint16_t(i),context.get());
+      });
+    mem32.setCallbackW(type, [ref,context](int32_t& value, uint32_t i) {
+      if(ref->is_member() && !context) return;
+      if(ref->type()==zenkit::DaedalusDataType::FLOAT)
+        ref->set_float(intBitsToFloat(value),uint16_t(i),context.get()); else
+        ref->set_int(value,uint16_t(i),context.get());
+      });
+    }
+  }
+
 auto DirectMemory::_takeref(zenkit::DaedalusVm& vm) -> zenkit::DaedalusNakedCall {
   if(vm.top_is_reference()) {
     auto [ref, idx, context] = vm.pop_reference();
@@ -1249,29 +1570,13 @@ auto DirectMemory::_takeref(zenkit::DaedalusVm& vm) -> zenkit::DaedalusNakedCall
         return zenkit::DaedalusNakedCall();
         }
       // ponytail: retain referenced VM instances until session end; use reclaimable mappings if this grows materially.
-      auto& ptr = scriptReferences[{context,ref->index()}];
+      auto it = scriptReferences.find({context,ref->index()});
+      if(it==scriptReferences.end())
+        it = scriptReferences.emplace(std::make_pair(context,ref->index()),0);
+      auto& ptr = it->second;
       if(ptr==0) {
         const auto type = Mem32::Type(uint32_t(Mem32::Type::firstScriptReference)+uint32_t(scriptReferences.size()));
-        if(string) {
-          mem32.setCallbackR(type, [this,ref,context](zString& value, uint32_t i) {
-            memAssignString(value,ref->get_string(uint16_t(i),context.get()));
-            });
-          mem32.setCallbackW(type, [this,ref,context](zString& value, uint32_t i) {
-            std::string text;
-            memFromString(text,value);
-            ref->set_string(text,uint16_t(i),context.get());
-            });
-          } else {
-          mem32.setCallbackR(type, [ref,context](int32_t& value, uint32_t i) {
-            value = ref->type()==zenkit::DaedalusDataType::FLOAT ?
-                    floatBitsToInt(ref->get_float(uint16_t(i),context.get())) : ref->get_int(uint16_t(i),context.get());
-            });
-          mem32.setCallbackW(type, [ref,context](int32_t& value, uint32_t i) {
-            if(ref->type()==zenkit::DaedalusDataType::FLOAT)
-              ref->set_float(intBitsToFloat(value),uint16_t(i),context.get()); else
-              ref->set_int(value,uint16_t(i),context.get());
-            });
-          }
+        bindReference(ref,context,type);
         ptr = mem32.alloc(uint32_t(ref->count())*stride,type);
         }
       vm.push_int(int32_t(ptr+uint32_t(idx)*stride));
@@ -1479,6 +1784,20 @@ void DirectMemory::directCall(zenkit::DaedalusVm& vm, zenkit::DaedalusSymbol& fu
   //vm.call_function(sym);
   //zenkit::StackGuard guard {&vm, func.rtype()};
   vm.unsafe_call(&func);
+  // The opt-in regression uses the original TIMER_SETPAUSE script as a callback.
+  // Count each dispatch, including multiple calls in one frame, then undo the pause.
+  if(persistenceProbeRoot!=0 && func.name()=="TIMER_SETPAUSE") {
+    auto* argument = vm.find_symbol_by_name("TIMER_SETPAUSE.ON");
+    if(uint32_t(argument->get_int())==persistenceProbeRoot) {
+      auto ptr = persistenceProbeRoot;
+      auto elapsed = uint32_t(gameScript.tickCount())-uint32_t(mem32.readInt(ptr+24));
+      if(elapsed<15000) throw std::runtime_error("Persistence callback fired early");
+      mem32.writeInt(ptr+4,mem32.readInt(ptr+4)+1);
+      argument->set_int(0);
+      vm.find_symbol_by_name("_TIMER_PAUSED")->set_int(mem32.readInt(ptr+12));
+      Log::i("[PERSISTENCE_PROBE] fired elapsed=",elapsed);
+      }
+    }
   }
 
 zenkit::DaedalusNakedCall DirectMemory::mem_callbyid(zenkit::DaedalusVm& vm) {

@@ -21,10 +21,12 @@ class DirectMemory {
 
     // hooks
     void        tick(uint64_t dt);
-    void        onLoad() { restoreQuestCallbacks = true; resetMusicZone(); }
     void        eventPlayAni(std::string_view ani);
     Npc&        dialogSpeaker(Npc& npc);
     bool        setMusicZone(std::string_view zone, uint8_t tags);
+    void        probePersistence(bool finish);
+    void        save(Serialize& out);
+    void        load(Serialize& in);
 
   private:
     using ptr32_t      = Mem32::ptr32_t;
@@ -58,8 +60,10 @@ class DirectMemory {
     zenkit::DaedalusVm& vm;
     Mem32               mem32;
     Cpu32               cpu;
+    uint64_t            scriptFingerprint = 0;
 
     bool        restoreQuestCallbacks = false;
+    ptr32_t     persistenceProbeRoot = 0;
     std::weak_ptr<zenkit::DaedalusInstance> triaSelf, triaSpeaker;
 
     uint32_t    versionHint     = 504628679; // G2
@@ -77,7 +81,10 @@ class DirectMemory {
 
     ptr32_t     scriptVariables = 0;
     ptr32_t     scriptSymbols   = 0;
-    std::map<std::pair<std::shared_ptr<zenkit::DaedalusInstance>,uint32_t>,ptr32_t> scriptReferences;
+    std::multimap<std::pair<std::shared_ptr<zenkit::DaedalusInstance>,uint32_t>,ptr32_t> scriptReferences;
+    void        bindReference(zenkit::DaedalusSymbol* ref, std::shared_ptr<zenkit::DaedalusInstance> context, Mem32::Type type);
+    void        saveReference(Serialize& out, const std::shared_ptr<zenkit::DaedalusInstance>& instance);
+    auto        loadReference(Serialize& in) -> std::shared_ptr<zenkit::DaedalusInstance>;
 
     void        setupFunctionTable();
     void        setupIkarusLoops();

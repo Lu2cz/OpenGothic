@@ -570,6 +570,13 @@ void GameScript::saveVar(Serialize &fout) {
     auto* sym = vm.find_symbol_by_index(i); // never returns nullptr
     saveSym(fout,*sym);
     }
+  if(dma)
+    dma->save(fout);
+  }
+
+void GameScript::probePersistence(bool finish) {
+  if(dma)
+    dma->probePersistence(finish);
   }
 
 void GameScript::loadVar(Serialize &fin) {
@@ -664,7 +671,7 @@ void GameScript::loadVar(Serialize &fin) {
       }
     }
   if(dma!=nullptr)
-    dma->onLoad();
+    dma->load(fin);
   }
 
 void GameScript::savePerc(Serialize& fout) {

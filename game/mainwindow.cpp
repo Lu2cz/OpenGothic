@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
+#include <filesystem>
 #include <iomanip>
 
 #include <Tempest/Except>
@@ -1137,9 +1138,23 @@ void MainWindow::saveGame(std::string_view slot, std::string_view name) {
     if(!game)
       return std::move(game);
 
-    Tempest::WFile f(slot);
-    Serialize      s(f);
-    game->save(s,name,pm);
+    // Keep the previous slot intact if serialization rejects unsupported state.
+    const auto temporary = slot+".tmp";
+    try {
+      {
+      Tempest::WFile f(temporary);
+      {
+      Serialize s(f);
+      game->save(s,name,pm);
+      }
+      if(!f.flush()) throw std::runtime_error("unable to flush savegame file");
+      }
+      std::filesystem::rename(temporary,slot);
+      } catch(...) {
+      std::error_code ignored;
+      std::filesystem::remove(temporary,ignored);
+      throw;
+      }
 
     // no print yet, because threading
     // gothic.print("Game saved");
@@ -1942,6 +1957,8 @@ void MainWindow::render(){
         }
       if(profileFrames==200)
         cityMeasuredAt = profileNow();
+      if(std::getenv("OPENGOTHIC_PERSISTENCE_PROBE")!=nullptr && (profileFrames==60 || profileFrames==600))
+        w.script().probePersistence(profileFrames==600);
       if(!cityProbeSaved && ((!musicFull && profileFrames==600) || (musicFull && musicProbeStage==13))) {
         size_t nearby = 0;
         w.detectNpc(pl->position(),2000,[&](Npc& npc) { if(&npc!=pl) ++nearby; });

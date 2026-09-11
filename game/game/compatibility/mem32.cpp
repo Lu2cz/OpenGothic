@@ -1,4 +1,5 @@
 #include "mem32.h"
+#include "game/serialize.h"
 
 #include <Tempest/Log>
 #include <cassert>
@@ -19,11 +20,119 @@ Mem32::Mem32() {
 
 Mem32::~Mem32() {
   for(auto& rgn:region) {
-    if(rgn.status==S_Allocated && rgn.real!=nullptr) {
+    if((rgn.status==S_Allocated || rgn.status==S_Callback) && rgn.real!=nullptr) {
       std::free(rgn.real);
       rgn.real = nullptr;
       }
     }
+  }
+
+void Mem32::save(Serialize& out) const {
+  uint32_t count = 0;
+  uint64_t total = 0;
+  for(const auto& r : region) {
+    if(r.status==S_Unused)
+      continue;
+    ++count;
+    total += r.size;
+    }
+  if(count>100000 || total>512ull*1024*1024)
+    throw std::runtime_error("Compatibility heap exceeds snapshot limits");
+  out.write(count);
+  for(const auto& r : region) {
+    if(r.status==S_Unused)
+      continue;
+    out.write(uint8_t(r.status),uint32_t(r.type),r.address,r.size,r.comment,r.real!=nullptr);
+    if(r.real)
+      out.writeBytes(r.real,r.size);
+    }
+  }
+
+void Mem32::load(Serialize& in, const std::function<void*(std::string_view,uint32_t)>& pinTarget) {
+  // Stage allocations before replacing the live map. Pinned data contains only
+  // Gothic values/virtual addresses; resolve its native destination afresh.
+  Mem32 next;
+  struct PinData { void* dst; std::vector<uint8_t> bytes; };
+  std::vector<PinData> pins;
+  std::unordered_set<void*> pinAddresses;
+  uint32_t count = 0;
+  in.read(count);
+  if(count>100000)
+    throw std::runtime_error("Invalid compatibility region count");
+  uint64_t total = 0, end = 0x1000;
+  for(uint32_t i=0;i<count;++i) {
+    uint8_t status = 0;
+    uint32_t type = 0, address = 0, size = 0;
+    std::string comment;
+    bool data = false;
+    uint32_t commentSize = 0;
+    in.read(status,type,address,size,commentSize);
+    if(commentSize>1024) throw std::runtime_error("Invalid compatibility region name");
+    comment.resize(commentSize);
+    in.readBytes(comment.data(),comment.size());
+    in.read(data);
+    total += size;
+    if(size==0 || address<end || uint64_t(address)+size>0x80001000ull ||
+       total>512ull*1024*1024 || status<S_Allocated || status>S_Callback ||
+       type>uint32_t(Type::firstScriptReference)+100000 || (status!=S_Callback && (!data || type!=uint32_t(Type::plain))) ||
+       (status==S_Callback && type==uint32_t(Type::plain)))
+      throw std::runtime_error("Invalid compatibility memory region");
+    end = uint64_t(address)+size;
+    auto* r = next.implAllocAt(address,size);
+    if(!r)
+      throw std::runtime_error("Overlapping compatibility memory region");
+    r->status = Status(status);
+    r->size = size;
+    r->type = Type(type);
+    r->comment = std::move(comment);
+    if(r->status==S_Callback && r->type<Type::firstScriptReference) {
+      const auto* old = implTranslate(address);
+      if(!old || old->address!=address || old->status!=S_Callback || old->type!=r->type || old->size!=size)
+        throw std::runtime_error("Incompatible fixed memory binding");
+      }
+    if(r->status==S_Pin) {
+      for(const auto& old : region)
+        if(old.status==S_Pin && old.comment==r->comment && old.size==size) {
+          r->real = old.real;
+          break;
+          }
+      if(!r->real)
+        r->real = pinTarget(r->comment,size);
+      if(!r->real || !pinAddresses.insert(r->real).second)
+        throw std::runtime_error("Unknown or duplicate compatibility pin: "+r->comment);
+      pins.push_back({r->real,std::vector<uint8_t>(size)});
+      in.readBytes(pins.back().bytes.data(),size);
+      } else if(data) {
+      r->real = std::calloc(size,1);
+      if(!r->real)
+        throw std::bad_alloc();
+      in.readBytes(r->real,size);
+      }
+    }
+  for(const auto& old : region) {
+    if(old.status!=S_Pin && !(old.status==S_Callback && old.type<Type::firstScriptReference))
+      continue;
+    auto* r = next.implTranslate(old.address);
+    if(!r || r->address!=old.address || r->size!=old.size || r->status!=old.status || r->type!=old.type || r->comment!=old.comment)
+      throw std::runtime_error("Incompatible native memory layout");
+    }
+  region.swap(next.region);
+  for(auto& p : pins)
+    std::memcpy(p.dst,p.bytes.data(),p.bytes.size());
+  std::erase_if(memMap,[](const auto& p) { return p.first>=Type::firstScriptReference; });
+  }
+
+Mem32::Type Mem32::regionType(ptr32_t address, uint32_t size) const {
+  for(const auto& r : region)
+    if(r.status==S_Callback && r.address==address && r.size==size)
+      return r.type;
+  throw std::runtime_error("Missing compatibility reference region");
+  }
+
+void Mem32::validateCallbacks() const {
+  for(const auto& r : region)
+    if(r.status!=S_Unused && r.type!=Type::plain && !memMap.contains(r.type))
+      throw std::runtime_error("Missing compatibility memory binding");
   }
 
 void Mem32::implSetCallbackR(Type t, std::function<void(void*, uint32_t)> fn, size_t elt) {
@@ -43,7 +152,7 @@ Mem32::ptr32_t Mem32::pin(void* mem, ptr32_t address, uint32_t size, const char*
     rgn->size    = size;
     rgn->real    = mem;
     rgn->status  = S_Pin;
-    rgn->comment = comment;
+    rgn->comment = comment==nullptr ? "" : comment;
     return address;
     }
   throw std::bad_alloc();
@@ -54,7 +163,7 @@ Mem32::ptr32_t Mem32::pin(void* mem, uint32_t size, const char* comment) {
     rgn->size    = size;
     rgn->real    = mem;
     rgn->status  = S_Pin;
-    rgn->comment = comment;
+    rgn->comment = comment==nullptr ? "" : comment;
     return rgn->address;
     }
   throw std::bad_alloc();
@@ -80,7 +189,7 @@ Mem32::ptr32_t Mem32::alloc(ptr32_t address, uint32_t size, const char* comment)
       }
     rgn->size    = size;
     rgn->status  = S_Allocated;
-    rgn->comment = comment;
+    rgn->comment = comment==nullptr ? "" : comment;
     return address;
     }
   throw std::bad_alloc();
@@ -94,7 +203,7 @@ Mem32::ptr32_t Mem32::alloc(uint32_t size, const char* comment) {
       return 0;
       }
     rgn->status  = S_Allocated;
-    rgn->comment = comment;
+    rgn->comment = comment==nullptr ? "" : comment;
     return rgn->address;
     }
   return 0;
@@ -104,7 +213,7 @@ Mem32::ptr32_t Mem32::alloc(uint32_t size, Type type, const char* comment) {
   if(auto rgn = implAlloc(size)) {
     rgn->type    = type;
     rgn->status  = S_Callback;
-    rgn->comment = comment;
+    rgn->comment = comment==nullptr ? "" : comment;
     return rgn->address;
     }
   return 0;
