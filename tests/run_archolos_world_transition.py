@@ -78,8 +78,10 @@ try:
         "destroyed_ref=0 inventory=", "callback_dispatches=1 recurring_dispatches=", "stale_focus=0"))
     mainland = run("02-to-mainland", sewer, "to-mainland", (
         "zone_trigger=", "target=ARCHOLOS_MAINLAND.ZEN", "save world=ARCHOLOS_MAINLAND.ZEN",
-        "returned_lock_progress=1", "destroyed_ref=0 inventory=", "callback_dispatches=1 recurring_dispatches=", "stale_focus=0"))
-    run("03-restart-mainland", mainland, "verify-mainland", ("restart_lock_progress=1 world=ARCHOLOS_MAINLAND.ZEN",))
+        "returned_lock_progress=1", "destroyed_ref=0 inventory=", "callback_dispatches=1 recurring_dispatches=", "stale_focus=0",
+        "inherited_callback_removed=1"))
+    run("03-restart-mainland", mainland, "verify-mainland", (
+        "restart_lock_progress=1 world=ARCHOLOS_MAINLAND.ZEN", "restart_bindings=1 recurring_dispatches="))
 finally:
     assert hashlib.sha256(source.read_bytes()).hexdigest() == source_hash, "Source save changed"
 print(f"PASS world transition: {out}")

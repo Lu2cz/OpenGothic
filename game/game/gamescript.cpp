@@ -599,6 +599,11 @@ void GameScript::checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock) 
     dma->checkWorldTransitionProbe(npc,returnedLock);
   }
 
+void GameScript::verifyWorldTransitionProbe(Npc& npc) {
+  if(dma)
+    dma->verifyWorldTransitionProbe(npc);
+  }
+
 void GameScript::loadVar(Serialize &fin) {
   std::string name;
   uint32_t sz=0;

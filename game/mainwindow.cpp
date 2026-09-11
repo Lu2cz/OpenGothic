@@ -1673,8 +1673,7 @@ void MainWindow::render(){
           if(lock->lockpickProgress()!=1)
             throw std::runtime_error("World-transition restart lost native lockpick progress");
           Log::i("[WORLD_PROBE] restart_lock_progress=1 world=",w.name());
-          worldProbeTransitioned=worldProbeSaved=true;
-          saveGame("save_slot_2.sav","World transition compatibility test");
+          worldProbeTransitioned=true;
           }
         else {
         w.script().beginWorldTransitionProbe(pl,*lock);
@@ -1687,12 +1686,12 @@ void MainWindow::render(){
           }
         }
       const char* destination = mode=="to-sewers" ? "ARCHOLOS_SEWERS.ZEN" : "ARCHOLOS_MAINLAND.ZEN";
-      if(worldProbeTransitioned && !worldProbeSaved && sameWorld(w.name(),destination) && worldProbeWalkFrame==0) {
+      if(mode!="verify-mainland" && worldProbeTransitioned && !worldProbeSaved && sameWorld(w.name(),destination) && worldProbeWalkFrame==0) {
         worldProbeWalkFrame = profileFrames;
         worldProbeWalkStart = pl.position();
         player.onKeyPressed(KeyCodec::Forward,Event::K_W,KeyCodec::Mapping(0));
         }
-      if(!worldProbeWalked && worldProbeWalkFrame!=0 && profileFrames>=worldProbeWalkFrame+60) {
+      if(mode!="verify-mainland" && !worldProbeWalked && worldProbeWalkFrame!=0 && profileFrames>=worldProbeWalkFrame+60) {
         player.clearInput();
         const auto walked = (pl.position()-worldProbeWalkStart).length();
         if(walked<=50 || w.currentCs()!=nullptr || dialogs.isActive())
@@ -1703,7 +1702,7 @@ void MainWindow::render(){
                " camera=",w.currentCs()!=nullptr," dialogue=",dialogs.isActive());
         worldProbeWalked = true;
         }
-      if(worldProbeTransitioned && !worldProbeSaved && worldProbeWalked &&
+      if(mode!="verify-mainland" && worldProbeTransitioned && !worldProbeSaved && worldProbeWalked &&
          sameWorld(w.name(),destination) && profileFrames>=180) {
         Interactive* returnedLock = nullptr;
         if(mode=="to-mainland")
@@ -1715,6 +1714,12 @@ void MainWindow::render(){
         if(mode=="to-mainland" && (returnedLock==nullptr || returnedLock->lockpickProgress()!=1))
           throw std::runtime_error("World-transition lost native lockpick progress");
         w.script().checkWorldTransitionProbe(pl,returnedLock);
+        Log::i("[WORLD_PROBE] save world=",w.name());
+        worldProbeSaved=true;
+        saveGame("save_slot_2.sav","World transition compatibility test");
+        }
+      if(mode=="verify-mainland" && worldProbeTransitioned && !worldProbeSaved && profileFrames>=180) {
+        w.script().verifyWorldTransitionProbe(pl);
         Log::i("[WORLD_PROBE] save world=",w.name());
         worldProbeSaved=true;
         saveGame("save_slot_2.sav","World transition compatibility test");

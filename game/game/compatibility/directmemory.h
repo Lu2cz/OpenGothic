@@ -33,6 +33,7 @@ class DirectMemory {
     void        probeLockFocus(Npc& npc, Interactive& lock, bool restored);
     void        beginWorldTransitionProbe(Npc& npc, Interactive& lock);
     void        checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock);
+    void        verifyWorldTransitionProbe(Npc& npc);
     void        probePersistence(bool finish);
     void        save(Serialize& out);
     void        load(Serialize& in);
@@ -74,6 +75,7 @@ class DirectMemory {
     bool        restoreQuestCallbacks = false;
     ptr32_t     persistenceProbeRoot = 0;
     ptr32_t     worldProbeReference  = 0;
+    ptr32_t     worldProbeItems[2]   = {};
     ptr32_t     worldProbeTimer      = 0;
     ptr32_t     worldProbeRecurringTimer = 0;
     uint32_t    worldProbeDispatches = 0;
@@ -98,6 +100,7 @@ class DirectMemory {
     ptr32_t     scriptVariables = 0;
     ptr32_t     scriptSymbols   = 0;
     std::multimap<std::pair<std::shared_ptr<zenkit::DaedalusInstance>,uint32_t>,ptr32_t> scriptReferences;
+    auto        nativeReference(zenkit::DaedalusSymbol* ref, std::shared_ptr<zenkit::DaedalusInstance> context) -> ptr32_t;
     void        bindReference(zenkit::DaedalusSymbol* ref, std::shared_ptr<zenkit::DaedalusInstance> context, Mem32::Type type);
     auto        focusVob(Interactive& focus) -> ptr32_t;
     void        saveReference(Serialize& out, const std::shared_ptr<zenkit::DaedalusInstance>& instance);

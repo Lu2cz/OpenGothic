@@ -4,6 +4,7 @@
 #include <Tempest/Log>
 
 #include <cassert>
+#include <array>
 #include <charconv>
 #include <limits>
 
@@ -314,20 +315,45 @@ static uint64_t inventorySignature(const Npc& npc) {
   return result;
   }
 
-void DirectMemory::beginWorldTransitionProbe(Npc& npc, Interactive& lock) {
-  auto* ref = vm.find_symbol_by_name("C_NPC.AIVAR");
-  auto context = npc.handlePtr();
+auto DirectMemory::nativeReference(zenkit::DaedalusSymbol* ref, std::shared_ptr<zenkit::DaedalusInstance> context) -> ptr32_t {
+  if(ref==nullptr)
+    throw std::runtime_error("Invalid native reference probe");
   auto it = scriptReferences.find({context,ref->index()});
-  if(it==scriptReferences.end()) {
-    const auto type = mem32.nextScriptReferenceType();
-    bindReference(ref,context,type);
-    auto ptr = mem32.alloc(uint32_t(ref->count())*4,type);
-    it = scriptReferences.emplace(std::make_pair(context,ref->index()),ptr);
+  if(it!=scriptReferences.end())
+    return it->second;
+  const auto type = mem32.nextScriptReferenceType();
+  bindReference(ref,context,type);
+  const uint32_t stride = ref->type()==zenkit::DaedalusDataType::STRING ? uint32_t(sizeof(zString)) : 4;
+  return scriptReferences.emplace(std::make_pair(std::move(context),ref->index()),
+                                  mem32.alloc(uint32_t(ref->count())*stride,type))->second;
+  }
+
+void DirectMemory::beginWorldTransitionProbe(Npc& npc, Interactive& lock) {
+  // A prior stage has already observed its restored recurring callback. Do not
+  // carry that test callback into the next transition's persistence check.
+  if(worldProbeRecurringTimer!=0) {
+    vm.call_function("FF_REMOVE",int32_t(vm.find_symbol_by_name("TIMER_SETPAUSE")->index()));
+    worldProbeRecurringTimer = 0;
+    Log::i("[WORLD_PROBE] inherited_callback_removed=1");
     }
-  worldProbeReference = it->second;
+  auto* ref = vm.find_symbol_by_name("C_NPC.AIVAR");
+  auto* itemValue = vm.find_symbol_by_name("C_ITEM.VALUE");
+  worldProbeReference = nativeReference(ref,npc.handlePtr());
   mem32.writeInt(worldProbeReference+99*4,0x1234);
   if(mem32.readInt(worldProbeReference+99*4)!=0x1234)
     throw std::runtime_error("World-transition probe could not bind native reference");
+  worldProbeItems[0] = worldProbeItems[1] = 0;
+  uint32_t firstClass = 0;
+  for(auto item=npc.inventory().iterator(Inventory::T_Inventory); item.isValid() && worldProbeItems[1]==0; ++item) {
+    const auto cls = uint32_t(item->clsId());
+    if(cls==firstClass)
+      continue;
+    const auto n = worldProbeItems[0]==0 ? 0u : 1u;
+    worldProbeItems[n] = nativeReference(itemValue,const_cast<Item&>(*item).handlePtr());
+    firstClass = cls;
+    }
+  if(worldProbeItems[0]==0 || worldProbeItems[1]==0 || worldProbeItems[0]==worldProbeItems[1])
+    throw std::runtime_error("World-transition probe needs two inventory item bindings");
 
   setNpcFocus(npc,&lock,int(lock.lockpickProgress()));
   auto* lastMob = vm.find_symbol_by_name("G_PICKLOCK.LASTMOB");
@@ -347,7 +373,7 @@ void DirectMemory::beginWorldTransitionProbe(Npc& npc, Interactive& lock) {
   auto* cb = vm.find_symbol_by_name("TIMER_SETPAUSE");
   vm.call_function("FF_APPLYEXTDATAGT",int32_t(cb->index()),1000,1,int32_t(worldProbeTimer));
   vm.call_function("FF_APPLYEXTDATAGT",int32_t(cb->index()),250,-1,int32_t(worldProbeRecurringTimer));
-  Log::i("[WORLD_PROBE] source native_ref=1 inventory=",worldProbeInventory," lock_address=",lock.lockAddress," pending=1 recurring=1");
+  Log::i("[WORLD_PROBE] source native_ref=1 inventory_refs=2 inventory=",worldProbeInventory," lock_address=",lock.lockAddress," pending=1 recurring=1");
   }
 
 void DirectMemory::checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock) {
@@ -355,7 +381,6 @@ void DirectMemory::checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock
      worldProbeRecurringDispatches<2 ||
      mem32.readInt(worldProbeReference+99*4)!=0)
     throw std::runtime_error("World-transition reference/callback regression");
-  vm.call_function("FF_REMOVE",int32_t(vm.find_symbol_by_name("TIMER_SETPAUSE")->index()));
   if(inventorySignature(npc)!=worldProbeInventory)
     throw std::runtime_error("World-transition lost player inventory");
   auto* lastMob = vm.find_symbol_by_name("G_PICKLOCK.LASTMOB");
@@ -369,9 +394,85 @@ void DirectMemory::checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock
            " lock_address=",returnedLock->lockAddress);
     clearNpcFocus(npc);
     }
+  auto* ref = vm.find_symbol_by_name("C_NPC.AIVAR");
+  auto* itemValue = vm.find_symbol_by_name("C_ITEM.VALUE");
+  const auto root = mem32.alloc(56,"World transition probe");
+  mem32.writeInt(root,0x57545031); // WTP1
+  mem32.writeInt(root+4,int32_t(worldProbeReference));
+  if(worldProbeItems[0]==0 || worldProbeItems[1]==0 || worldProbeItems[0]==worldProbeItems[1])
+    throw std::runtime_error("World-transition lost inventory tombstones");
+  mem32.writeInt(root+8,int32_t(worldProbeItems[0]));
+  mem32.writeInt(root+12,int32_t(worldProbeItems[1]));
+  const auto liveHero = nativeReference(ref,npc.handlePtr());
+  std::array<ptr32_t,2> liveItems = {};
+  std::array<uint32_t,2> itemClasses = {};
+  for(auto item=npc.inventory().iterator(Inventory::T_Inventory); item.isValid() && liveItems[1]==0; ++item) {
+    const auto cls = uint32_t(item->clsId());
+    if(cls==itemClasses[0])
+      continue;
+    const auto n = liveItems[0]==0 ? 0u : 1u;
+    liveItems[n] = nativeReference(itemValue,const_cast<Item&>(*item).handlePtr());
+    itemClasses[n] = cls;
+    }
+  if(liveItems[0]==0 || liveItems[1]==0)
+    throw std::runtime_error("World-transition lost live inventory bindings");
+  const std::array<ptr32_t,6> addresses = {worldProbeReference,worldProbeItems[0],worldProbeItems[1],liveHero,liveItems[0],liveItems[1]};
+  for(size_t i=0;i<addresses.size();++i)
+    for(size_t r=0;r<i;++r)
+      if(addresses[i]==addresses[r])
+        throw std::runtime_error("World-transition reused a native reference address");
+  mem32.writeInt(root+16,int32_t(liveHero));
+  mem32.writeInt(root+20,int32_t(liveItems[0]));
+  mem32.writeInt(root+24,int32_t(liveItems[1]));
+  const auto checkLive = [this,root](ptr32_t address, uint32_t offset) {
+    const auto value = mem32.readInt(address);
+    mem32.writeInt(address,value^0x55aa55aa);
+    if(mem32.readInt(address)!=(value^0x55aa55aa))
+      throw std::runtime_error("World-transition live native reference write failed");
+    mem32.writeInt(address,value);
+    mem32.writeInt(root+offset,value);
+    };
+  checkLive(liveHero+99*4,28);
+  checkLive(liveItems[0],32);
+  checkLive(liveItems[1],36);
+  mem32.writeInt(root+40,int32_t(worldProbeRecurringTimer));
+  mem32.writeInt(root+44,int32_t(itemClasses[0]));
+  mem32.writeInt(root+48,int32_t(itemClasses[1]));
+  vm.find_symbol_by_name("MEM_INFOBOX.RES")->set_int(int32_t(root));
   Log::i("[WORLD_PROBE] destroyed_ref=0 inventory=",worldProbeInventory,
          " callback_dispatches=",worldProbeDispatches," recurring_dispatches=",worldProbeRecurringDispatches,
-         " stale_focus=0");
+         " stale_focus=0 restart_bindings=ready");
+  }
+
+void DirectMemory::verifyWorldTransitionProbe(Npc& npc) {
+  const auto root = uint32_t(vm.find_symbol_by_name("MEM_INFOBOX.RES")->get_int());
+  if(!mem32.isAllocation(root,56,"World transition probe") || mem32.readInt(root)!=0x57545031 ||
+     worldProbeRecurringTimer!=uint32_t(mem32.readInt(root+40)) || worldProbeRecurringDispatches<2)
+    throw std::runtime_error("World-transition restart callback regression");
+  const std::array<ptr32_t,3> old = {uint32_t(mem32.readInt(root+4)),uint32_t(mem32.readInt(root+8)),uint32_t(mem32.readInt(root+12))};
+  if(mem32.readInt(old[0]+99*4)!=0 || mem32.readInt(old[1])!=0 || mem32.readInt(old[2])!=0)
+    throw std::runtime_error("World-transition restart retained a tombstone");
+  auto* firstItem = npc.getItem(uint32_t(mem32.readInt(root+44)));
+  auto* secondItem = npc.getItem(uint32_t(mem32.readInt(root+48)));
+  if(firstItem==nullptr || secondItem==nullptr)
+    throw std::runtime_error("World-transition restart lost inventory item binding");
+  auto* ref = vm.find_symbol_by_name("C_NPC.AIVAR");
+  auto* itemValue = vm.find_symbol_by_name("C_ITEM.VALUE");
+  const std::array<std::shared_ptr<zenkit::DaedalusInstance>,3> context = {npc.handlePtr(),firstItem->handlePtr(),secondItem->handlePtr()};
+  const std::array<ptr32_t,3> live = {uint32_t(mem32.readInt(root+16))+99*4,uint32_t(mem32.readInt(root+20)),uint32_t(mem32.readInt(root+24))};
+  const std::array<int32_t,3> expected = {mem32.readInt(root+28),mem32.readInt(root+32),mem32.readInt(root+36)};
+  for(size_t i=0;i<live.size();++i) {
+    if(mem32.readInt(live[i])!=expected[i])
+      throw std::runtime_error("World-transition restart live native reference read failed");
+    mem32.writeInt(live[i],expected[i]^0x55aa55aa);
+    const auto actual = i==0 ? ref->get_int(99,context[i].get()) : itemValue->get_int(0,context[i].get());
+    if(actual!=(expected[i]^0x55aa55aa))
+      throw std::runtime_error("World-transition restart live native reference write failed");
+    mem32.writeInt(live[i],expected[i]);
+    }
+  vm.call_function("FF_REMOVE",int32_t(vm.find_symbol_by_name("TIMER_SETPAUSE")->index()));
+  worldProbeRecurringTimer = 0;
+  Log::i("[WORLD_PROBE] restart_bindings=1 recurring_dispatches=",worldProbeRecurringDispatches);
   }
 
 void DirectMemory::probeLockFocus(Npc& npc, Interactive& lock, bool restored) {
@@ -641,6 +742,14 @@ void DirectMemory::load(Serialize& in) {
   restoreQuestCallbacks = false;
   if(std::getenv("OPENGOTHIC_PERSISTENCE_PROBE")!=nullptr)
     persistenceProbeRoot = uint32_t(vm.find_symbol_by_name("MEM_INFOBOX.RES")->get_int());
+  if(std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) {
+    const auto root = uint32_t(vm.find_symbol_by_name("MEM_INFOBOX.RES")->get_int());
+    if(mem32.isAllocation(root,56,"World transition probe") && mem32.readInt(root)==0x57545031) {
+      worldProbeRecurringTimer = uint32_t(mem32.readInt(root+40));
+      worldProbeRecurringDispatches = 0;
+      worldProbeRecurringLastElapsed = 0;
+      }
+    }
   Log::i("[COMPATIBILITY] Restored virtual heap and script bindings");
   }
 
@@ -1787,15 +1896,7 @@ auto DirectMemory::_takeref(zenkit::DaedalusVm& vm) -> zenkit::DaedalusNakedCall
         return zenkit::DaedalusNakedCall();
         }
       // ponytail: retain referenced VM instances until session end; use reclaimable mappings if this grows materially.
-      auto it = scriptReferences.find({context,ref->index()});
-      if(it==scriptReferences.end())
-        it = scriptReferences.emplace(std::make_pair(context,ref->index()),0);
-      auto& ptr = it->second;
-      if(ptr==0) {
-        const auto type = mem32.nextScriptReferenceType();
-        bindReference(ref,context,type);
-        ptr = mem32.alloc(uint32_t(ref->count())*stride,type);
-        }
+      auto ptr = nativeReference(ref,context);
       vm.push_int(int32_t(ptr+uint32_t(idx)*stride));
       return zenkit::DaedalusNakedCall();
       }
