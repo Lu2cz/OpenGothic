@@ -47,6 +47,11 @@ def run(name, save, mode, evidence):
         trace = "\n".join((stage / n).read_text(errors="replace") for n in ("terminal.log", "log.txt") if (stage / n).exists())
         assert result.returncode == 0, f"{name}: game exited {result.returncode}"
         assert "[WORLD_PROBE] save finalized" in trace, f"{name}: incomplete save"
+        if mode != "verify-mainland":
+            assert "destination_control walked=" in trace, f"{name}: destination was not controllable"
+            assert (stage / "world-transition-destination.png").exists(), f"{name}: destination was not rendered"
+            assert trace.count("[WORLD_PROBE] recurring_dispatch=") >= 2, f"{name}: recurring callback was lost"
+            assert trace.index("Done loading world[") < trace.index("[WORLD_PROBE] callback_dispatch=1"), f"{name}: pending callback ran before destination load"
         assert all(x not in trace for x in ("Internal Exception", "translation failure", "Unmapped memory")), f"{name}: script/VM error"
         for marker in evidence:
             assert marker in trace, f"{name}: missing {marker!r}"
@@ -70,10 +75,10 @@ def run(name, save, mode, evidence):
 try:
     sewer = run("01-to-sewers", source, "to-sewers", (
         "zone_trigger=", "target=ARCHOLOS_SEWERS.ZEN", "save world=archolos_sewers.zen",
-        "destroyed_ref=0 inventory=", "callback_dispatches=1 stale_focus=0"))
+        "destroyed_ref=0 inventory=", "callback_dispatches=1 recurring_dispatches=", "stale_focus=0"))
     mainland = run("02-to-mainland", sewer, "to-mainland", (
         "zone_trigger=", "target=ARCHOLOS_MAINLAND.ZEN", "save world=ARCHOLOS_MAINLAND.ZEN",
-        "returned_lock_progress=1", "destroyed_ref=0 inventory=", "callback_dispatches=1 stale_focus=0"))
+        "returned_lock_progress=1", "destroyed_ref=0 inventory=", "callback_dispatches=1 recurring_dispatches=", "stale_focus=0"))
     run("03-restart-mainland", mainland, "verify-mainland", ("restart_lock_progress=1 world=ARCHOLOS_MAINLAND.ZEN",))
 finally:
     assert hashlib.sha256(source.read_bytes()).hexdigest() == source_hash, "Source save changed"

@@ -1279,9 +1279,12 @@ void MainWindow::render(){
     static bool cityProbeSaved=false;
     static bool worldProbeTransitioned=false;
     static bool worldProbeSaved=false;
+    static bool worldProbeWalked=false;
+    static uint32_t worldProbeWalkFrame=0;
     static unsigned musicProbeStage=0;
     static double musicProbeAt=0;
     static Tempest::Vec3 cityWalkStart;
+    static Tempest::Vec3 worldProbeWalkStart;
     static double cityMeasuredAt=0;
     static bool forestProbeSaved=false;
     static size_t beachTorchCount=0;
@@ -1684,7 +1687,24 @@ void MainWindow::render(){
           }
         }
       const char* destination = mode=="to-sewers" ? "ARCHOLOS_SEWERS.ZEN" : "ARCHOLOS_MAINLAND.ZEN";
-      if(worldProbeTransitioned && !worldProbeSaved && sameWorld(w.name(),destination) && profileFrames>=180) {
+      if(worldProbeTransitioned && !worldProbeSaved && sameWorld(w.name(),destination) && worldProbeWalkFrame==0) {
+        worldProbeWalkFrame = profileFrames;
+        worldProbeWalkStart = pl.position();
+        player.onKeyPressed(KeyCodec::Forward,Event::K_W,KeyCodec::Mapping(0));
+        }
+      if(!worldProbeWalked && worldProbeWalkFrame!=0 && profileFrames>=worldProbeWalkFrame+60) {
+        player.clearInput();
+        const auto walked = (pl.position()-worldProbeWalkStart).length();
+        if(walked<=50 || w.currentCs()!=nullptr || dialogs.isActive())
+          throw std::runtime_error("World-transition destination is not controllable");
+        auto shot = renderer.screenshoot(cmdId);
+        device.readPixels(textureCast<const Texture2d&>(shot)).save("world-transition-destination.png");
+        Log::i("[WORLD_PROBE] destination_control walked=",walked,
+               " camera=",w.currentCs()!=nullptr," dialogue=",dialogs.isActive());
+        worldProbeWalked = true;
+        }
+      if(worldProbeTransitioned && !worldProbeSaved && worldProbeWalked &&
+         sameWorld(w.name(),destination) && profileFrames>=180) {
         Interactive* returnedLock = nullptr;
         if(mode=="to-mainland")
           for(uint32_t id=0;auto* mob=w.mobsiById(id);++id)

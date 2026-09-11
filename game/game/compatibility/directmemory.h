@@ -75,7 +75,10 @@ class DirectMemory {
     ptr32_t     persistenceProbeRoot = 0;
     ptr32_t     worldProbeReference  = 0;
     ptr32_t     worldProbeTimer      = 0;
+    ptr32_t     worldProbeRecurringTimer = 0;
     uint32_t    worldProbeDispatches = 0;
+    uint32_t    worldProbeRecurringDispatches = 0;
+    uint32_t    worldProbeRecurringLastElapsed = 0;
     uint64_t    worldProbeInventory  = 0;
     std::weak_ptr<zenkit::DaedalusInstance> triaSelf, triaSpeaker;
 

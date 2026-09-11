@@ -336,17 +336,26 @@ void DirectMemory::beginWorldTransitionProbe(Npc& npc, Interactive& lock) {
 
   worldProbeTimer = mem32.alloc(64);
   mem32.writeInt(worldProbeTimer+24,int32_t(gameScript.tickCount()));
+  mem32.writeInt(worldProbeTimer+28,vm.find_symbol_by_name("_TIMER_PAUSED")->get_int());
+  worldProbeRecurringTimer = mem32.alloc(64);
+  mem32.writeInt(worldProbeRecurringTimer+24,int32_t(gameScript.tickCount()));
+  mem32.writeInt(worldProbeRecurringTimer+28,vm.find_symbol_by_name("_TIMER_PAUSED")->get_int());
   worldProbeDispatches = 0;
+  worldProbeRecurringDispatches = 0;
+  worldProbeRecurringLastElapsed = 0;
   worldProbeInventory = inventorySignature(npc);
   auto* cb = vm.find_symbol_by_name("TIMER_SETPAUSE");
   vm.call_function("FF_APPLYEXTDATAGT",int32_t(cb->index()),1000,1,int32_t(worldProbeTimer));
-  Log::i("[WORLD_PROBE] source native_ref=1 inventory=",worldProbeInventory," lock_address=",lock.lockAddress," pending=1");
+  vm.call_function("FF_APPLYEXTDATAGT",int32_t(cb->index()),250,-1,int32_t(worldProbeRecurringTimer));
+  Log::i("[WORLD_PROBE] source native_ref=1 inventory=",worldProbeInventory," lock_address=",lock.lockAddress," pending=1 recurring=1");
   }
 
 void DirectMemory::checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock) {
-  if(worldProbeReference==0 || worldProbeTimer==0 || worldProbeDispatches!=1 ||
+  if(worldProbeReference==0 || worldProbeTimer==0 || worldProbeRecurringTimer==0 || worldProbeDispatches!=1 ||
+     worldProbeRecurringDispatches<2 ||
      mem32.readInt(worldProbeReference+99*4)!=0)
     throw std::runtime_error("World-transition reference/callback regression");
+  vm.call_function("FF_REMOVE",int32_t(vm.find_symbol_by_name("TIMER_SETPAUSE")->index()));
   if(inventorySignature(npc)!=worldProbeInventory)
     throw std::runtime_error("World-transition lost player inventory");
   auto* lastMob = vm.find_symbol_by_name("G_PICKLOCK.LASTMOB");
@@ -361,7 +370,8 @@ void DirectMemory::checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock
     clearNpcFocus(npc);
     }
   Log::i("[WORLD_PROBE] destroyed_ref=0 inventory=",worldProbeInventory,
-         " callback_dispatches=",worldProbeDispatches," stale_focus=0");
+         " callback_dispatches=",worldProbeDispatches," recurring_dispatches=",worldProbeRecurringDispatches,
+         " stale_focus=0");
   }
 
 void DirectMemory::probeLockFocus(Npc& npc, Interactive& lock, bool restored) {
@@ -1998,7 +2008,21 @@ void DirectMemory::directCall(zenkit::DaedalusVm& vm, zenkit::DaedalusSymbol& fu
     if(worldProbeTimer!=0 && uint32_t(argument->get_int())==worldProbeTimer) {
       ++worldProbeDispatches;
       Log::i("[WORLD_PROBE] callback_dispatch=",worldProbeDispatches,
-             " elapsed=",uint32_t(gameScript.tickCount())-uint32_t(mem32.readInt(worldProbeTimer+24)));
+             " elapsed=",uint32_t(gameScript.tickCount())-uint32_t(mem32.readInt(worldProbeTimer+24)),
+             " world=",gameScript.world().name());
+      argument->set_int(0);
+      vm.find_symbol_by_name("_TIMER_PAUSED")->set_int(mem32.readInt(worldProbeTimer+28));
+      }
+    if(worldProbeRecurringTimer!=0 && uint32_t(argument->get_int())==worldProbeRecurringTimer) {
+      const auto elapsed = uint32_t(gameScript.tickCount())-uint32_t(mem32.readInt(worldProbeRecurringTimer+24));
+      if(worldProbeRecurringLastElapsed!=0 && elapsed-worldProbeRecurringLastElapsed<100)
+        throw std::runtime_error("World-transition recurring callback duplicated");
+      worldProbeRecurringLastElapsed = elapsed;
+      ++worldProbeRecurringDispatches;
+      Log::i("[WORLD_PROBE] recurring_dispatch=",worldProbeRecurringDispatches,
+             " elapsed=",elapsed," world=",gameScript.world().name());
+      argument->set_int(0);
+      vm.find_symbol_by_name("_TIMER_PAUSED")->set_int(mem32.readInt(worldProbeRecurringTimer+28));
       }
     if(persistenceProbeRoot!=0 && uint32_t(argument->get_int())==persistenceProbeRoot) {
       auto ptr = persistenceProbeRoot;
