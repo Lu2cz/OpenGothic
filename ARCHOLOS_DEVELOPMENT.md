@@ -563,3 +563,25 @@ The supplied af2ed609 log contains three launches and normal menu exits, no cras
 Old Windows crash/LAA checks and original-engine debugger hooks are not needed to run the native 64-bit macOS engine. They are not universally obsolete for the Windows original; recreating them is unnecessary here unless a concrete debugging need emerges. Original automatic draw-distance scaling remains a possible future native optimization if measured performance warrants it. Menu presentation is optional polish. Broader story progression, save/world-transition consistency, cutscene choreography and callback persistence remain the substantive compatibility priorities.
 
 Installed Fast SHA-256 `1bc44a88eb2a145eac6f3806ca91929398bb7912d5dc0ab0287fc75be56bbfc8`; tested Profile SHA-256 `f416ffba48516b1720a614e876031d66831dd5d9b04b455ed7a40754d72c3acd`; matching executable bytes before signature offset 26351168. Previous Fast executable: work/Gothic2Notr-Fast-before-menu-audio. Evidence: outputs/archolos-menu-audio-fix.json and .patch. Local-only commit; no push.
+
+
+## Hidden Windows message diagnosis, 11 September 2026
+
+Captured the installed 1.2.11 message without displaying a blocking dialog or changing the emulated call's behavior:
+
+> Information: This should never happen! If it does anyway, please report to Lehona on WorldOfGothic.
+
+Call chain: DirectMemory::tick's load recovery → INIT_QUESTSEVENTSMANAGER → FF_APPLYONCEEXTGT → FF_APPLYEXTGT → _FF_CREATE → NEW → MEM_INFOBOX → MEM_MESSAGEBOX → unsupported Windows MessageBox call. This is LeGo's missing-handle-table diagnostic, not a platform-service request. No upstream report was sent.
+
+Installed NEW bytecode checks HANDLESPOINTER and emits this notice when zero, then creates HANDLESPOINTER/HANDLESINSTANCE hash tables and HANDLESWRAPPED before continuing with allocation. Its foreach table is also created lazily. The installed pointer globals are mutable script constants initially zero; GameScript::saveSym/loadVar intentionally exclude constants. The virtual heap is not serialized. Our existing load recovery reconstructs the recurring quest and animation callbacks, which triggers this fallback. NEXTHANDLE is an ordinary saved variable; recreating the tables does not restore old heap objects or arbitrary pending callbacks.
+
+Evidence:
+
+- work/message-before: unchanged Profile build reproduces the opaque unsupported-message line while city load/walk/save passes.
+- work/message-captured: temporary demangling-boundary instrumentation reads MEM_MESSAGEBOX.TXT/CAPTION and prints the live VM stack; exact text/caller captured, normal city run/save completes.
+- work/message-recovery-reload: fresh process loads the preceding private output save. Same diagnostic reproduces, followed by nonzero pointer/instance/wrapped/foreach tables and NUMHANDLES()==2 after quest/animation registration. City load/walk/save passes, 12 nearby NPCs, no camera/dialogue lock. This verifies the fallback and reconstruction in this scenario, not persistence of arbitrary original heap objects.
+- Installed pointer-symbol flags and NEW bytecode inspected directly; reference decompilation alone is insufficient. Captured trace: outputs/archolos-hidden-message-trace.txt. Repeatable transient instrumentation: outputs/archolos-hidden-message-probe.patch, applied to 60b52d73; run the existing tests/run_archolos_city.py on private saves. Probe observations are read-only.
+
+No gameplay patch is shipped for this diagnosis. Initializing empty tables earlier would remove the warning without providing missing persistence. Treat full LeGo object/callback save restoration and actual world-transition consistency as the substantive follow-up, with pending one-shot callbacks and live script-object references as explicit test cases. Current ordinary quest/inventory save tests do not establish that broader guarantee.
+
+Temporary DEBUG-message code removed; Profile restored byte-for-byte to its signed menu-audio build, playable Fast executable never replaced, and all three current user saves retain their hashes. Build directory rebuilt from clean source to remove instrumentation. No new launch command or New Game is required. The unsupported-message line can still occur in the current playable build; its cause is now identified rather than silently suppressed.
