@@ -25,10 +25,13 @@ Build the isolated Release Metal target, then use private output directories:
 rtk proxy cmake --build /Users/lu2/projects/OpenGothic-issue-6/build-issue-6 --target Gothic2Notr --parallel 4
 rtk proxy python3 /Users/lu2/projects/OpenGothic-issue-6/tests/run_archolos_ai_wait.py --executable /Users/lu2/projects/OpenGothic-issue-6/build-issue-6/opengothic/Gothic2Notr --game /Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues/work/archolos-game --save SOURCE --output SEED --mode seed
 rtk proxy python3 /Users/lu2/projects/OpenGothic-issue-6/tests/run_archolos_ai_wait.py --executable /Users/lu2/projects/OpenGothic-issue-6/build-issue-6/opengothic/Gothic2Notr --game /Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues/work/archolos-game --save SEED/save_slot_2.sav --output RELOAD --mode reload
+rtk proxy python3 /Users/lu2/projects/OpenGothic-issue-6/tests/run_archolos_ai_wait.py --executable /Users/lu2/projects/OpenGothic-issue-6/build-issue-6/opengothic/Gothic2Notr --game /Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues/work/archolos-game --save SOURCE --output EDGES --mode edges
 ```
 
 The reload probe requires `restored pending=1`, `still pending=1`, then
 `complete`; it does not treat removal of the fallback warning as scene proof.
+The edge probe requires `empty`, `completed`, `self`, `snapshot`, `reciprocal`,
+and `removed` markers before it saves.
 The normal-duration forest and captain runners remain separate scene evidence.
 
 ## Private verification
@@ -48,3 +51,9 @@ was built from this worktree and exercised without modifying source saves:
 
 The captain replay is still pending a regenerated, real pre-captain fixture. The
 available mainland save is not such a fixture, so no captain acceptance is claimed.
+
+Candidate `4673359a853f41bb58bdd2eb78803ac0a5ba113fc094f5a69246d98a20a5c624`
+also passed the pending-wait seed/reload pair and the private edge matrix in
+`issue6-aiwait-edgefinal-{seed,reload}` and `issue6-aiwait-edges-final`.
+The legacy active-navigation migration and malformed-ticket rejection still need
+their own runnable fixtures.

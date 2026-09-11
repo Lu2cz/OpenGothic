@@ -2579,7 +2579,7 @@ void Npc::nextAiAction(AiQueue& queue, uint64_t dt) {
       implAiWait(uint64_t(act.i0));
       break;
     case AI_WaitTillEnd:
-      if(act.target!=nullptr && act.target->isAiActionPending(act.watch))
+      if(act.target!=nullptr && act.target!=this && act.target->isAiActionPending(act.watch))
         queue.pushFront(std::move(act));
       break;
     case AI_StandUp:

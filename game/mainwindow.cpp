@@ -1289,6 +1289,8 @@ void MainWindow::render(){
     static double cityMeasuredAt=0;
     static bool forestProbeSaved=false;
     static bool aiWaitProbeSaved=false;
+    static uint64_t aiWaitProbeTicket=0;
+    static uint8_t aiWaitProbeStep=0;
     static size_t beachTorchCount=0;
     static Item* beachTorch=nullptr;
     static float beachTorchStartY=0;
@@ -1401,7 +1403,8 @@ void MainWindow::render(){
         auto& w = *Gothic::inst().world();
         auto& self = *w.player();
         auto* target = w.findNpcByInstance(w.script().getVm().find_symbol_by_name("NONE_1_JORN")->index());
-        if(target==nullptr || dialogs.isActive() || w.currentCs()!=nullptr)
+        auto* other = w.findNpcByInstance(w.script().getVm().find_symbol_by_name("NONE_5_FABIO")->index());
+        if(target==nullptr || other==nullptr || dialogs.isActive() || w.currentCs()!=nullptr)
           throw std::runtime_error("AI wait persistence probe needs normal world control");
         if(std::string_view(mode)=="seed") {
           self.clearAiQueue();
@@ -1409,6 +1412,24 @@ void MainWindow::render(){
           target->aiPush(AiQueue::aiWait(16000));
           self.aiPush(AiQueue::aiWaitTillEnd(*target,target->aiWaitTicket()));
           Log::i("[AI_WAIT_PROBE] seeded self_empty=",self.isAiQueueEmpty()," target_busy=",target->isAiBusy());
+          }
+        if(std::string_view(mode)=="edges") {
+          self.clearAiQueue();
+          target->clearAiQueue();
+          other->clearAiQueue();
+          auto* point=w.findPoint("PART_13_NAV_11",false);
+          if(point==nullptr)
+            throw std::runtime_error("AI wait edge probe needs navigation point");
+          self.setPosition(point->position()+Tempest::Vec3(0,0,120));
+          target->setPosition(point->position());
+          other->setPosition(point->position()+Tempest::Vec3(100,0,0));
+          target->setProcessPolicy(NpcProcessPolicy::AiNormal);
+          other->setProcessPolicy(NpcProcessPolicy::AiNormal);
+          self.aiPush(AiQueue::aiWaitTillEnd(*target,target->aiWaitTicket()));
+          self.aiPush(AiQueue::aiWaitTillEnd(self,self.aiWaitTicket()));
+          target->aiPush(AiQueue::aiWait(1));
+          aiWaitProbeTicket=target->aiWaitTicket();
+          Log::i("[AI_WAIT_PROBE] edges started");
           }
         }
       if(std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr) {
@@ -2093,6 +2114,55 @@ void MainWindow::render(){
     if(sampling) {
       if(auto mode=std::getenv("OPENGOTHIC_AI_WAIT_PROBE")) {
         auto& self = *Gothic::inst().world()->player();
+        auto& w = *Gothic::inst().world();
+        auto* target = w.findNpcByInstance(w.script().getVm().find_symbol_by_name("NONE_1_JORN")->index());
+        auto* other = w.findNpcByInstance(w.script().getVm().find_symbol_by_name("NONE_5_FABIO")->index());
+        if(std::string_view(mode)=="edges") {
+          if(aiWaitProbeStep==0 && self.isAiQueueEmpty()) {
+            Log::i("[AI_WAIT_PROBE] empty=1");
+            Log::i("[AI_WAIT_PROBE] self=1");
+            self.aiPush(AiQueue::aiWaitTillEnd(*target,aiWaitProbeTicket));
+            aiWaitProbeStep=1;
+            }
+          if(aiWaitProbeStep==1 && self.isAiQueueEmpty()) {
+            Log::i("[AI_WAIT_PROBE] completed=1");
+            target->clearAiQueue();
+            target->aiPush(AiQueue::aiWait(250));
+            aiWaitProbeTicket=target->aiWaitTicket();
+            self.aiPush(AiQueue::aiWaitTillEnd(*target,aiWaitProbeTicket));
+            target->aiPush(AiQueue::aiWait(4000));
+            aiWaitProbeStep=2;
+            }
+          if(aiWaitProbeStep==2 && self.isAiQueueEmpty() && target->isAiBusy()) {
+            Log::i("[AI_WAIT_PROBE] snapshot=1");
+            self.clearAiQueue();
+            target->clearAiQueue();
+            other->clearAiQueue();
+            target->aiPush(AiQueue::aiWait(500));
+            other->aiPush(AiQueue::aiWait(250));
+            target->aiPush(AiQueue::aiWaitTillEnd(*other,other->aiWaitTicket()));
+            other->aiPush(AiQueue::aiWaitTillEnd(*target,target->aiWaitTicket()));
+            aiWaitProbeStep=3;
+            }
+          if(aiWaitProbeStep==3 && target->isAiQueueEmpty() && other->isAiQueueEmpty()) {
+            Log::i("[AI_WAIT_PROBE] reciprocal=1");
+            target->aiPush(AiQueue::aiWait(4000));
+            self.aiPush(AiQueue::aiWaitTillEnd(*target,target->aiWaitTicket()));
+            aiWaitProbeStep=4;
+            }
+          if(aiWaitProbeStep==4 && !self.isAiQueueEmpty() && target->isAiBusy()) {
+            w.removeNpc(*target);
+            aiWaitProbeStep=5;
+            }
+          if(aiWaitProbeStep==5 && !aiWaitProbeSaved && self.isAiQueueEmpty()) {
+            Log::i("[AI_WAIT_PROBE] removed=1");
+            Log::i("[AI_WAIT_PROBE] edges complete");
+            aiWaitProbeSaved=true;
+            saveGame("save_slot_2.sav","AI wait edge test");
+            }
+          if(profileFrames>=720 && !aiWaitProbeSaved)
+            throw std::runtime_error("AI wait edge probe timed out");
+          }
         if(std::string_view(mode)=="seed" && !aiWaitProbeSaved && profileFrames==30) {
           if(self.isAiQueueEmpty())
             throw std::runtime_error("AI wait persistence probe was not queued");
