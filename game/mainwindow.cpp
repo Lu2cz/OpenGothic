@@ -883,6 +883,7 @@ uint64_t MainWindow::tick() {
   if(dt<5)
     return 0;
   lastTick  = time;
+  GameMusic::inst().tick();
 
   auto st = Gothic::inst().checkLoading();
   if(st==Gothic::LoadState::Finalize || st==Gothic::LoadState::FailedLoad || st==Gothic::LoadState::FailedSave) {
@@ -1236,6 +1237,8 @@ void MainWindow::render(){
     static bool captainProbeSaved=false;
     static bool beachProbeSaved=false;
     static bool cityProbeSaved=false;
+    static unsigned musicProbeStage=0;
+    static double musicProbeAt=0;
     static Tempest::Vec3 cityWalkStart;
     static double cityMeasuredAt=0;
     static bool forestProbeSaved=false;
@@ -1810,8 +1813,57 @@ void MainWindow::render(){
         }
       }
     if(sampling && std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr) {
+      const auto musicProbe = std::getenv("OPENGOTHIC_MUSIC_PROBE");
+      const bool musicFull = musicProbe!=nullptr && std::string_view(musicProbe)=="full";
+      if(musicProbe!=nullptr && profileFrames%60==0)
+        GameMusic::inst().traceFileMusic();
       auto& w = *Gothic::inst().world();
       auto* pl = w.player();
+      if(musicFull && profileFrames>=180) {
+        auto& vm = w.script().getVm();
+        const auto overrideTrack = [&](const char* name) {
+          vm.find_symbol_by_name("MUSIC_CURRENTOVERRIDE")->set_int(name==nullptr ? 0 : int32_t(vm.find_symbol_by_name(name)->index()));
+          // Exercise BL dispatch through the real script wrapper, including its native override.
+          vm.call_function("INIT_MUSICSYSTEM_ALWAYS");
+          };
+        const double delay = musicProbeStage==0 ? 0 : musicProbeStage==8 ? 38000 : 6500;
+        if(musicProbeStage<13 && profileNow()-musicProbeAt>=delay) {
+          Log::i("[MUSIC_PROBE] stage=",musicProbeStage);
+          GameMusic::inst().traceFileMusic();
+          switch(musicProbeStage) {
+            case 0: overrideTrack(nullptr); break;
+            case 1: {
+              Gothic::settingsSetF("SOUND","musicVolume",0.2f);
+              const auto started = profileNow();
+              w.script().setMusicZone("VIL",uint8_t(GameMusic::Day));
+              GameMusic::inst().tick(); // Start decoding, then cancel before completion.
+              w.script().setMusicZone("CIT",uint8_t(GameMusic::Day));
+              Log::i("[MUSIC_PROBE] cancelled load dispatch_ms=",profileNow()-started);
+              break;
+              }
+            case 2: Gothic::settingsSetI("SOUND","musicEnabled",0); break;
+            case 3:
+              Gothic::settingsSetI("SOUND","musicEnabled",1);
+              Gothic::settingsSetF("SOUND","musicVolume",0.5f);
+              w.setDayTime(23,0);
+              break;
+            case 4: w.setDayTime(12,0); break;
+            case 5:
+              if(!w.script().setMusicZone("VIL",uint8_t(GameMusic::Day)))
+                throw std::runtime_error("Missing village music zone");
+              break;
+            case 6: w.script().setMusicZone("VIL",uint8_t(GameMusic::Fgt)); break;
+            case 7: overrideTrack("BATTLE_35"); break;
+            case 8: overrideTrack(nullptr); break;
+            case 9: w.script().setMusicZone("VIL",uint8_t(GameMusic::Ngt|GameMusic::Fgt)); break;
+            case 10: w.script().setMusicZone("CIT",uint8_t(GameMusic::Day)); break;
+            case 11: overrideTrack("BATTLE2_36"); break;
+            case 12: break; // Save an active override; the reload run must restore it.
+            }
+          ++musicProbeStage;
+          musicProbeAt=profileNow();
+          }
+        }
       if(cityProbeSaved) {
         Log::i("[CITY_PROBE] save finalized");
         Tempest::SystemApi::exit();
@@ -1826,11 +1878,11 @@ void MainWindow::render(){
         }
       if(profileFrames==200)
         cityMeasuredAt = profileNow();
-      if(profileFrames==600) {
+      if(!cityProbeSaved && ((!musicFull && profileFrames==600) || (musicFull && musicProbeStage==13))) {
         size_t nearby = 0;
         w.detectNpc(pl->position(),2000,[&](Npc& npc) { if(&npc!=pl) ++nearby; });
         const auto pos = pl->position();
-        Log::i("[CITY_PROBE] settled fps=",400000.0/(profileNow()-cityMeasuredAt)," nearby=",nearby,
+        Log::i("[CITY_PROBE] settled fps=",double(profileFrames-200)*1000.0/(profileNow()-cityMeasuredAt)," nearby=",nearby,
                " pos=",pos.x,",",pos.y,",",pos.z," camera=",w.currentCs()!=nullptr," dialogue=",dialogs.isActive());
         if(dialogs.isActive())
           for(uint32_t i=0;i<w.npcCount();++i) {
@@ -1896,7 +1948,7 @@ void MainWindow::render(){
           }
         }
       }
-    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u))))))) {
+    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u))))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,

@@ -82,6 +82,7 @@ class GameScript final {
     World&       world();
     uint64_t     tickCount() const;
     void         tick(uint64_t dt);
+    bool         setMusicZone(std::string_view zone, uint8_t tags);
 
     uint32_t     rand(uint32_t max);
     void         removeItem(Item& it);

@@ -265,6 +265,8 @@ void WorldSound::tickSoundZone(Npc& player) {
   for(auto zone:zTry)
     for(auto day:dayTry)
       for(auto mode:modeTry) {
+        if(zone==nullptr)
+          continue;
         const size_t sep = zone->name.find('_');
         const char*  tag = zone->name.c_str();
         if(sep!=std::string::npos)
@@ -320,6 +322,8 @@ void WorldSound::initSlot(WorldSound::Effect& slot) {
   }
 
 bool WorldSound::setMusic(std::string_view zone, GameMusic::Tags tags) {
+  if(owner.script().setMusicZone(zone,uint8_t(tags)))
+    return true;
   bool             isDay = (tags&GameMusic::Ngt)==0;
   std::string_view smode = "STD";
   if(tags&GameMusic::Thr)

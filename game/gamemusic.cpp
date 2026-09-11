@@ -3,6 +3,8 @@
 
 #include <Tempest/Sound>
 #include <Tempest/Log>
+#include <Tempest/Application>
+#include <Tempest/MemReader>
 
 #include "game/definitions/musicdefinitions.h"
 #include "dmusic/mixer.h"
@@ -342,6 +344,8 @@ GameMusic::GameMusic() {
   }
 
 GameMusic::~GameMusic() {
+  fileTails.clear();
+  fileSound = SoundEffect();
   sound = SoundEffect();
   instance = nullptr;
   Gothic::inst().onSettingsChanged.ubind(this, &GameMusic::setupSettings);
@@ -356,11 +360,13 @@ GameMusic::Tags GameMusic::mkTags(GameMusic::Tags daytime, GameMusic::Tags mode)
   }
 
 void GameMusic::setEnabled(bool e) {
-  impl->setEnabled(e);
+  enabled = e;
+  impl->setEnabled(e && fileTheme.file.empty());
+  tick();
   }
 
 bool GameMusic::isEnabled() const {
-  return impl->isEnabled();
+  return enabled;
   }
 
 void GameMusic::setMusic(GameMusic::Music m) {
@@ -375,9 +381,117 @@ void GameMusic::setMusic(GameMusic::Music m) {
   }
 
 void GameMusic::setMusic(const zenkit::IMusicTheme &theme, Tags tags) {
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr &&
+     currentMusic.theme.file!=theme.file)
+    Log::i("[MUSIC_PROBE] legacy theme=",theme.file);
+  fileTheme = {};
+  requestedFile.clear();
+  pendingFile = false;
+  fileTails.clear();
+  fileSound = SoundEffect();
+  fileBuffer.reset();
   currentMusic.theme = theme;
   currentMusic.tags  = tags;
   impl->playTheme(currentMusic.theme, currentMusic.tags);
+  impl->setEnabled(enabled);
+  }
+
+void GameMusic::setMusic(const FileTheme& theme) {
+  if(theme.file==requestedFile)
+    return;
+  requestedFile = theme.file;
+  nextFileTheme = theme;
+  pendingFile = true;
+  }
+
+void GameMusic::loadFileMusic() {
+  if(fileLoad.valid() && fileLoad.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
+    try {
+      auto buffer = fileLoad.get();
+      if(buffer.isEmpty() || buffer.timeLength()==0)
+        throw std::runtime_error("Empty music stream");
+      if(loadingFileTheme.file==requestedFile) {
+        pendingFile = false;
+        // Transition with the outgoing track's fade, as KmLib does.
+        if(!fileSound.isEmpty()) {
+          const auto now = Application::tickCount();
+          const auto fade = fileFadeIn==0 ? 1.f : std::min(1.f,float(now-fileStarted)/float(fileFadeIn));
+          fileTails.push_back({std::move(fileSound), now, fileTheme.fadeOut, fade, true});
+          }
+        fileSound = SoundEffect();
+        fileTheme = nextFileTheme;
+        fileBuffer.emplace(std::move(buffer));
+        impl->setEnabled(false);
+        startFileMusic(false);
+        }
+      }
+    catch(const std::exception& e) {
+      Log::e("Unable to load music ",loadingFileTheme.file,": ",e.what());
+      }
+    }
+  if(!pendingFile || fileLoad.valid())
+    return;
+  pendingFile = false;
+  if(requestedFile==fileTheme.file)
+    return;
+  loadingFileTheme = nextFileTheme;
+  // Own the input before dispatch: decoding never holds the Resources lock or
+  // accesses the VFS while another world is loading or shutting down.
+  auto bytes = Resources::getFileData(requestedFile);
+  fileLoad = std::async(std::launch::async, [bytes=std::move(bytes), name=requestedFile]() {
+    const auto started = Application::tickCount();
+    Tempest::MemReader input(bytes.data(),bytes.size());
+    Tempest::Sound buffer(input);
+    if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr)
+      Log::i("[MUSIC_PROBE] decode file=",name," ms=",Application::tickCount()-started," background=1");
+    return buffer;
+    });
+  }
+
+void GameMusic::startFileMusic(bool loop) {
+  if(loop && !fileSound.isEmpty())
+    fileTails.push_back({std::move(fileSound), 0, 0, 1.f, false});
+  fileSound = device.load(*fileBuffer);
+  fileStarted = Application::tickCount();
+  fileFadeIn = loop ? 0 : fileTheme.fadeIn;
+  fileSound.setVolume(enabled ? volume : 0.f);
+  if(!loop && fileTheme.fadeIn>0)
+    fileSound.setVolume(0.f);
+  fileSound.play();
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr)
+    Log::i("[MUSIC_PROBE] playing file=",fileTheme.file," length=",fileSound.timeLength(),
+           " overlap=",fileTheme.loopOverlap," loop=",loop);
+  }
+
+void GameMusic::tick() {
+  loadFileMusic();
+  if(fileTheme.file.empty())
+    return;
+  const auto length = fileSound.timeLength();
+  const auto overlap = fileTheme.loopOverlap<length ? fileTheme.loopOverlap : 0;
+  if(fileSound.isFinished() || fileSound.currentTime()>=length-overlap)
+    startFileMusic(true);
+  const auto now = Application::tickCount();
+  const float gain = enabled ? volume : 0.f;
+  float fadeIn = fileFadeIn==0 ? 1.f : std::min(1.f, float(now-fileStarted)/float(fileFadeIn));
+  fileSound.setVolume(gain*fadeIn);
+  for(size_t i=0; i<fileTails.size();) {
+    auto& tail = fileTails[i];
+    const auto elapsed = now-tail.start;
+    if(tail.sound.isFinished() || (tail.fade && elapsed>=tail.duration)) {
+      fileTails.erase(fileTails.begin()+int(i));
+      continue;
+      }
+    const float fade = tail.fade ? 1.f-float(elapsed)/float(tail.duration) : 1.f;
+    tail.sound.setVolume(gain*tail.volume*fade);
+    ++i;
+    }
+  }
+
+void GameMusic::traceFileMusic() const {
+  Log::i("[MUSIC_PROBE] state file=",fileTheme.file," position=",fileSound.currentTime(),
+         " gain=",fileSound.volume()," enabled=",enabled," tails=",fileTails.size(),
+         " finished=",fileSound.isFinished());
   }
 
 void GameMusic::stopMusic() {
@@ -388,6 +502,8 @@ void GameMusic::setupSettings() {
   const int   musicEnabled  = Gothic::settingsGetI("SOUND",    "musicEnabled");
   const float musicVolume   = Gothic::settingsGetF("SOUND",    "musicVolume");
   const int   providerIndex = Gothic::settingsGetI("INTERNAL", "soundProviderIndex");
+
+  volume = std::clamp(musicVolume,0.f,1.f);
 
   if(providerIndex != provider || musicEnabled!=isEnabled()) {
     Log::i("Switching music provider to ", providerIndex == PROVIDER_OPENGOTHIC ? "'OpenGothic'" : "'GothicKit'");
@@ -409,5 +525,5 @@ void GameMusic::setupSettings() {
     }
 
   setEnabled(musicEnabled != 0);
-  sound.setVolume(musicVolume);
+  sound.setVolume(volume);
   }

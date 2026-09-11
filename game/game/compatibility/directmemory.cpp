@@ -12,6 +12,7 @@
 #include "world/world.h"
 #include "world/focus.h"
 #include "gothic.h"
+#include "gamemusic.h"
 
 using namespace Tempest;
 using namespace Compatibility;
@@ -131,6 +132,7 @@ DirectMemory::DirectMemory(GameScript& owner, zenkit::DaedalusVm& vm) : gameScri
   setupFontFunctions();
   setupNpcFunctions();
   setupWorldFunctions();
+  setupMusicFunctions();
 
   // various
   vm.override_function("MEM_PrintStackTrace", [this](){ memPrintstacktraceImplementation(); });
@@ -227,6 +229,87 @@ void DirectMemory::tick(uint64_t dt) {
     }
 
   tickUi(dt);
+  updateMusic();
+  }
+
+void DirectMemory::setupMusicFunctions() {
+  if(vm.find_symbol_by_name("KMLIB_INITIALIZEGAMESTART")==nullptr)
+    return;
+  for(auto name : {"MUSIC_CURRENTOVERRIDE", "MUSIC_OVERRIDETRACK", "MUSIC_DISABLEOVERRIDE",
+                   "MUSICTRACK.FILENAME", "MUSICTRACK.LOOPOFFSETDURATION",
+                   "MUSICTRACK.FADEOUTSLIDEDURATION", "MUSICTRACK.FADEINSLIDEDURATION",
+                   "MUSICZONE.DAY", "MUSICZONE.NIGHT", "MUSICZONE.DAYFIGHT", "MUSICZONE.NIGHTFIGHT"})
+    if(vm.find_symbol_by_name(name)==nullptr)
+      return;
+  musicOverride = vm.find_symbol_by_name("MUSIC_CURRENTOVERRIDE");
+  vm.register_as_opaque("MUSICTRACK");
+  vm.register_as_opaque("MUSICZONE");
+  // Keep the script global authoritative: it is already serialized in saves.
+  // Playback happens on the world tick, never on the asynchronous load thread.
+  vm.override_function("MUSIC_OVERRIDETRACK", [this](int track) { musicOverride->set_int(track); });
+  vm.override_function("MUSIC_DISABLEOVERRIDE", [this]() { musicOverride->set_int(0); });
+  }
+
+bool DirectMemory::setMusicZone(std::string_view zone, uint8_t tags) {
+  if(musicOverride==nullptr)
+    return false;
+  auto sym = vm.find_symbol_by_name(zone);
+  if(sym==nullptr || sym->type()!=zenkit::DaedalusDataType::INSTANCE)
+    return false;
+  auto cls = sym;
+  while(cls!=nullptr && cls->type()!=zenkit::DaedalusDataType::CLASS)
+    cls = vm.find_symbol_by_index(cls->parent());
+  if(cls==nullptr || cls->name()!="MUSICZONE")
+    return false;
+  if(musicZoneName!=zone) {
+    musicZone = vm.init_opaque_instance(sym);
+    musicZoneName = zone;
+    }
+  musicTags = tags;
+  updateMusic();
+  return true;
+  }
+
+void DirectMemory::updateMusic() {
+  if(musicOverride==nullptr)
+    return;
+  int32_t track = musicOverride->get_int();
+  if(track<=0 && musicZone!=nullptr) {
+    const bool night = (musicTags&GameMusic::Ngt)!=0;
+    const bool fight = (musicTags&(GameMusic::Fgt|GameMusic::Thr))!=0;
+    auto field = fight ? (night ? "MUSICZONE.NIGHTFIGHT" : "MUSICZONE.DAYFIGHT") :
+                         (night ? "MUSICZONE.NIGHT" : "MUSICZONE.DAY");
+    track = vm.find_symbol_by_name(field)->get_int(0,musicZone.get());
+    }
+  if(track<=0)
+    return;
+  auto sym = vm.find_symbol_by_index(uint32_t(track));
+  if(sym==nullptr || sym->type()!=zenkit::DaedalusDataType::INSTANCE)
+    return;
+  auto cls = sym;
+  while(cls!=nullptr && cls->type()!=zenkit::DaedalusDataType::CLASS)
+    cls = vm.find_symbol_by_index(cls->parent());
+  if(cls==nullptr || cls->name()!="MUSICTRACK")
+    return;
+  auto instance = sym->get_instance();
+  if(instance==nullptr)
+    instance = vm.init_opaque_instance(sym);
+  GameMusic::FileTheme theme;
+  theme.file = vm.find_symbol_by_name("MUSICTRACK.FILENAME")->get_string(0,instance.get());
+  if(theme.file.empty())
+    return;
+  theme.file += ".ogg";
+  const auto duration = [&](const char* name) {
+    return uint64_t(std::max(0,vm.find_symbol_by_name(name)->get_int(0,instance.get())));
+    };
+  theme.loopOverlap = duration("MUSICTRACK.LOOPOFFSETDURATION");
+  theme.fadeIn = duration("MUSICTRACK.FADEINSLIDEDURATION");
+  theme.fadeOut = duration("MUSICTRACK.FADEOUTSLIDEDURATION");
+  if(track!=musicTrack && std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr)
+    Log::i("[MUSIC_PROBE] select zone=",musicZoneName," tags=",int(musicTags),
+           " override=",musicOverride->get_int()," track=",sym->name()," file=",theme.file);
+  musicTrack = track;
+  GameMusic::inst().setMusic(theme);
   }
 
 void DirectMemory::eventPlayAni(std::string_view ani) {

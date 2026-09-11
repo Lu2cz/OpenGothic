@@ -559,6 +559,10 @@ void GameScript::loadQuests(Serialize& fin) {
   fin.read(gilAttitudes);
   }
 
+bool GameScript::setMusicZone(std::string_view zone, uint8_t tags) {
+  return dma!=nullptr && dma->setMusicZone(zone,tags);
+  }
+
 void GameScript::saveVar(Serialize &fout) {
   auto& dat = vm.symbols();
   fout.write(uint32_t(dat.size()));
