@@ -142,6 +142,12 @@ void Interactive::load(Serialize &fin) {
   visual.load(fin, *this);
   visual.setObjMatrix(transform());
   visual.syncPhysics();
+  uint32_t progress = 0;
+  if(fin.setEntry("worlds/",fin.worldName(),"/mobsi/",vobObjectID,"/lockpick-progress"))
+    fin.read(progress);
+  if(progress>pickLockStr.size())
+    throw std::runtime_error("Invalid saved lockpick progress");
+  lockProgress = progress;
   }
 
 void Interactive::save(Serialize &fout) const {
@@ -167,6 +173,12 @@ void Interactive::save(Serialize &fout) const {
 
   fout.setEntry("worlds/",fout.worldName(),"/mobsi/",vobObjectID,"/visual");
   visual.save(fout,*this);
+  // WorldStateStorage also uses this path during world transitions. Keep native
+  // progress there; virtual addresses belong only to the compatibility snapshot.
+  if(lockProgress!=0) {
+    fout.setEntry("worlds/",fout.worldName(),"/mobsi/",vobObjectID,"/lockpick-progress");
+    fout.write(uint32_t(lockProgress));
+    }
   }
 
 void Interactive::postValidate() {

@@ -83,6 +83,7 @@ class Mem32 {
     void    load(Serialize& in, const std::function<void*(std::string_view,uint32_t)>& pinTarget);
     void    validateCallbacks() const;
     Type    regionType(ptr32_t address, uint32_t size) const;
+    bool    isAllocation(ptr32_t address, uint32_t size, std::string_view comment) const;
 
   private:
     enum Status:uint8_t {

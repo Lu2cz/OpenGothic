@@ -1,5 +1,7 @@
 #pragma once
 
+class Interactive;
+
 #include <zenkit/DaedalusVm.hh>
 #include <zenkit/addon/daedalus.hh>
 #include <zenkit/CutsceneLibrary.hh>
@@ -73,6 +75,7 @@ class GameScript final {
     void         saveVar(Serialize& fout);
     void         loadVar(Serialize& fin);
     void         probePersistence(bool finish);
+    void         probeLockFocus(Npc& npc, Interactive& lock, bool restored);
     void         savePerc(Serialize& fout);
     void         loadPerc(Serialize& fin);
 
@@ -140,7 +143,8 @@ class GameScript final {
     int  invokeManaRelease (Npc& npc, Npc* target, int mana);
     void invokeSpell(Npc& npc, Npc *target, Item&  fn);
     int  invokeCond (Npc& npc, std::string_view func);
-    void invokePickLock(Npc& npc, int bSuccess, int bBrokenOpen);
+    void invokePickLock(Npc& npc, int bSuccess, int bBrokenOpen, int pickLockProgress);
+    bool hasSharedLockpickProgress() { return dma!=nullptr && vm.find_symbol_by_name("SPELL_LOGIC_PICKLOCK")!=nullptr && vm.find_symbol_by_name("SPL_PICKLOCK")!=nullptr; }
     void invokeRefreshAtInsert(Npc& npc);
     auto canNpcCollideWithSpell(Npc& npc, Npc* shooter, int32_t spellId) -> CollideMask;
 

@@ -129,6 +129,14 @@ Mem32::Type Mem32::regionType(ptr32_t address, uint32_t size) const {
   throw std::runtime_error("Missing compatibility reference region");
   }
 
+bool Mem32::isAllocation(ptr32_t address, uint32_t size, std::string_view comment) const {
+  for(const auto& r:region)
+    if(r.address==address && r.status==S_Allocated && r.type==Type::plain &&
+       r.size==((size+memAlign-1)/memAlign)*memAlign && r.comment==comment)
+      return true;
+  return false;
+  }
+
 void Mem32::validateCallbacks() const {
   for(const auto& r : region)
     if(r.status!=S_Unused && r.type!=Type::plain && !memMap.contains(r.type))

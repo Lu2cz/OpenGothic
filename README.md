@@ -37,12 +37,13 @@ Progress as of 11 September 2026; new chapter evidence belongs in
 - Polish dialogue audio, native Archolos music with day/night/combat changes, and
   menu music without the original Gothic soundtrack playing over it.
 - Recipe reading, journal entries and scrolling, cooking, XP notices, and menu saving.
-- Ship barriers, the Open Lock spell, stash discovery, corrected fresh container loot,
-  and tested opening cutscene progression and speaker labels.
+- Ship barriers, ordinary lockpicking and the Open Lock spell (including combined
+  partial progress), stash discovery, corrected fresh container loot, and tested
+  opening cutscene progression and speaker labels. See [lockpick verification](docs/archolos/lockpick-regression.md).
 - Inventory/quest save restoration, plus Ikarus heap and delayed-callback persistence
   in the tested save/restart scenarios.
 
-The remaining work includes ordinary lockpicking/focus access, transitions between
+The remaining work includes broader NPC/item focus access, transitions between
 distinct worlds, broader NPC synchronization, essential boss/buff UI and campaign
 validation. See [the roadmap](https://github.com/Lu2cz/OpenGothic/issues/1) for priorities
 and acceptance criteria. Full LeGo/Ikarus or Windows DLL compatibility is not claimed.
