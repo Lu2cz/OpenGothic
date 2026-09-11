@@ -21,7 +21,7 @@ class DirectMemory {
 
     // hooks
     void        tick(uint64_t dt);
-    void        onLoad() { restoreQuestCallbacks = true; }
+    void        onLoad() { restoreQuestCallbacks = true; resetMusicZone(); }
     void        eventPlayAni(std::string_view ani);
     Npc&        dialogSpeaker(Npc& npc);
     bool        setMusicZone(std::string_view zone, uint8_t tags);
@@ -179,11 +179,16 @@ class DirectMemory {
     //
     void        setupNpcFunctions();
     void        setupWorldFunctions();
+    void        setupKmLibFunctions();
     void        setupMusicFunctions();
+    void        notifyMusicZone();
+    void        resetMusicZone();
     void        updateMusic();
     zenkit::DaedalusSymbol* musicOverride = nullptr;
     std::shared_ptr<zenkit::DaedalusInstance> musicZone;
     uint8_t     musicTags = 0;
     int32_t     musicTrack = 0;
-    std::string musicZoneName;
+    std::string musicZoneName, musicThemeName;
+    zString     musicThemeString = {};
+    ptr32_t     musicThemePtr = 0;
   };

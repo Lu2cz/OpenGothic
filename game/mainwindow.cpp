@@ -901,6 +901,25 @@ uint64_t MainWindow::tick() {
     return 0;
     }
 
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_KMLIB_MENU_PROBE")!=nullptr &&
+     !Gothic::inst().isInGame()) {
+    static unsigned stage = 0;
+    static uint64_t menuAt = 0;
+    if(menuAt==0)
+      menuAt = time;
+    if(time-menuAt>4000) {
+      Log::i("[KMLIB_PROBE] menu stage=",stage);
+      GameMusic::inst().traceFileMusic();
+      menuAt=0;
+      if(stage++==0) {
+        Gothic::inst().load("save_slot_1.sav");
+        rootMenu.popMenu();
+        } else {
+        Tempest::SystemApi::exit();
+        }
+      }
+    }
+
   video.tick();
   if(video.isActive())
     return 0;
@@ -1175,6 +1194,7 @@ void MainWindow::onWorldLoaded() {
 
 void MainWindow::onSessionExit() {
   rootMenu.setMainMenu();
+  rootMenu.processMusicTheme();
   }
 
 void MainWindow::onBenchmarkFinished() {
@@ -1266,7 +1286,7 @@ void MainWindow::render(){
       keyUpEvent(escape);
       loadedAt = profileEntry;
       }
-    const bool sampling = profileReady && profileEntry-loadedAt>=10000;
+    bool sampling = profileReady && profileEntry-loadedAt>=10000;
     if(sampling && profileAt==0) {
       if(auto mode=std::getenv("OPENGOTHIC_CITY_PROBE")) {
         auto& w = *Gothic::inst().world();
@@ -1638,6 +1658,8 @@ void MainWindow::render(){
       lastly - camera position
       */
     const uint64_t dt = tick();
+    // A script can end the session during tick; probes must not retain readiness.
+    sampling = sampling && Gothic::inst().world()!=nullptr;
     profileStamp(0);
     updateAnimation(dt);
     profileStamp(1);
@@ -1819,6 +1841,49 @@ void MainWindow::render(){
         GameMusic::inst().traceFileMusic();
       auto& w = *Gothic::inst().world();
       auto* pl = w.player();
+      if(std::getenv("OPENGOTHIC_KMLIB_PROBE")!=nullptr && profileFrames==180) {
+        auto& vm = w.script().getVm();
+        const auto gi = [&](const char* name) { return vm.find_symbol_by_name(name)->get_int(); };
+        const auto si = [&](const char* name, int value) { vm.find_symbol_by_name(name)->set_int(value); };
+        Log::i("[KMLIB_PROBE] natural=",vm.find_symbol_by_name("CURRENTMUSICZONE")->get_string());
+        // This outer function dispatches the DLL wrappers through real script BL calls.
+        vm.call_function("GAMESERVICES_INCREMENTSTATANDCHECKACHIEVEMENT",
+                         std::string_view("STAT_ACHIEVEMENT_18"),2,std::string_view("ACHIEVEMENT_18"),5);
+        Log::i("[KMLIB_PROBE] stat=",Gothic::settingsGetI("KMLIB_STATS","STAT_ACHIEVEMENT_18"),
+               " unlocked=",Gothic::settingsGetI("KMLIB_ACHIEVEMENTS","ACHIEVEMENT_18"));
+        const auto chapter=gi("KAPITEL"), noEntry=gi("NOLOCATIONENTRYCHECK");
+        const auto haven=gi("B_LOCATIONENTRYCHECK.HAVENNOENTRY"), city=gi("B_LOCATIONENTRYCHECK.CITYNOENTRY");
+        const auto circle=gi("SQ504_JOINEDWATERCIRCLE"), unequip=gi("WATERCIRCLE_UNEQUIP");
+        const auto edx=gi("EDX");
+        // Capture scene requests, leaving the installed location/quest logic intact.
+        // Choreography is covered separately by captain/forest integration tests.
+        auto scenes=std::make_shared<std::vector<int>>();
+        vm.override_function("CUTSCENE_START",[scenes](int scene) { scenes->push_back(scene); });
+        si("KAPITEL",2); si("NOLOCATIONENTRYCHECK",1);
+        si("B_LOCATIONENTRYCHECK.HAVENNOENTRY",0); si("B_LOCATIONENTRYCHECK.CITYNOENTRY",0);
+        Gothic::settingsSetI("SOUND","musicEnabled",0);
+        w.script().setMusicZone("HAV",uint8_t(GameMusic::Day));
+        Log::i("[KMLIB_PROBE] gated=",gi("B_LOCATIONENTRYCHECK.HAVENNOENTRY"));
+        si("NOLOCATIONENTRYCHECK",0);
+        w.script().setMusicZone("VIL",uint8_t(GameMusic::Day));
+        w.script().setMusicZone("HAV",uint8_t(GameMusic::Day));
+        Log::i("[KMLIB_PROBE] haven=",gi("B_LOCATIONENTRYCHECK.HAVENNOENTRY")," scenes=",scenes->size(),
+               " theme=",vm.find_symbol_by_name("CURRENTMUSICZONE")->get_string()," edx_preserved=",gi("EDX")==edx);
+        w.script().setMusicZone("HAV",uint8_t(GameMusic::Day));
+        w.script().setMusicZone("HAV",uint8_t(GameMusic::Ngt|GameMusic::Fgt));
+        Log::i("[KMLIB_PROBE] repeat_scenes=",scenes->size()," night=",vm.find_symbol_by_name("CURRENTMUSICZONE")->get_string());
+        si("NOLOCATIONENTRYCHECK",1); si("SQ504_JOINEDWATERCIRCLE",1); si("WATERCIRCLE_UNEQUIP",1);
+        w.script().setMusicZone("CIT",uint8_t(GameMusic::Day));
+        const auto restricted=gi("WATERCIRCLE_UNEQUIP");
+        w.script().setMusicZone("FOR",uint8_t(GameMusic::Day));
+        Log::i("[KMLIB_PROBE] armor_restricted=",restricted," armor_released=",gi("WATERCIRCLE_UNEQUIP"));
+        si("KAPITEL",chapter); si("NOLOCATIONENTRYCHECK",noEntry);
+        si("B_LOCATIONENTRYCHECK.HAVENNOENTRY",haven); si("B_LOCATIONENTRYCHECK.CITYNOENTRY",city);
+        si("SQ504_JOINEDWATERCIRCLE",circle); si("WATERCIRCLE_UNEQUIP",unequip);
+        Gothic::settingsSetI("SOUND","musicEnabled",1);
+        w.script().setMusicZone("CIT",uint8_t(GameMusic::Day));
+        Gothic::inst().flushSettings();
+        }
       if(musicFull && profileFrames>=180) {
         auto& vm = w.script().getVm();
         const auto overrideTrack = [&](const char* name) {
@@ -1866,7 +1931,10 @@ void MainWindow::render(){
         }
       if(cityProbeSaved) {
         Log::i("[CITY_PROBE] save finalized");
-        Tempest::SystemApi::exit();
+        if(std::getenv("OPENGOTHIC_KMLIB_MENU_PROBE")!=nullptr)
+          Gothic::inst().gameSession()->exitSession();
+        else
+          Tempest::SystemApi::exit();
         }
       if(profileFrames==90) {
         cityWalkStart = pl->position();

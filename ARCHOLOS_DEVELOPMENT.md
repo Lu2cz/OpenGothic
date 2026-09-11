@@ -6,9 +6,9 @@ Working branch: `archolos/performance-v092`, based on OpenGothic v0.92. The newe
 
 Workspace and user-facing evidence: `/Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues`. Launcher and reports are under `outputs`; proprietary game data, saves, benchmark runs, and extraction tools are under `work` and are not committed.
 
-## Current milestone: Trialogue speaker labels and exact subtitle lookup
+## Current milestone: Native KmLib gameplay integration
 
-Forest and captain replays now display the script-selected speaker, and empty cutscene output no longer displays an unrelated line. Normal-duration forest dialogue returns control and saves. New Game is recommended for a clean loot baseline; all previous saves were subsequently deleted at the user’s request. Full cutscene choreography and campaign completion remain unverified.
+Menu soundtrack, shared zone gameplay notifications and persistent local achievement counters/unlocks are now implemented and installed. Menu/load/save/return, full music scenario, fresh-process override/counter restoration and fresh-game recipe regressions pass. Full external platform integration, legacy renderer/debug hooks and campaign completion remain outside verified coverage. See the latest dated section for exact evidence and limits.
 
 # Archolos: first performance milestone
 
@@ -503,3 +503,37 @@ This milestone implements gameplay soundtrack behavior, not the entire DLL. Menu
 Final acceptance: work/music-fresh-recipe passes fresh-game initialization and actual recipe use/reread, with document persistence, journal/stove eligibility and preserved script context. Release build, diff whitespace and runner syntax checks pass. Installed gameplay executable SHA-256 `1c5fbb03505cca6c1e069d971763223842215673d9fbb5ffb1de87096cdba2d8`; previous playable build is work/Gothic2Notr-before-music. Profile candidate SHA-256 `b3b7533fe6c6e50f6761c59d704f0cdb43d960609801a9ad21c61712fb2bb4cf`. The bundles have different Info.plists and require different ad-hoc signatures; every byte before the Mach-O signature (offset 26316768) is identical, and the installed signature verifies. No untested executable code was introduced during installation.
 
 Added playable slot 3, CITY EXPLORATION - Music, from the verified corrected copy (SHA-256 `10b11f7040aad1dfeba34c305f81aa9e2a0b81bb05d1d63f13674624e036ba55`). Slots 1 and 2 retain their original hashes. Use slot 3 to hear normal city music; slot 2 retains its old prologue override. The story save needs no migration or new game. Evidence: outputs/archolos-music-fix.json and outputs/archolos-music-fix.patch. Next: audit remaining KmLib initialization and music-zone gameplay notifications separately from audio playback.
+
+## Remaining KmLib gameplay integration, 11 September 2026
+
+Audited all nine exports of the installed 32-bit DLL and every installed-script KMLIB_GETPROCADDRESS caller. The extra ChromeTraceEvent lookup belongs to the optional developer profiler and is not exported by this release. GAMESERVICES_GETSTAT has only the achievement-threshold helper as a caller; there is no installed GameServices_SetStat wrapper or lookup. Full audit: outputs/archolos-kmlib-coverage.md. Disassembly and installed bytecode: work/kmlib-full-disasm.txt, work/kmlib-installed-bytecode.txt, work/kmlib-gameplay-bytecode.txt and work/kmlib-export-callers.txt.
+
+### Changes
+
+- Deliver ONZONEMUSICCHANGEDHOOK through the shared native zone selection method, supplying the original day/night/combat theme name through a virtual zString in EDX. Restore EDX on all exits. Execute the installed hook itself; it retains its location-entry and Water Circle conditions and its call to scaling logic. Notify while muted and during overrides; suppress identical theme repeats. Reset transient selection on save load and KMLIB_INITIALIZEALWAYS/world initialization. No production scene IDs, coordinates or quest outcomes are hardcoded.
+- Native menu music uses the DLL's hardcoded 02.ogg and 7651 ms overlap, reusing the already tested file playback. Identify Archolos from its world/music assets. Resume menu music when a game session ends; settings continue to control volume/mute.
+- Native GetStat/IncrementStat/UnlockAchievement adapters use the existing local Gothic.ini store, under KMLIB_STATS and KMLIB_ACHIEVEMENTS. Progress survives save rollback and application restarts, and unlocks are idempotent. Validate keys, clamp local counters to nonnegative int32 range and flush changes through existing settings persistence. No external service requests or platform popups.
+- Handle KmLib initialization natively. Original InitializeAlways only looks up version symbols; INIT_ALWAYS still owns migrations and version assignments. Other initializer responsibilities include legacy engine/debug-console hooks, menu/save-format patches, Windows crash reporting/checksum checks and platform initialization. Native audio/UI/save handling supplies the applicable core behavior; unsupported legacy/platform features are documented rather than claimed as emulated.
+
+### Evidence
+
+- work/kmlib-before: probe-only baseline fails with CURRENTMUSICZONE empty, no Haven scene request, no Water Circle release and local counter=0.
+- work/kmlib-native: first corrected city run passes natural city notification, muted region checks, suppression and repeat guards, night/combat suffix, EDX restoration, Water Circle region release and counter update; normal walking/save/exit, 58.99 FPS.
+- work/kmlib-menu: rejected diagnostic run. Startup menu, city checks and saving worked; after session exit the probe used a readiness flag computed before tick and dereferenced the destroyed world. Crash report/ARM64 instruction identifies the diagnostic access. Sampling now rechecks world availability after tick for all probes. This candidate was never installed in ArcholosFast.
+- work/kmlib-menu-final: final executable passes menu → city → save → menu, native playback clocks/gains, normal process exit, and counter restoration/increment 2→4. Short 1280x720 city sample 60.00 FPS.
+
+- work/kmlib-full-final: final executable passes all 13 stages, including cancellation, day/night/village/combat selections, volume/mute, script-dispatched overrides/release, a complete overlap loop, native source progress and save completion. Local counter restores 4→6 and achievement unlock becomes 1. Longer 1280x720 city sample 57.32 FPS.
+
+- work/kmlib-override-reload: fresh-process reload starts 36.ogg from the saved override, still delivers all region checks while that override remains active, restores/increments the counter 6→8 with unlock still 1, walks and saves again; 59.25 FPS.
+
+- work/kmlib-fresh-recipe: actual new game and inventory read/reread pass, including document persistence, journal ingredients, stove eligibility and restored ITEM/SELF context; normal process exit.
+
+### Limits
+
+This is native support for the identified gameplay-facing KmLib contract, not full DLL/platform parity. Steam/GOG publishing, Discord presence, legacy debugging-console additions, Windows crash reporting and original menu/save metadata hooks remain unported. Existing save flags cannot reconstruct every achievement earned before local tracking existed. Local progress belongs to the launcher directory, not a cloud account.
+
+The music-zone hook is adjacent LeGo integration, not a KmLib export. Its original-engine outdoor sky-controller fields are still unmapped, so UPDATESCALINGFACTOR's guard skips legacy automatic draw-distance adjustments. The installed 1.2.11 bytecode has real mutually exclusive branches, unlike the misleading 1.2.7 decompilation. The native selector retains its five-second cadence and existing overlapping-zone priority. Region tests capture scene requests rather than replaying their choreography; Water Circle release is exercised without a full faction quest. Full campaign/world-transition behavior, arbitrary callback/heap persistence and complete trialogue choreography remain separate work. Cursor remains unchanged.
+
+Next: normal story progression toward Silbach and actual world-transition/save consistency tests. Continue local-only commits; no user save migration or new game required for zone/music behavior.
+
+Final installation: Fast SHA-256 `9408e554791b0d1d9e78f96ec5cbc6d1773498eab011fa0705e6f697e6285ba5`; tested Profile SHA-256 `b7b12286af0eb9ffc6f69ac8c7aa87ac95796258af8c78e4b3f2661ce8be859b`. All executable bytes before Mach-O signature offset 26350992 match; Fast ad-hoc signature verifies. Prior executable is `work/Gothic2Notr-Fast-before-kmlib-rest`. All three user-save hashes remain unchanged. Release build, runner syntax and diff whitespace checks pass. Evidence: outputs/archolos-kmlib-rest-fix.json, outputs/archolos-kmlib-rest-fix.patch and outputs/archolos-kmlib-coverage.md.

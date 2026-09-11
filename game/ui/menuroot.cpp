@@ -4,6 +4,7 @@
 
 #include "ui/gamemenu.h"
 #include "gothic.h"
+#include "gamemusic.h"
 
 using namespace Tempest;
 
@@ -113,6 +114,12 @@ void MenuRoot::setPlayer(const Npc &pl) {
   }
 
 void MenuRoot::processMusicTheme() {
+  if(current!=nullptr && !Gothic::inst().isInGame() &&
+     Resources::hasFile("ARCHOLOS_MAINLAND.ZEN") && Resources::hasFile("02.OGG")) {
+    // KmLib InitializeMenu hardcodes track 02 and a 7651 ms overlapping loop.
+    GameMusic::inst().setMusic(GameMusic::FileTheme{"02.ogg",7651,0,0});
+    return;
+    }
   if(current!=nullptr)
     current->processMusicTheme();
   }

@@ -5,6 +5,7 @@
 
 #include <cassert>
 #include <charconv>
+#include <limits>
 
 #include "world/objects/npc.h"
 #include "world/objects/interactive.h"
@@ -133,6 +134,7 @@ DirectMemory::DirectMemory(GameScript& owner, zenkit::DaedalusVm& vm) : gameScri
   setupNpcFunctions();
   setupWorldFunctions();
   setupMusicFunctions();
+  setupKmLibFunctions();
 
   // various
   vm.override_function("MEM_PrintStackTrace", [this](){ memPrintstacktraceImplementation(); });
@@ -232,6 +234,46 @@ void DirectMemory::tick(uint64_t dt) {
   updateMusic();
   }
 
+void DirectMemory::setupKmLibFunctions() {
+  if(vm.find_symbol_by_name("KMLIB_INITIALIZEGAMESTART")==nullptr)
+    return;
+  // Native initialization owns audio, menus, console and save files. The original
+  // initializers patch Windows code, start platform clients/crash reporting, and
+  // look up version symbols; INIT_ALWAYS itself performs the script migrations.
+  for(auto name : {"KMLIB_INITIALIZEMENU", "KMLIB_INITIALIZEGAMESTART"})
+    if(vm.find_symbol_by_name(name)!=nullptr)
+      vm.override_function(name, []() {});
+
+  if(vm.find_symbol_by_name("KMLIB_INITIALIZEALWAYS")!=nullptr)
+    vm.override_function("KMLIB_INITIALIZEALWAYS", [this]() { resetMusicZone(); });
+
+  const auto validKey = [](std::string_view key) {
+    return !key.empty() && key.size()<=128 &&
+           key.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_")==std::string_view::npos;
+    };
+  // Local profile progress, deliberately outside saves: loading an earlier save
+  // must not roll back achievement counters. No Steam/GOG/Discord publishing.
+  if(vm.find_symbol_by_name("GAMESERVICES_GETSTAT")!=nullptr)
+    vm.override_function("GAMESERVICES_GETSTAT", [validKey](std::string_view name) {
+      return validKey(name) ? Gothic::settingsGetI("KMLIB_STATS",name) : -1;
+      });
+  if(vm.find_symbol_by_name("GAMESERVICES_INCREMENTSTAT")!=nullptr)
+    vm.override_function("GAMESERVICES_INCREMENTSTAT", [validKey](std::string_view name, int amount) {
+      if(!validKey(name))
+        return;
+      const int64_t value = int64_t(Gothic::settingsGetI("KMLIB_STATS",name))+amount;
+      Gothic::settingsSetI("KMLIB_STATS",name,int(std::clamp<int64_t>(value,0,std::numeric_limits<int32_t>::max())));
+      Gothic::inst().flushSettings();
+      });
+  if(vm.find_symbol_by_name("GAMESERVICES_UNLOCKACHIEVEMENT")!=nullptr)
+    vm.override_function("GAMESERVICES_UNLOCKACHIEVEMENT", [validKey](std::string_view name) {
+      if(!validKey(name) || Gothic::settingsGetI("KMLIB_ACHIEVEMENTS",name)!=0)
+        return;
+      Gothic::settingsSetI("KMLIB_ACHIEVEMENTS",name,1);
+      Gothic::inst().flushSettings();
+      });
+  }
+
 void DirectMemory::setupMusicFunctions() {
   if(vm.find_symbol_by_name("KMLIB_INITIALIZEGAMESTART")==nullptr)
     return;
@@ -242,6 +284,8 @@ void DirectMemory::setupMusicFunctions() {
     if(vm.find_symbol_by_name(name)==nullptr)
       return;
   musicOverride = vm.find_symbol_by_name("MUSIC_CURRENTOVERRIDE");
+  if(vm.find_symbol_by_name("ONZONEMUSICCHANGEDHOOK")!=nullptr && vm.find_symbol_by_name("EDX")!=nullptr)
+    musicThemePtr = mem32.pin(&musicThemeString,sizeof(musicThemeString),"music zone theme");
   vm.register_as_opaque("MUSICTRACK");
   vm.register_as_opaque("MUSICZONE");
   // Keep the script global authoritative: it is already serialized in saves.
@@ -266,8 +310,37 @@ bool DirectMemory::setMusicZone(std::string_view zone, uint8_t tags) {
     musicZoneName = zone;
     }
   musicTags = tags;
+  notifyMusicZone();
   updateMusic();
   return true;
+  }
+
+void DirectMemory::resetMusicZone() {
+  musicZone.reset();
+  musicZoneName.clear();
+  musicThemeName.clear();
+  musicTrack = 0;
+  }
+
+void DirectMemory::notifyMusicZone() {
+  if(musicThemePtr==0)
+    return;
+  // This hook observes the original engine theme name, including time/combat
+  // suffixes, even while audio is muted or a story track overrides the zone.
+  std::string name = musicZoneName + ((musicTags&GameMusic::Ngt)!=0 ? "_NGT_" : "_DAY_");
+  name += (musicTags&GameMusic::Fgt)!=0 ? "FGT" : (musicTags&GameMusic::Thr)!=0 ? "THR" : "STD";
+  if(name==musicThemeName)
+    return;
+  musicThemeName = name;
+  memAssignString(musicThemeString,name);
+  auto& edx = *vm.find_symbol_by_name("EDX");
+  struct RestoreRegister {
+    zenkit::DaedalusSymbol& symbol;
+    int32_t value;
+    ~RestoreRegister() { symbol.set_int(value); }
+    } restore{edx,edx.get_int()};
+  edx.set_int(int32_t(musicThemePtr));
+  vm.call_function("ONZONEMUSICCHANGEDHOOK");
   }
 
 void DirectMemory::updateMusic() {
