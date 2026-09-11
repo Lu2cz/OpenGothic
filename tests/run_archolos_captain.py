@@ -41,9 +41,11 @@ try:
             assert z.testzip() is None and b"Captain fixture" in z.read("header")
         print(f"Evidence: {out}")
         raise SystemExit
-    for fn in ("DIA_JORN_Q101_WHATSUP_INFO", "DIA_JORN_Q101_WHATSUP_YES",
+    for fn in ("DIA_JORN_Q101_WHATSUP_INFO",
                "TRIA_CAPTAIN_Q101_JORNTRIALOG_1", "TRIA_CAPTAIN_Q101_TIMOTRIALOG_NOTNECESSARY"):
         assert "[CAPTAIN_PROBE] select " + fn in trace, "Missing dialogue choice: " + fn
+    assert ("[CAPTAIN_PROBE] select DIA_JORN_Q101_WHATSUP_YES" in trace or
+            "[CAPTAIN_PROBE] select DIA_JORN_Q101_WHATSUP_NO" in trace), "Missing Jorn captain choice"
     assert "Go bother someone else." not in trace, "Empty dialogue selected an unrelated subtitle"
     assert "_TRIA_Copy: Invalid NPC" not in trace, "Legacy speaker swapping still ran"
     for message, speaker in (("TRIA_Jorn_Q101_JornTrialog_01_03", "Jorn"),

@@ -56,12 +56,15 @@ SHIP_JORN_02. This is synthetic prerequisite setup, not campaign validation.
 
 `issue6-captain-fixture-3/save_slot_2.sav` was generated on candidate
 `cec49f70e37e6ddf0db2334ee2501298ce6a4d4c706df20922ea55716ea5d474`.
-The normal replay in `issue6-captain-fixture-3-run` selected
-DIA_JORN_Q101_WHATSUP_INFO but had not selected its follow-up by the budget
-checkpoint. The coordinator stopped that private run; it is neither a passed
-captain test nor a proven new runtime regression. Next, inspect why the follow-up
-choice is unavailable, then rerun to the actual runner result. No tests remain
-running from this checkpoint. The fixture changes compile and remain opt-in.
+Normal-duration replay `issue6-captain-final-1` passed on candidate
+`95a5d0769a9c620536e39071ce216d38171b97c9411736efa2d41b30aa2089e7`.
+It selected the Jorn prompt, the installed 1.2.11 `DIA_JORN_Q101_WHATSUP_NO`
+captain response, and both required trialogue responses; it then returned control
+with flag 11, finalized a CRC-valid private save, and preserved the fixture hash.
+The runner accepts either `WHATSUP_YES` or `WHATSUP_NO`: 1.2.11 exposes `NO`
+where the 1.2.7 reference lists `YES`, and both dispatch the captain sequence.
+This corrects the runner's choice expectation, not the campaign; the fixture and
+replay remain synthetic private scene evidence, not campaign-progression proof.
 
 Candidate `4673359a853f41bb58bdd2eb78803ac0a5ba113fc094f5a69246d98a20a5c624`
 also passed the pending-wait seed/reload pair and the private edge matrix in
