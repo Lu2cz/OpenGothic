@@ -15,7 +15,7 @@ The baseline setup tag `archolos-baseline-2026-09-11` adds documentation and for
 submodule URLs without changing engine code. Keep that tag as the rollback reference.
 
 Pinned modified dependencies are published in Lu2cz/Tempest (`fb9fa22d2e66fd350ca93cbef4a9cfca05ed5669`)
-and Lu2cz/ZenKit (`f3d49626bb42bedc1ca7f8443adf4176800c36fa`). Do not update submodules
+and Lu2cz/ZenKit (`6fa71bfbd8f3c349be59bbc485f3e7bac7fa3961`). Do not update submodules
 with `--remote`; ordinary recursive initialization retrieves the recorded revisions.
 
 Fresh source checkout (choose an unused destination):
@@ -88,6 +88,11 @@ fingerprint`, `--reject truncated` and `--save-failure` cover rejection/data pro
 Old saves without `game/compatibility` use legacy recovery; the next save stores
 current state but cannot recreate state already lost. Mapping changes must review
 snapshot ABI/version and identical-script requirements.
+
+Lockpicking now writes compatibility v2 and reads baseline v1 snapshots. Older
+binaries reject v2 saves; keep pre-upgrade saves with rollback binaries. See
+[lockpick regression coverage](lockpick-regression.md) for ownership, migration
+and exact verification boundaries.
 
 Before replacing either shared app, ensure no test/build/game run conflicts; preserve
 the prior playable executable, test the candidate privately, and verify the bundle's
