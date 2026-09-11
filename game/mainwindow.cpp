@@ -1677,8 +1677,10 @@ void MainWindow::render(){
         w.script().beginWorldTransitionProbe(pl,*lock);
         worldProbeTransitioned=true;
         const char* target = toSewers ? "ARCHOLOS_SEWERS.ZEN" : "ARCHOLOS_MAINLAND.ZEN";
-        Log::i("[WORLD_PROBE] native_change target=",target," synthetic=1");
-        w.triggerChangeWorld(target,"");
+        std::string trigger, start;
+        if(!w.triggerChangeLevel(target,&trigger,&start))
+          throw std::runtime_error("World-transition probe entrance trigger missing");
+        Log::i("[WORLD_PROBE] zone_trigger=",trigger," target=",target," start=",start," synthetic=1");
           }
         }
       const char* destination = mode=="to-sewers" ? "ARCHOLOS_SEWERS.ZEN" : "ARCHOLOS_MAINLAND.ZEN";

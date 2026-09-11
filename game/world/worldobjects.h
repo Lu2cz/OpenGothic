@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <memory>
+#include <string>
 
 #include <zenkit/vobs/Misc.hh>
 
@@ -87,6 +88,7 @@ class WorldObjects final {
     void           addTrigger(AbstractTrigger* trigger);
     void           enableDefTrigger(AbstractTrigger& trigger);
     void           triggerEvent(const TriggerEvent& e);
+    bool           triggerChangeLevel(Npc& npc, std::string_view level, std::string* triggerName, std::string* startVob);
     bool           triggerOnStart(bool firstTime);
     void           execDelayedEvents();
     bool           execTriggerEvent(const TriggerEvent& e);

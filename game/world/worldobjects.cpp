@@ -11,6 +11,7 @@
 #include "world/triggers/pfxcontroller.h"
 #include "world/triggers/triggerworldstart.h"
 #include "world/triggers/abstracttrigger.h"
+#include "world/triggers/zonetrigger.h"
 #include "world.h"
 #include "utils/workers.h"
 #include "utils/dbgpainter.h"
@@ -382,6 +383,21 @@ void WorldObjects::tickNear(uint64_t /*dt*/) {
 
 void WorldObjects::triggerEvent(const TriggerEvent &e) {
   triggerEvents.push_back(e);
+  }
+
+bool WorldObjects::triggerChangeLevel(Npc& npc, std::string_view level, std::string* triggerName, std::string* startVob) {
+  for(auto* trigger:triggers) {
+    auto* zone = dynamic_cast<ZoneTrigger*>(trigger);
+    if(!zone || !zone->changesTo(level))
+      continue;
+    if(triggerName)
+      *triggerName = zone->name();
+    if(startVob)
+      *startVob = zone->startVob();
+    zone->onIntersect(npc);
+    return true;
+    }
+  return false;
   }
 
 void WorldObjects::tickTriggers(uint64_t /*dt*/) {

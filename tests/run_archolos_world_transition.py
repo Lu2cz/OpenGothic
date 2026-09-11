@@ -69,10 +69,10 @@ def run(name, save, mode, evidence):
 
 try:
     sewer = run("01-to-sewers", source, "to-sewers", (
-        "native_change target=ARCHOLOS_SEWERS.ZEN", "save world=archolos_sewers.zen",
+        "zone_trigger=", "target=ARCHOLOS_SEWERS.ZEN", "save world=archolos_sewers.zen",
         "destroyed_ref=0 callback_dispatches=1 stale_focus=0"))
     mainland = run("02-to-mainland", sewer, "to-mainland", (
-        "native_change target=ARCHOLOS_MAINLAND.ZEN", "save world=ARCHOLOS_MAINLAND.ZEN",
+        "zone_trigger=", "target=ARCHOLOS_MAINLAND.ZEN", "save world=ARCHOLOS_MAINLAND.ZEN",
         "returned_lock_progress=1", "destroyed_ref=0 callback_dispatches=1 stale_focus=0"))
     run("03-restart-mainland", mainland, "verify-mainland", ("restart_lock_progress=1 world=ARCHOLOS_MAINLAND.ZEN",))
 finally:

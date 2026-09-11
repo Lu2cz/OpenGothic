@@ -126,6 +126,7 @@ class World final {
 
     void                 triggerOnStart(bool firstTime);
     void                 triggerEvent(const TriggerEvent& e);
+    bool                 triggerChangeLevel(std::string_view world, std::string* triggerName, std::string* startVob);
     void                 triggerChangeWorld(std::string_view world, std::string_view wayPoint);
     void                 execTriggerEvent(const TriggerEvent& e);
     void                 enableDefTrigger(AbstractTrigger& t);
