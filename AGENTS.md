@@ -27,6 +27,17 @@ Do not duplicate the backlog or completed-work history here.
 - Advance the assigned scope autonomously; record newly found unrelated work in
   linked issues rather than expanding this task into a library-wide rewrite.
 
+## Model selection
+- Choose by uncertainty and failure risk, not expected diff size.
+- Focus/memory, saves, world transitions and NPC synchronization: strongest coding
+  model with high reasoning; unclear UI/parser investigations also start strong.
+- Established small fixes and documentation: faster, cheaper model when adequate.
+- Reassess after diagnosis; acceptance and regression standards stay unchanged.
+- Record recommended tier/reasoning, actual model/settings when exposed, and why
+  in the issue handoff. Never infer an unexposed model from the recommendation.
+- Respect task API override rules; when a tier cannot be selected, retain and
+  disclose the configured default. Do not silently switch a running task's model.
+
 ## Engineering
 - Trace the real flow; fix shared causes when evidence supports them.
 - Reuse existing mechanisms; prefer the smallest correct implementation.
@@ -54,6 +65,8 @@ Do not duplicate the backlog or completed-work history here.
 ## Finishing and handing off
 - Update the issue with cause, commits/PR, verification and material limitations.
 - State whether the playable app was updated and identify its exact source/build.
+- Update README campaign progress when new story evidence is verified; date it and
+  link the issue. Keep synthetic exploration separate and avoid a running history.
 - Move the board status honestly: Backlog, Ready, In progress, Needs verification,
   Done. Close only when acceptance is satisfied; pending player checks stay open.
 - Push meaningful checkpoints to the fork. Integrate verified fixes through a PR
