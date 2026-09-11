@@ -491,7 +491,7 @@ void GameMusic::tick() {
 void GameMusic::traceFileMusic() const {
   Log::i("[MUSIC_PROBE] state file=",fileTheme.file," position=",fileSound.currentTime(),
          " gain=",fileSound.volume()," enabled=",enabled," tails=",fileTails.size(),
-         " finished=",fileSound.isFinished());
+         " finished=",fileSound.isFinished()," legacy=",impl->isEnabled());
   }
 
 void GameMusic::stopMusic() {

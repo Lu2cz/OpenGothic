@@ -537,3 +537,29 @@ The music-zone hook is adjacent LeGo integration, not a KmLib export. Its origin
 Next: normal story progression toward Silbach and actual world-transition/save consistency tests. Continue local-only commits; no user save migration or new game required for zone/music behavior.
 
 Final installation: Fast SHA-256 `9408e554791b0d1d9e78f96ec5cbc6d1773498eab011fa0705e6f697e6285ba5`; tested Profile SHA-256 `b7b12286af0eb9ffc6f69ac8c7aa87ac95796258af8c78e4b3f2661ce8be859b`. All executable bytes before Mach-O signature offset 26350992 match; Fast ad-hoc signature verifies. Prior executable is `work/Gothic2Notr-Fast-before-kmlib-rest`. All three user-save hashes remain unchanged. Release build, runner syntax and diff whitespace checks pass. Evidence: outputs/archolos-kmlib-rest-fix.json, outputs/archolos-kmlib-rest-fix.patch and outputs/archolos-kmlib-coverage.md.
+
+
+## Menu audio overlap and appearance audit, 11 September 2026
+
+User confirms music, combat changes and travelling outside the city appear smooth. This is useful gameplay evidence, not proof of a different-ZEN world transition. Steam/GOG/Discord integration is explicitly deferred.
+
+### Cause and change
+
+The previous menu test observed the intended Ogg clock/gain but missed competing sources. MainWindow::render also unconditionally played GAMESTART.WAV as a global sound effect. In the installed game that is the original Gothic Addon startup music, 43.142 seconds long. It bypasses GameMusic and its mute/volume/provider selection. Instrumented baseline work/menu-audio-before confirms this WAV starts alongside 02.ogg while the legacy music provider is disabled and there are no Ogg tails. The strengthened no-startup-WAV assertion fails against this baseline.
+
+Move startup sound ownership to MenuRoot::processMusicTheme, after the custom soundtrack branch. Play the vanilla startup sound once per menu root only when an out-of-game legacy menu requests music. Rendering no longer triggers sound effects. Direct save/new-game launches no longer start an unrelated menu WAV. No game assets or cursor behavior changed.
+
+### Verification
+
+- work/menu-audio-final: --menu --kmlib --full passes all 13 music stages, cancellation, volume/mute, day/night/combat variants, overrides, complete overlapping loop, region hooks/local stats, city movement, saving and return to menu. Both menu samples play 02.ogg at advancing clocks/nonzero gain, with legacy=0, tails=0 and no GAMESTART.WAV emission. The varied run reports 47.44 FPS; window discovery/screenshot collection and uncontrolled desktop workload make this unsuitable as a controlled performance comparison.
+- Strengthen tests/run_archolos_music.py --menu to reject the competing WAV and enabled legacy provider/tails, and verify the installed Archolos background and logo are loaded. Dedicated probe logging is opt-in; no subjective listening or OS audio loopback recording is claimed.
+- Captured the actual private application window after returning to the menu: outputs/archolos-menu.png. It already shows the Archolos-specific knight background, The Chronicles of Myrtana / Archolos logo and Mod of the Year badge. Runtime background is 2048x2048 and the logo is menu_km_archolos.tga. Archive mounting reproduces the correct KM_Textures winner; no evidence warrants changing VFS priority. Gothic-style bitmap text, native layout, the Gothic II window title and OpenGothic version footer remain cosmetic differences. No menu artwork replacement was needed or shipped.
+- Release build, runner syntax and diff whitespace pass. Three user save hashes remain unchanged. The installed executable matches tested code before its bundle-specific signature; both signatures verify.
+
+### Log assessment and remaining scope
+
+The supplied af2ed609 log contains three launches and normal menu exits, no crash/stacktrace. Outstanding leads: malformed/missing mesh and ambient sound names, archive section overflow/MDS parser warnings, null OCNPC.FOCUS_VOB access, unsupported LOG_MOVETOTOP (journal ordering), mdl_applyrandomani/freq (idle variation), and a suppressed Windows MessageBox call whose message is not recorded. Do not label the unknown message harmless without capturing its contents. Repeated Fane state messages alone do not demonstrate a stuck scene. The user did not report a new progression blocker in this run.
+
+Old Windows crash/LAA checks and original-engine debugger hooks are not needed to run the native 64-bit macOS engine. They are not universally obsolete for the Windows original; recreating them is unnecessary here unless a concrete debugging need emerges. Original automatic draw-distance scaling remains a possible future native optimization if measured performance warrants it. Menu presentation is optional polish. Broader story progression, save/world-transition consistency, cutscene choreography and callback persistence remain the substantive compatibility priorities.
+
+Installed Fast SHA-256 `1bc44a88eb2a145eac6f3806ca91929398bb7912d5dc0ab0287fc75be56bbfc8`; tested Profile SHA-256 `f416ffba48516b1720a614e876031d66831dd5d9b04b455ed7a40754d72c3acd`; matching executable bytes before signature offset 26351168. Previous Fast executable: work/Gothic2Notr-Fast-before-menu-audio. Evidence: outputs/archolos-menu-audio-fix.json and .patch. Local-only commit; no push.

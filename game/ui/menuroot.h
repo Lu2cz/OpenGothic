@@ -48,4 +48,5 @@ class MenuRoot : public Tempest::Widget {
 
     Tempest::Event::KeyType                cheatCode[6] = {};
     bool                                   showVersionHint = false;
+    bool                                   startupSoundPlayed = false;
   };

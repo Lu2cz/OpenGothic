@@ -433,6 +433,8 @@ void Gothic::emitGlobalSound(const Tempest::Sound &sfx) {
 void Gothic::emitGlobalSoundWav(std::string_view wav) {
   auto s = sndDev.load(Resources::loadSoundBuffer(wav));
   s.play();
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_KMLIB_MENU_PROBE")!=nullptr)
+    Log::i("[KMLIB_PROBE] global wav=",wav," length=",s.timeLength());
 
   for(size_t i=0;i<sndStorage.size();){
     if(sndStorage[i].isFinished()){

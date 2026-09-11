@@ -291,6 +291,11 @@ GameMenu::GameMenu(MenuRoot &owner, KeyCodec& keyCodec, zenkit::DaedalusVm& vm, 
   back = Resources::loadTexture(menu->back_pic);
 
   initItems();
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_KMLIB_MENU_PROBE")!=nullptr) {
+    for(const auto& item : hItems)
+      if(item.img!=nullptr && (item.name=="MENUITEM_MAIN_HEADLINE2" || item.name=="MENUITEM_MAIN_MOTY"))
+        Log::i("[KMLIB_PROBE] menu image=",item.handle->backpic," size=",item.img->w(),"x",item.img->h());
+    }
   if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr) {
     Log::i("[MODAL_PROBE] menu opened=",menuSection);
     for(const auto& item : menu->items)

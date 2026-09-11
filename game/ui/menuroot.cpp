@@ -120,6 +120,11 @@ void MenuRoot::processMusicTheme() {
     GameMusic::inst().setMusic(GameMusic::FileTheme{"02.ogg",7651,0,0});
     return;
     }
+  // The original startup WAV is menu audio, and must not accompany a custom soundtrack.
+  if(current!=nullptr && !Gothic::inst().isInGame() && !startupSoundPlayed) {
+    Gothic::inst().emitGlobalSoundWav("GAMESTART.WAV");
+    startupSoundPlayed = true;
+    }
   if(current!=nullptr)
     current->processMusicTheme();
   }

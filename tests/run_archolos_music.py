@@ -63,10 +63,14 @@ try:
         assert re.search(r"playing file=35.ogg .*loop=1",trace), "Track did not loop through its overlap point"
         assert any(int(tails)>0 for _,_,_,_,tails,_ in states), "No transition/loop tail was observed"
     if a.menu:
+        assert "global wav=GAMESTART.WAV" not in trace, "Gothic startup WAV overlaps the Archolos soundtrack"
+        assert "background=2048x2048" in trace, "Archolos menu background was not selected"
+        assert "menu image=menu_km_archolos.tga" in trace.lower(), "Archolos menu logo was not loaded"
         assert lengths[0][0]=="02.ogg" and lengths[-1][0]=="02.ogg", "Menu track missing on launch or return"
         for stage in (0,1):
             state = trace.split(f"[KMLIB_PROBE] menu stage={stage}\n",1)[1].splitlines()[0]
             assert re.search(r"state file=02.ogg position=[1-9]\d{3,} gain=0.500000",state), "Menu audio clock/gain failed"
+            assert "tails=0 finished=0 legacy=0" in state, "Another music source remains active in the menu"
     if a.kmlib:
         assert "[KMLIB_PROBE] natural=CIT_" in trace, "Natural city zone notification missing"
         assert "[KMLIB_PROBE] haven=1 scenes=1 theme=HAV_DAY_STD edx_preserved=1" in trace, "Muted region entry hook failed"

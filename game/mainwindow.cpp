@@ -175,6 +175,8 @@ void MainWindow::paintEvent(PaintEvent& event) {
 
   if(!Gothic::inst().isInGame() && st==Gothic::LoadState::Idle && background.isEmpty()) {
     background = Resources::loadTextureUncached("STARTSCREEN.TGA");
+    if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_KMLIB_MENU_PROBE")!=nullptr)
+      Log::i("[KMLIB_PROBE] background=",background.w(),"x",background.h());
     }
 
   if(world==nullptr && !background.isEmpty()) {
@@ -1637,12 +1639,6 @@ void MainWindow::render(){
       profileStage = now;
       };
     static uint64_t time=Application::tickCount();
-
-    static bool once=true;
-    if(once) {
-      Gothic::inst().emitGlobalSoundWav("GAMESTART.WAV");
-      once=false;
-      }
 
     if(T_UNLIKELY(Gothic::inst().isBenchmarkModeCi())) {
       const auto st = Gothic::inst().checkLoading();
