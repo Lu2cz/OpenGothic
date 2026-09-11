@@ -312,7 +312,7 @@ void DirectMemory::beginWorldTransitionProbe(Npc& npc, Interactive& lock) {
   auto context = npc.handlePtr();
   auto it = scriptReferences.find({context,ref->index()});
   if(it==scriptReferences.end()) {
-    const auto type = Mem32::Type(uint32_t(Mem32::Type::firstScriptReference)+uint32_t(scriptReferences.size()));
+    const auto type = mem32.nextScriptReferenceType();
     bindReference(ref,context,type);
     auto ptr = mem32.alloc(uint32_t(ref->count())*4,type);
     it = scriptReferences.emplace(std::make_pair(context,ref->index()),ptr);
@@ -329,15 +329,15 @@ void DirectMemory::beginWorldTransitionProbe(Npc& npc, Interactive& lock) {
 
   worldProbeTimer = mem32.alloc(64);
   mem32.writeInt(worldProbeTimer+24,int32_t(gameScript.tickCount()));
-  persistenceProbeRoot = worldProbeTimer;
+  worldProbeDispatches = 0;
   auto* cb = vm.find_symbol_by_name("TIMER_SETPAUSE");
   vm.call_function("FF_APPLYEXTDATAGT",int32_t(cb->index()),1000,1,int32_t(worldProbeTimer));
   Log::i("[WORLD_PROBE] source native_ref=1 lock_address=",lock.lockAddress," pending=1");
   }
 
 void DirectMemory::checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock) {
-  if(worldProbeReference==0 || worldProbeTimer==0 ||
-     mem32.readInt(worldProbeReference+99*4)!=0 || mem32.readInt(worldProbeTimer+4)!=1)
+  if(worldProbeReference==0 || worldProbeTimer==0 || worldProbeDispatches!=1 ||
+     mem32.readInt(worldProbeReference+99*4)!=0)
     throw std::runtime_error("World-transition reference/callback regression");
   auto* lastMob = vm.find_symbol_by_name("G_PICKLOCK.LASTMOB");
   if(lastMob->get_int()!=0)
@@ -350,7 +350,7 @@ void DirectMemory::checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock
            " lock_address=",returnedLock->lockAddress);
     clearNpcFocus(npc);
     }
-  Log::i("[WORLD_PROBE] destroyed_ref=0 callback_dispatches=1 stale_focus=0");
+  Log::i("[WORLD_PROBE] destroyed_ref=0 callback_dispatches=",worldProbeDispatches," stale_focus=0");
   }
 
 void DirectMemory::probeLockFocus(Npc& npc, Interactive& lock, bool restored) {
@@ -567,6 +567,7 @@ void DirectMemory::load(Serialize& in) {
     if(name=="ASMINT_CallTarget" && size==sizeof(ASMINT_CallTarget)) return &ASMINT_CallTarget;
     return nullptr;
     });
+  ASMINT_CallTargetPtr = mem32.pinAddress("ASMINT_CallTarget");
   scriptReferences.clear();
   in.read(count);
   if(count>100000) throw std::runtime_error("Invalid compatibility reference count");
@@ -581,8 +582,10 @@ void DirectMemory::load(Serialize& in) {
     const uint32_t stride = ref->type()==zenkit::DaedalusDataType::STRING ? sizeof(zString) : 4;
     const uint32_t size = ((uint32_t(ref->count())*stride+Mem32::memAlign-1)/Mem32::memAlign)*Mem32::memAlign;
     auto type = mem32.regionType(ptr,size);
-    if(type<Mem32::Type::firstScriptReference || !boundTypes.insert(type).second)
+    const bool unique = boundTypes.insert(type).second;
+    if(type<Mem32::Type::firstScriptReference || !unique) {
       throw std::runtime_error("Invalid compatibility binding type");
+      }
     bindReference(ref,context,type);
     if((context || !ref->is_member()) && scriptReferences.contains({context,id}))
       throw std::runtime_error("Duplicate compatibility reference");
@@ -637,7 +640,7 @@ void DirectMemory::probePersistence(bool finish) {
     *static_cast<zString*>(mem32.derefv(ptr+32,sizeof(zString))) = str;
     auto* ref = vm.find_symbol_by_name("C_NPC.AIVAR");
     auto context = gameScript.world().player()->handlePtr();
-    auto type = Mem32::Type(uint32_t(Mem32::Type::firstScriptReference)+uint32_t(scriptReferences.size())+1);
+    auto type = mem32.nextScriptReferenceType();
     bindReference(ref,context,type);
     auto mapped = mem32.alloc(uint32_t(ref->count())*4,type);
     scriptReferences.emplace(std::make_pair(context,ref->index()),mapped);
@@ -649,7 +652,7 @@ void DirectMemory::probePersistence(bool finish) {
       auto original = gold->get_instance();
       auto removed = vm.allocate_instance<zenkit::IItem>(gold);
       gold->set_instance(original);
-      type = Mem32::Type(uint32_t(Mem32::Type::firstScriptReference)+uint32_t(scriptReferences.size())+1);
+      type = mem32.nextScriptReferenceType();
       bindReference(itemValue,removed,type);
       auto address = mem32.alloc(4,type);
       scriptReferences.emplace(std::make_pair(removed,itemValue->index()),address);
@@ -1670,10 +1673,11 @@ void DirectMemory::ASMINT_Init() {
       sym->set_int(int32_t(ASMINT_InternalStack));
     }
 
-  auto p = mem32.pin(&ASMINT_CallTarget, sizeof(ASMINT_CallTarget), "ASMINT_CallTarget");
+  if(!ASMINT_CallTargetPtr)
+    ASMINT_CallTargetPtr = mem32.pin(&ASMINT_CallTarget, sizeof(ASMINT_CallTarget), "ASMINT_CallTarget");
   if(auto sym = vm.find_symbol_by_name("ASMINT_CallTarget")) {
     if(sym->type()==zenkit::DaedalusDataType::INT)
-      sym->set_int(int32_t(p));
+      sym->set_int(int32_t(ASMINT_CallTargetPtr));
     }
   }
 
@@ -1767,7 +1771,7 @@ auto DirectMemory::_takeref(zenkit::DaedalusVm& vm) -> zenkit::DaedalusNakedCall
         it = scriptReferences.emplace(std::make_pair(context,ref->index()),0);
       auto& ptr = it->second;
       if(ptr==0) {
-        const auto type = Mem32::Type(uint32_t(Mem32::Type::firstScriptReference)+uint32_t(scriptReferences.size()));
+        const auto type = mem32.nextScriptReferenceType();
         bindReference(ref,context,type);
         ptr = mem32.alloc(uint32_t(ref->count())*stride,type);
         }
@@ -1978,9 +1982,14 @@ void DirectMemory::directCall(zenkit::DaedalusVm& vm, zenkit::DaedalusSymbol& fu
   vm.unsafe_call(&func);
   // The opt-in regression uses the original TIMER_SETPAUSE script as a callback.
   // Count each dispatch, including multiple calls in one frame, then undo the pause.
-  if(persistenceProbeRoot!=0 && func.name()=="TIMER_SETPAUSE") {
+  if(func.name()=="TIMER_SETPAUSE") {
     auto* argument = vm.find_symbol_by_name("TIMER_SETPAUSE.ON");
-    if(uint32_t(argument->get_int())==persistenceProbeRoot) {
+    if(worldProbeTimer!=0 && uint32_t(argument->get_int())==worldProbeTimer) {
+      ++worldProbeDispatches;
+      Log::i("[WORLD_PROBE] callback_dispatch=",worldProbeDispatches,
+             " elapsed=",uint32_t(gameScript.tickCount())-uint32_t(mem32.readInt(worldProbeTimer+24)));
+      }
+    if(persistenceProbeRoot!=0 && uint32_t(argument->get_int())==persistenceProbeRoot) {
       auto ptr = persistenceProbeRoot;
       auto elapsed = uint32_t(gameScript.tickCount())-uint32_t(mem32.readInt(ptr+24));
       if(elapsed<15000) throw std::runtime_error("Persistence callback fired early");

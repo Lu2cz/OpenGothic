@@ -75,6 +75,7 @@ class DirectMemory {
     ptr32_t     persistenceProbeRoot = 0;
     ptr32_t     worldProbeReference  = 0;
     ptr32_t     worldProbeTimer      = 0;
+    uint32_t    worldProbeDispatches = 0;
     std::weak_ptr<zenkit::DaedalusInstance> triaSelf, triaSpeaker;
 
     uint32_t    versionHint     = 504628679; // G2
@@ -133,6 +134,7 @@ class DirectMemory {
 
     ptr32_t     ASMINT_InternalStack = 0;
     ptr32_t     ASMINT_CallTarget    = 0;
+    ptr32_t     ASMINT_CallTargetPtr = 0;
     void        ASMINT_Init();
     void        ASMINT_CallMyExternal();
 

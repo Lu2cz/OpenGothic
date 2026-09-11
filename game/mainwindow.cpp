@@ -1646,11 +1646,17 @@ void MainWindow::render(){
       const auto mode = std::string_view(std::getenv("OPENGOTHIC_WORLD_PROBE"));
       auto& w = *Gothic::inst().world();
       auto& pl = *w.player();
+      const auto sameWorld = [](std::string_view a, std::string_view b) {
+        if(a.size()!=b.size()) return false;
+        for(size_t i=0;i<a.size();++i)
+          if(std::tolower(uint8_t(a[i]))!=std::tolower(uint8_t(b[i]))) return false;
+        return true;
+        };
       if(!worldProbeTransitioned && profileFrames==30) {
         const bool toSewers = mode=="to-sewers";
         const bool verifyMainland = mode=="verify-mainland";
         const char* expected = (toSewers || verifyMainland) ? "ARCHOLOS_MAINLAND.ZEN" : "ARCHOLOS_SEWERS.ZEN";
-        if(w.name()!=expected)
+        if(!sameWorld(w.name(),expected))
           throw std::runtime_error("World-transition probe started in the wrong world");
         Interactive* lock = nullptr;
         for(uint32_t id=0;auto* mob=w.mobsiById(id);++id)
@@ -1676,7 +1682,7 @@ void MainWindow::render(){
           }
         }
       const char* destination = mode=="to-sewers" ? "ARCHOLOS_SEWERS.ZEN" : "ARCHOLOS_MAINLAND.ZEN";
-      if(worldProbeTransitioned && !worldProbeSaved && w.name()==destination && profileFrames>=180) {
+      if(worldProbeTransitioned && !worldProbeSaved && sameWorld(w.name(),destination) && profileFrames>=180) {
         Interactive* returnedLock = nullptr;
         if(mode=="to-mainland")
           for(uint32_t id=0;auto* mob=w.mobsiById(id);++id)
@@ -1691,7 +1697,7 @@ void MainWindow::render(){
         worldProbeSaved=true;
         saveGame("save_slot_2.sav","World transition compatibility test");
         }
-      if(worldProbeSaved) {
+      if(worldProbeSaved && Gothic::inst().checkLoading()==Gothic::LoadState::Idle) {
         Log::i("[WORLD_PROBE] save finalized");
         Tempest::SystemApi::exit();
         }

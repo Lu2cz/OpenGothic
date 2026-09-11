@@ -143,6 +143,25 @@ void Mem32::validateCallbacks() const {
       throw std::runtime_error("Missing compatibility memory binding");
   }
 
+Mem32::ptr32_t Mem32::pinAddress(std::string_view comment) const {
+  for(const auto& r : region)
+    if(r.status==S_Pin && r.comment==comment)
+      return r.address;
+  return 0;
+  }
+
+Mem32::Type Mem32::nextScriptReferenceType() const {
+  constexpr auto first = uint32_t(Type::firstScriptReference);
+  for(uint32_t type=first; type<=first+100000; ++type) {
+    const auto value = Type(type);
+    if(!memMap.contains(value) && std::none_of(region.begin(),region.end(),[value](const auto& r) {
+         return r.status==S_Callback && r.type==value;
+         }))
+      return value;
+    }
+  throw std::bad_alloc();
+  }
+
 void Mem32::implSetCallbackR(Type t, std::function<void(void*, uint32_t)> fn, size_t elt) {
   auto& m       = memMap[t];
   m.read        = std::move(fn);
