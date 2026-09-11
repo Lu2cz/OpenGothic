@@ -2075,11 +2075,14 @@ void MainWindow::render(){
           device.readPixels(textureCast<const Texture2d&>(shot)).save(profileFrames==300 ? "forest-line-300.png" : "forest-line-600.png");
           }
         if(chosen && !running && !dialogs.isActive() && w.currentCs()==nullptr) {
+          if(!w.player()->isPlayer())
+            throw std::runtime_error("Forest dialogue did not restore player control");
           for(auto name : {"NONE_1_JORN","NONE_5_FABIO"}) {
             auto n = w.findNpcByInstance(vm.find_symbol_by_name(name)->index());
             if(&w.script().dialogSpeaker(*n)!=n)
               throw std::runtime_error("Trialogue speaker leaked after finish");
             }
+          Log::i("[FOREST_PROBE] player control verified");
           Log::i("[FOREST_PROBE] speaker reset verified");
           Log::i("[FOREST_PROBE] complete");
           saveGame("save_slot_2.sav","Forest dialogue test");
@@ -2101,6 +2104,11 @@ void MainWindow::render(){
           if(self.isAiQueueEmpty())
             throw std::runtime_error("AI wait was lost on reload");
           Log::i("[AI_WAIT_PROBE] restored pending=1");
+          }
+        if(std::string_view(mode)=="reload" && profileFrames==120) {
+          if(self.isAiQueueEmpty())
+            throw std::runtime_error("AI wait did not block after reload");
+          Log::i("[AI_WAIT_PROBE] still pending=1");
           }
         if(std::string_view(mode)=="reload" && !aiWaitProbeSaved && profileFrames==420) {
           if(!self.isAiQueueEmpty())

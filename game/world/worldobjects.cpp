@@ -223,6 +223,12 @@ void WorldObjects::tick(uint64_t dt, uint64_t dtPlayer) {
   auto cpos  = camera!=nullptr ? camera->originLwc() : Vec3();
   auto plPos = pl!=nullptr ? pl->position() : cpos;
   for(auto& i:npcArr) {
+    if(Gothic::inst().isNpcInDialog(*i)) {
+      npcNear.push_back(i.get());
+      if(i.get()!=pl)
+        i->setProcessPolicy(NpcProcessPolicy::AiNormal);
+      continue;
+      }
     float dist = (i->position()-plPos).quadLength();
     if(dist<nearDist){
       npcNear.push_back(i.get());

@@ -123,6 +123,8 @@ GameSession::GameSession(Serialize &fin) {
   SaveGameHeader hdr;
   fin.setEntry("header");
   fin.read(hdr);
+  if(hdr.version<Serialize::Version::MinVersion || hdr.version>Serialize::Version::Current)
+    throw std::runtime_error("Unsupported save-game version");
   fin.setGlobalVersion(hdr.version);
 
   {

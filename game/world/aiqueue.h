@@ -43,6 +43,7 @@ class AiQueue {
     uint64_t takeTicket();
     uint64_t lastTicket() const;
     bool     hasTicket(uint64_t ticket) const;
+    bool     isTicketValid(uint64_t ticket) const;
     int      aiOutputOrderId() const;
 
     void     onWldItemRemoved(const Item& itm);

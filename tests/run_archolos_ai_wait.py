@@ -16,6 +16,8 @@ exe, game, save, out = (getattr(a, name).resolve() for name in ("executable", "g
 original = hashlib.sha256(save.read_bytes()).hexdigest()
 out.mkdir(parents=True, exist_ok=False)
 shutil.copy2(save, out / "save_slot_1.sav")
+(out / "source.sha256").write_text(original)
+(out / "executable.sha256").write_text(hashlib.sha256(exe.read_bytes()).hexdigest())
 (out / "Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")
 env = {key: value for key, value in os.environ.items() if not key.startswith("OPENGOTHIC_")}
 env.update(OPENGOTHIC_PROFILE="1", OPENGOTHIC_AI_WAIT_PROBE=a.mode)
@@ -30,6 +32,7 @@ try:
     assert expected in trace and "[AI_WAIT_PROBE] save finalized" in trace, trace[-2000:]
     if a.mode == "reload":
         assert "[AI_WAIT_PROBE] restored pending=1" in trace
+        assert "[AI_WAIT_PROBE] still pending=1" in trace
     with zipfile.ZipFile(out / "save_slot_2.sav") as archive:
         assert archive.testzip() is None and b"AI wait persistence test" in archive.read("header")
 finally:

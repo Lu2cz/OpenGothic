@@ -28,6 +28,8 @@ void AiQueue::load(Serialize& fin) {
   nextTicket=1;
   if(fin.version()>55)
     fin.read(nextTicket);
+  if(fin.version()>55 && nextTicket==0)
+    throw std::runtime_error("Invalid AI action ticket in save");
   aiActions.resize(size);
   for(auto& i:aiActions){
     fin.read(reinterpret_cast<uint32_t&>(i.act));
@@ -95,6 +97,10 @@ bool AiQueue::hasTicket(uint64_t ticket) const {
     if(i.ticket==ticket)
       return true;
   return false;
+  }
+
+bool AiQueue::isTicketValid(uint64_t ticket) const {
+  return ticket!=0 && ticket<nextTicket;
   }
 
 int AiQueue::aiOutputOrderId() const {

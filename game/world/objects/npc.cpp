@@ -368,8 +368,11 @@ void Npc::loadAiState(Serialize& fin) {
 
   aiQueue.load(fin);
   aiQueueOverlay.load(fin);
-  if(fin.version()>55)
+  if(fin.version()>55) {
     fin.read(aiActionTicket);
+    if(aiActionTicket!=0 && !aiQueue.isTicketValid(aiActionTicket))
+      throw std::runtime_error("Invalid active AI ticket in save");
+    }
 
   uint32_t size=0;
   fin.read(size);
