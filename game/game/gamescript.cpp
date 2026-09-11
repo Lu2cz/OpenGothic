@@ -98,6 +98,11 @@ GameScript::GameScript(GameSession &owner)
 
   vmLang = Gothic::inst().settingsGetI("GAME", "language");
   vm.register_exception_handler(zenkit::lenient_vm_exception_handler);
+  if(std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr)
+    vm.register_exception_handler([](auto& vm, const auto& error, const auto& instruction) {
+      vm.print_stack_trace();
+      return zenkit::lenient_vm_exception_handler(vm,error,instruction);
+      });
   Gothic::inst().setupCommonScriptClasses(vm);
   Gothic::inst().setupVmCommonApi(vm);
   aiDefaultPipe.reset(new GlobalOutput(*this));
@@ -577,6 +582,11 @@ void GameScript::saveVar(Serialize &fout) {
 void GameScript::probePersistence(bool finish) {
   if(dma)
     dma->probePersistence(finish);
+  }
+
+void GameScript::probeLockFocus(Npc& npc, Interactive& lock, bool restored) {
+  if(dma)
+    dma->probeLockFocus(npc,lock,restored);
   }
 
 void GameScript::loadVar(Serialize &fin) {
@@ -1197,13 +1207,23 @@ int GameScript::invokeCond(Npc& npc, std::string_view func) {
   }
 
 void GameScript::invokePickLock(Npc& npc, int bSuccess, int bBrokenOpen, int pickLockProgress) {
-  if(dma!=nullptr)
-    dma->setNpcFocus(npc,npc.interactive(),pickLockProgress);
   auto fn   = vm.find_symbol_by_name("G_PickLock");
   if(fn==nullptr)
     return;
+  if(dma!=nullptr)
+    dma->setNpcFocus(npc,npc.interactive(),pickLockProgress);
+  struct ClearFocus {
+    DirectMemory* dma;
+    Npc& npc;
+    ~ClearFocus() { if(dma) dma->clearNpcFocus(npc); }
+    } clearFocus{dma.get(),npc};
   ScopeVar self(*vm.global_self(), npc.handlePtr());
   vm.call_function<void>(fn, bSuccess, bBrokenOpen);
+  if(std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr) {
+    auto* partial = vm.find_symbol_by_name("G_PICKLOCK.PARTPICKLOCK");
+    Log::i("[LOCK_PROBE] hook success=",bSuccess," broken_open=",bBrokenOpen,
+           " before=",pickLockProgress," partial=",partial ? partial->get_int() : -1);
+    }
   }
 
 void GameScript::invokeRefreshAtInsert(Npc& npc) {

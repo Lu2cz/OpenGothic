@@ -68,6 +68,7 @@ class Interactive : public Vob {
     bool                isCracked() const { return isLockCracked; }
     bool                isLocked() const { return locked && !isLockCracked; }
     bool                needToLockpick(const Npc& pl) const;
+    size_t&             lockpickProgress() { return lockProgress; }
 
     Inventory&          inventory();
     void                setSlotItem(MeshObjects::Mesh&& itm, std::string_view slot);
@@ -170,6 +171,9 @@ class Interactive : public Vob {
     bool                reverseState  = false;
     bool                loopState     = false;
     bool                isLockCracked = false;
+    friend class DirectMemory;
+    uint32_t            lockAddress = 0;
+    size_t              lockProgress = 0;
 
     uint64_t            waitAnim      = 0;
     bool                animChanged   = false;

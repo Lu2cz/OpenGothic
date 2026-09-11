@@ -225,6 +225,10 @@ DirectMemory::DirectMemory(GameScript& owner, zenkit::DaedalusVm& vm) : gameScri
   dummyfy("WRITENOP",    [](int,int){}); // hook-related mess
   dummyfy("MEM_SETKEYS", [](std::string_view,int,int){});
   dummyfy("INIT_QUIVERS_ALWAYS", [](){}); // requires sorted npc list
+  // Register only inside DMA compatibility and after fingerprinting the original
+  // raw member offset. Ordinary mods and existing v1 snapshot identity stay intact.
+  if(vm.find_symbol_by_name("OCNPC.FOCUS_VOB"))
+    vm.register_member("OCNPC.FOCUS_VOB",&zenkit::INpc::focus_vob);
   }
 
 bool DirectMemory::isRequired(zenkit::DaedalusScript& vm) {
@@ -238,21 +242,22 @@ bool DirectMemory::isRequired(zenkit::DaedalusScript& vm) {
   }
 
 auto DirectMemory::focusVob(Interactive& focus) -> ptr32_t {
-  for(auto& i:focusVobs)
-    if(i.native==&focus)
-      return i.address;
+  if(focus.lockAddress!=0)
+    return focus.lockAddress;
 
   auto* cls = vm.find_symbol_by_name("OCMOBLOCKABLE");
   if(cls==nullptr || cls->class_size()==0)
     return 0;
 
-  const auto address = mem32.alloc(cls->class_size(),"focused OCMOBLOCKABLE");
-  focusVobs.push_back({&focus,address});
-  return address;
+  // ponytail: retain one small block per touched lock until session destruction;
+  // reclaim only with script-reference tracking. Deleted locks leave zeroed
+  // bytes, and new native objects never inherit their virtual address.
+  focus.lockAddress = mem32.alloc(cls->class_size(),"focused OCMOBLOCKABLE");
+  return focus.lockAddress;
   }
 
 void DirectMemory::setNpcFocus(Npc& npc, Interactive* focus, int pickLockProgress) {
-  npc.handle().focus_vob = 0;
+  clearNpcFocus(npc);
   if(focus==nullptr)
     return;
 
@@ -262,9 +267,63 @@ void DirectMemory::setNpcFocus(Npc& npc, Interactive* focus, int pickLockProgres
     return;
 
   const auto at = address + ptr32_t(bitfield->offset_as_member());
-  const int32_t state = mem32.readInt(at);
-  mem32.writeInt(at,(state & int32_t(3)) | (pickLockProgress<<2) | (focus->isLocked() ? 1 : 0));
+  // Original oCMobLockable: bit 0 locked, bit 1 auto-open, bits 2..31 progress.
+  // Native locks do not auto-open. Derive every bit; never keep stale lock state.
+  mem32.writeInt(at,int32_t(uint32_t(pickLockProgress)<<2) | (focus->isLocked() ? 1 : 0));
   npc.handle().focus_vob = int32_t(address);
+  }
+
+void DirectMemory::clearNpcFocus(Npc& npc) {
+  if(auto address = uint32_t(npc.handle().focus_vob)) {
+    auto* cls = vm.find_symbol_by_name("OCMOBLOCKABLE");
+    if(cls && mem32.isAllocation(address,cls->class_size(),"focused OCMOBLOCKABLE"))
+      if(auto* bytes = mem32.derefv(address,cls->class_size()))
+        std::memset(bytes,0,cls->class_size());
+    }
+  npc.handle().focus_vob = 0;
+  }
+
+void DirectMemory::probeLockFocus(Npc& npc, Interactive& lock, bool restored) {
+  auto check = [](bool ok) { if(!ok) throw std::runtime_error("Lock focus regression failed"); };
+  const auto offset = vm.find_symbol_by_name("OCMOBLOCKABLE.BITFIELD")->offset_as_member();
+  const bool cracked = lock.isCracked();
+  check(npc.handle().focus_vob==0);
+  npc.handle().focus_vob = 1; // Unknown/non-lock pointer must not be dereferenced.
+  setNpcFocus(npc,nullptr,0);
+  check(npc.handle().focus_vob==0);
+  if(restored) {
+    check(lock.lockAddress!=0);
+    check(mem32.readInt(lock.lockAddress+offset)==0);
+    check(uint32_t(vm.find_symbol_by_name("G_PICKLOCK.LASTMOB")->get_int())==lock.lockAddress);
+    Log::i("[LOCK_PROBE] restored ownership=1 stale_bytes=0");
+    }
+  lock.setAsCracked(false);
+  setNpcFocus(npc,&lock,2);
+  const auto first = uint32_t(npc.handle().focus_vob);
+  check(mem32.readInt(first+offset)==9);
+  lock.setAsCracked(true);
+  setNpcFocus(npc,&lock,2);
+  check(uint32_t(npc.handle().focus_vob)==first && mem32.readInt(first+offset)==8);
+  setNpcFocus(npc,nullptr,0);
+  check(npc.handle().focus_vob==0 && mem32.readInt(first+offset)==0);
+  if(!restored) {
+    // Simulate a new object at the exact same native address: object-local
+    // metadata is reset on construction. Old script pointers must not alias it.
+    lock.lockAddress = 0;
+    setNpcFocus(npc,&lock,0);
+    check(uint32_t(npc.handle().focus_vob)!=first && mem32.readInt(first+offset)==0);
+    }
+  Interactive* second = nullptr;
+  for(uint32_t id=0;auto* mob=gameScript.world().mobsiById(id);++id)
+    if(mob!=&lock && (mob->isContainer() || mob->isDoor())) { second=mob; break; }
+  check(second!=nullptr);
+  const auto current = lock.lockAddress;
+  setNpcFocus(npc,second,0);
+  check(uint32_t(npc.handle().focus_vob)!=current && mem32.readInt(current+offset)==0);
+  clearNpcFocus(npc);
+  check(npc.handle().focus_vob==0 && mem32.readInt(second->lockAddress+offset)==0);
+  lock.setAsCracked(cracked);
+  Log::i("[LOCK_PROBE] focus locked_unlocked=1 null=1 target_change=1 address_reuse=",!restored," cleared=1");
   }
 
 void DirectMemory::saveReference(Serialize& out, const std::shared_ptr<zenkit::DaedalusInstance>& instance) {
@@ -335,7 +394,7 @@ void DirectMemory::save(Serialize& out) {
   out.setEntry("game/compatibility");
   // ponytail: a complete virtual-memory snapshot requires identical scripts and
   // mapping ABI. Bump this version when changing the native memory layout.
-  out.write(uint32_t(1),scriptFingerprint,scriptVariables,scriptSymbols,ASMINT_InternalStack,musicThemePtr);
+  out.write(uint32_t(2),scriptFingerprint,scriptVariables,scriptSymbols,ASMINT_InternalStack,musicThemePtr);
   std::vector<uint32_t> values, instances;
   for(auto& s : vm.symbols()) {
     if(s.is_member()) continue;
@@ -367,19 +426,28 @@ void DirectMemory::save(Serialize& out) {
     out.write(ref.second,ptr);
     saveReference(out,ref.first);
     }
+  std::vector<Interactive*> locks;
+  auto& world = gameScript.world();
+  for(uint32_t id=0;auto* lock=world.mobsiById(id);++id)
+    if(lock->lockAddress!=0 || lock->lockProgress!=0)
+      locks.push_back(lock);
+  out.write(uint32_t(locks.size()));
+  for(auto* lock:locks)
+    out.write(world.mobsiId(lock),lock->lockAddress,uint32_t(lock->lockProgress));
   }
 
 void DirectMemory::load(Serialize& in) {
   resetMusicZone();
-  focusVobs.clear();
   if(!in.setEntry("game/compatibility")) {
+    if(auto* lastMob = vm.find_symbol_by_name("G_PICKLOCK.LASTMOB"))
+      lastMob->set_int(0);
     restoreQuestCallbacks = true; // older saves have no heap to restore
     return;
     }
   uint32_t version = 0;
   uint64_t fingerprint = 0;
   in.read(version,fingerprint);
-  if(version!=1 || fingerprint!=scriptFingerprint)
+  if((version!=1 && version!=2) || fingerprint!=scriptFingerprint)
     throw std::runtime_error("Incompatible script/compatibility snapshot");
   uint32_t variables = 0, symbols = 0;
   in.read(variables,symbols,ASMINT_InternalStack,musicThemePtr);
@@ -451,10 +519,31 @@ void DirectMemory::load(Serialize& in) {
     // Distinct deleted native objects can resolve to null. Keep each address
     // bound to a tombstone, including across subsequent saves.
     scriptReferences.emplace(std::make_pair(context,id),ptr);
-  }
+    }
   mem32.validateCallbacks();
-  if(auto* lastMob = vm.find_symbol_by_name("G_PICKLOCK.LASTMOB"))
-    lastMob->set_int(0); // Native vob addresses are not valid after a reload.
+  if(version>=2) {
+    in.read(count);
+    if(count>100000) throw std::runtime_error("Invalid compatibility lock count");
+    seen.clear();
+    std::unordered_set<uint32_t> addresses;
+    for(uint32_t n=0;n<count;++n) {
+      uint32_t id=0,address=0,progress=0;
+      in.read(id,address,progress);
+      auto* lock = gameScript.world().mobsiById(id);
+      auto* cls = vm.find_symbol_by_name("OCMOBLOCKABLE");
+      if(!lock || !seen.insert(id).second || progress>lock->pickLockCode().size() ||
+         (address!=0 && (!addresses.insert(address).second || !cls ||
+                        !mem32.isAllocation(address,cls->class_size(),"focused OCMOBLOCKABLE"))))
+        throw std::runtime_error("Invalid compatibility lock binding");
+      lock->lockAddress = address;
+      lock->lockProgress = progress;
+      }
+    }
+  // v1 had no lock ownership metadata. Its old allocations remain harmless
+  // script data; none are rebound to new native objects by guessing addresses.
+  if(version==1)
+    if(auto* lastMob = vm.find_symbol_by_name("G_PICKLOCK.LASTMOB"))
+      lastMob->set_int(0);
   restoreQuestCallbacks = false;
   if(std::getenv("OPENGOTHIC_PERSISTENCE_PROBE")!=nullptr)
     persistenceProbeRoot = uint32_t(vm.find_symbol_by_name("MEM_INFOBOX.RES")->get_int());
@@ -2450,7 +2539,7 @@ void DirectMemory::setupWorldFunctions() {
      vm.find_symbol_by_name("SPL_PICKLOCK")!=nullptr) {
     // The script implements this using oCNpc/oCMobLockable memory and x86 hooks.
     // Use native targeting/locks while leaving casting and scroll use to Npc.
-    vm.override_function("SPELL_LOGIC_PICKLOCK", [this, target=static_cast<Interactive*>(nullptr)](int mana) mutable -> int {
+    vm.override_function("SPELL_LOGIC_PICKLOCK", [this, target=ptr32_t(0), partial=false, invested=0](int mana) mutable -> int {
       auto npc = gameScript.world().player();
       if(npc==nullptr || vm.global_self()->get_instance()!=npc->handlePtr())
         return SPL_SENDSTOP;
@@ -2468,23 +2557,30 @@ void DirectMemory::setupWorldFunctions() {
       if(required<=0 || npc->attribute(ATR_MANA)<required)
         return SPL_SENDSTOP;
       if(mana==0) {
-        target = focus;
+        target = focusVob(*focus);
+        partial = focus->lockpickProgress()>0;
+        invested = 0;
         return SPL_NEXTLEVEL;
         }
-      if(target!=focus)
+      if(target==0 || target!=focusVob(*focus))
         return SPL_SENDSTOP;
-      if(mana%required!=0)
+      if(mana%required!=0 || mana<=invested)
         return SPL_RECEIVEINVEST;
+      invested = mana;
       world.sendPassivePerc(*npc,*npc,*npc,PERC_ASSESSUSEMOB);
       npc->emitSoundEffect("PICKLOCK_SUCCESS",2500,true);
-      // ponytail: progress is per cast; partial conventional lockpicking and its
-      // hybrid achievement need shared per-lock progress before they can combine.
-      if(size_t(mana/required)>=focus->pickLockCode().size()) {
+      if(++focus->lockpickProgress()>=focus->pickLockCode().size()) {
         focus->setAsCracked(true);
         npc->changeAttribute(ATR_MANA,-required,false);
         if(auto msg = vm.find_symbol_by_name("PRINT_PICKLOCK_UNLOCK"))
           Gothic::inst().onPrint(msg->get_string());
         Gothic::inst().emitGlobalSound("MFX_PICKLOCK_CAST");
+        if(partial)
+          if(auto* achievement = vm.find_symbol_by_name("ACH_34")) {
+            vm.call_function<void>("GAMESERVICES_UNLOCKACHIEVEMENT",std::string_view(achievement->get_string()));
+            if(std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr)
+              Log::i("[LOCK_PROBE] hybrid achievement=1");
+            }
         return SPL_SENDCAST;
         }
       return SPL_RECEIVEINVEST;

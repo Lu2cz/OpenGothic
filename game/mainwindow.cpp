@@ -1270,6 +1270,8 @@ void MainWindow::render(){
     static size_t lockProbeScroll=0, lockProbeCount=0;
     static int lockProbeMana=0;
     static int lockProbeDexterity=0;
+    static bool lockProbeSaved=false;
+    static uint32_t lockProbeActionFrame=uint32_t(-1);
     static unsigned dialogProbeRounds=0;
     static bool dialogProbePending=false;
     static bool captainProbeSaved=false;
@@ -1452,7 +1454,7 @@ void MainWindow::render(){
         auto& w = *Gothic::inst().world();
         auto& pl = *Gothic::inst().player();
         const auto mode = std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"));
-        if(mode=="ordinary" || mode=="ordinary-reload") {
+        if(mode=="ordinary" || mode=="ordinary-reload" || mode=="partial" || std::getenv("OPENGOTHIC_LOCK_FIXTURE")!=nullptr) {
           for(uint32_t i=0;auto mob=w.mobsiById(i);++i)
             if(mob->tag()=="Q101_CHEST_01") {
               lockProbeTarget=mob;
@@ -1461,11 +1463,31 @@ void MainWindow::render(){
           if(lockProbeTarget==nullptr)
             throw std::runtime_error("Ordinary lockpick probe target missing");
           const auto chestPos = lockProbeTarget->position();
-          pl.setPosition(chestPos);
+          Log::i("[LOCK_PROBE] fixture prior_interaction=",pl.interactive()!=nullptr," synthetic=1");
+          inventory.close();
+          pl.setInteraction(nullptr,true);
+          pl.clearAiQueue();
+          pl.clearState(true);
+          pl.clearGoTo();
+          pl.closeWeapon(true);
+          pl.setPosition(chestPos+Vec3(0,0,-150));
           pl.setDirection(chestPos-pl.position());
           pl.updateTransform();
           Gothic::inst().camera()->reset(&pl);
-          if(mode=="ordinary") {
+          if(mode=="cast" || mode=="spell-partial") {
+            auto& vm = w.script().getVm();
+            auto scroll = vm.find_symbol_by_name("ITSC_PICKLOCK")->index();
+            if(pl.inventory().itemCount(scroll)==0)
+              pl.addItem(scroll,1);
+            pl.useItem(scroll,3,true);
+            pl.handle().attribute[ATR_MANAMAX] = std::max(100,pl.attribute(ATR_MANAMAX));
+            pl.handle().attribute[ATR_MANA] = 100;
+            Log::i("[LOCK_PROBE] fixture=Q101_CHEST_01 item=ITSC_PICKLOCK mana=100 synthetic=1");
+            }
+          }
+        if(mode=="ordinary" || mode=="ordinary-reload" || mode=="partial") {
+          w.script().probeLockFocus(pl,*lockProbeTarget,mode=="ordinary-reload");
+          if(mode!="ordinary-reload") {
             if(!lockProbeTarget->isLocked() || lockProbeTarget->pickLockCode().empty())
               throw std::runtime_error("Ordinary lockpick probe requires locked Q101_CHEST_01");
             const auto lockpick = w.script().lockPickId();
@@ -1473,7 +1495,7 @@ void MainWindow::render(){
               pl.addItem(lockpick,1);
             }
           inventory.open(pl,*lockProbeTarget);
-          if(mode=="ordinary")
+          if(mode!="ordinary-reload")
             Log::i("[LOCK_PROBE] ordinary target=",lockProbeTarget->tag()," code=",lockProbeTarget->pickLockCode(),
                    " lockpicks=",pl.inventory().itemCount(w.script().lockPickId())," state=",int(inventory.isOpen()));
           else
@@ -1618,7 +1640,28 @@ void MainWindow::render(){
           Log::i("[RECIPE_PROBE] end");
         }
       }
-    if(sampling && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="cast" && profileFrames==100) {
+    const bool lockProbeAction = sampling && lockProbeActionFrame!=profileFrames;
+    if(std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr && lockProbeAction)
+      lockProbeActionFrame = profileFrames;
+    if(lockProbeAction && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="partial" && profileFrames==100) {
+      const auto key = std::toupper(lockProbeTarget->pickLockCode().front())=='L' ? KeyCodec::Left : KeyCodec::Right;
+      player.onKeyPressed(key,Event::K_NoKey,KeyCodec::Mapping(0));
+      Log::i("[LOCK_PROBE] partial progress=",lockProbeTarget->lockpickProgress()," cracked=",lockProbeTarget->isCracked());
+      }
+    if(lockProbeAction && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="ordinary" && profileFrames==90) {
+      auto& pl = *Gothic::inst().player();
+      const auto id = Gothic::inst().world()->script().lockPickId();
+      const auto count = pl.inventory().itemCount(id);
+      const auto dex = pl.attribute(ATR_DEXTERITY);
+      pl.handle().attribute[ATR_DEXTERITY] = 100;
+      const auto wrong = std::toupper(lockProbeTarget->pickLockCode().front())=='L' ? KeyCodec::Right : KeyCodec::Left;
+      player.onKeyPressed(wrong,Event::K_NoKey,KeyCodec::Mapping(0));
+      pl.handle().attribute[ATR_DEXTERITY] = dex;
+      Log::i("[LOCK_PROBE] ordinary failed_without_break=",count==pl.inventory().itemCount(id));
+      }
+    if(lockProbeAction && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr &&
+       (std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="cast" ||
+        std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="spell-partial") && profileFrames==100) {
       auto& w = *Gothic::inst().world();
       auto& pl = *Gothic::inst().player();
       auto f = w.findFocus(Focus());
@@ -1642,11 +1685,42 @@ void MainWindow::render(){
         Log::i("[LOCK_PROBE] unlocked_rejected=",sc.invokeMana(pl,nullptr,0)==SPL_SENDSTOP);
         lockProbeTarget->setAsCracked(false);
         }
+      const auto origin = pl.position();
+      const bool started = sc.invokeMana(pl,nullptr,0)==SPL_NEXTLEVEL;
+      bool changedRejected = false;
+      for(uint32_t id=0;auto* mob=w.mobsiById(id);++id) {
+        if(mob==lockProbeTarget || !mob->isLocked() || mob->pickLockCode().empty())
+          continue;
+        pl.setPosition(mob->position()+Vec3(0,0,-150));
+        pl.setDirection(mob->position()-pl.position());
+        pl.updateTransform();
+        if(w.findFocus(Focus()).interactive!=mob)
+          continue;
+        const auto progress = mob->lockpickProgress();
+        changedRejected = started && sc.invokeMana(pl,nullptr,1)==SPL_SENDSTOP && mob->lockpickProgress()==progress;
+        break;
+        }
+      pl.setPosition(origin);
+      pl.setDirection(facing);
+      pl.updateTransform();
+      Log::i("[LOCK_PROBE] target_changed_rejected=",changedRejected);
       player.onKeyPressed(KeyCodec::ActionGeneric,Event::K_NoKey,KeyCodec::Mapping(0));
       player.onKeyPressed(KeyCodec::Forward,Event::K_W,KeyCodec::Mapping(0));
       Log::i("[LOCK_PROBE] cast input held");
       }
-    if(sampling && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="ordinary" && profileFrames==100) {
+    if(sampling && !lockProbeSaved && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr &&
+       std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="spell-partial" &&
+       profileFrames>100 && lockProbeTarget->lockpickProgress()>0) {
+      lockProbeSaved = true;
+      auto& pl = *Gothic::inst().player();
+      player.clearInput();
+      pl.closeWeapon(true);
+      pl.setInteraction(nullptr,true);
+      Log::i("[LOCK_PROBE] spell_partial progress=",lockProbeTarget->lockpickProgress(),
+             " cracked=",lockProbeTarget->isCracked()," scroll_used=",lockProbeCount-pl.inventory().itemCount(lockProbeScroll));
+      saveGame("save_slot_2.sav","Open Lock partial test");
+      }
+    if(lockProbeAction && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="ordinary" && profileFrames==100) {
       auto& w = *Gothic::inst().world();
       auto& pl = *Gothic::inst().player();
       const auto code = lockProbeTarget->pickLockCode();
@@ -1659,7 +1733,7 @@ void MainWindow::render(){
       player.onKeyPressed(wrong,Event::K_NoKey,KeyCodec::Mapping(0));
       Log::i("[LOCK_PROBE] ordinary wrong key sent");
       }
-    if(sampling && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="ordinary" && profileFrames==101) {
+    if(lockProbeAction && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="ordinary" && profileFrames==101) {
       auto& pl = *Gothic::inst().player();
       const auto broken = lockProbeCount-pl.inventory().itemCount(lockProbeScroll);
       pl.handle().attribute[ATR_DEXTERITY] = lockProbeDexterity;
@@ -1667,11 +1741,16 @@ void MainWindow::render(){
         player.onKeyPressed(std::toupper(key)=='L' ? KeyCodec::Left : KeyCodec::Right,Event::K_NoKey,KeyCodec::Mapping(0));
       Log::i("[LOCK_PROBE] ordinary broken=",broken);
       }
-    if(sampling && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="ordinary" && profileFrames==130) {
+    if(sampling && !lockProbeSaved && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr &&
+       (std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE")).starts_with("ordinary") ||
+        std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="partial") && profileFrames>=130) {
+      lockProbeSaved = true;
       Log::i("[LOCK_PROBE] ordinary cracked=",lockProbeTarget->isCracked()," chest_ui=",int(inventory.isOpen()));
+      inventory.close();
+      Gothic::inst().player()->setInteraction(nullptr,true);
       saveGame("save_slot_2.sav","Ordinary lockpick test");
       }
-    if(sampling && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="cast" && profileFrames==700) {
+    if(lockProbeAction && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="cast" && profileFrames==700) {
       auto& pl = *Gothic::inst().player();
       player.clearInput();
       Log::i("[LOCK_PROBE] complete cracked=",lockProbeTarget && lockProbeTarget->isCracked(),
@@ -1681,7 +1760,10 @@ void MainWindow::render(){
       if(lockProbeTarget)
         inventory.open(pl,*lockProbeTarget);
       }
-    if(sampling && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="cast" && profileFrames==890) {
+    if(sampling && !lockProbeSaved && std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr &&
+       ((std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="cast" && profileFrames>=890) ||
+        (std::string_view(std::getenv("OPENGOTHIC_LOCK_PROBE"))=="reload" && profileFrames>=130))) {
+      lockProbeSaved = true;
       Log::i("[LOCK_PROBE] chest_ui=",int(inventory.isOpen()));
       inventory.close();
       auto& pl = *Gothic::inst().player();
