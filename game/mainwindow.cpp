@@ -1662,14 +1662,16 @@ void MainWindow::render(){
           Log::i("[BOSS_UI] synthetic start active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
                  " hp=",pl->attribute(ATR_HITPOINTS));
           } else if(std::string_view(mode)=="event") {
+          vm.call_function<std::string>("RAZORBOSSCOMMAND",std::string_view{});
           auto* razor = w.findNpcByInstance(vm.find_symbol_by_name("RAZOR_ARMORED")->index());
           if(razor==nullptr)
-            razor = w.addNpc(vm.find_symbol_by_name("RAZOR_ARMORED")->index(),pl->position()+Tempest::Vec3(200,0,0));
-          if(razor==nullptr)
-            throw std::runtime_error("SQ416 fixture could not spawn RAZOR_ARMORED");
-          vm.find_symbol_by_name("MIS_SQ416")->set_int(vm.find_symbol_by_name("LOG_RUNNING")->get_int());
-          vm.find_symbol_by_name("SQ416_HUNTERSSLEEP")->set_int(2);
-          vm.find_symbol_by_name("SQ416_STARTBOSSFIGHT")->set_int(1);
+            throw std::runtime_error("SQ416 fixture did not insert RAZOR_ARMORED");
+          pl->setPosition(razor->position()+Tempest::Vec3(200,0,0));
+          if(auto camera=Gothic::inst().camera())
+            camera->reset(pl);
+          const auto heroPos = pl->position(), razorPos = razor->position();
+          Log::i("[BOSS_UI] event positions hero=",heroPos.x,",",heroPos.y,",",heroPos.z,
+                 " razor=",razorPos.x,",",razorPos.y,",",razorPos.z);
           vm.call_function("EVENTSMANAGER_SQ416");
           pl->handle().flags = zenkit::NpcFlag(uint32_t(pl->handle().flags) | uint32_t(zenkit::NpcFlag::IMMORTAL));
           Log::i("[BOSS_UI] event start active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
