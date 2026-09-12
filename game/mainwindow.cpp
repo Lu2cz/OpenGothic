@@ -254,8 +254,8 @@ void MainWindow::paintEvent(PaintEvent& event) {
             }
           }
         }
+      world->script().drawUi(p,w(),h());
       }
-    world->script().drawUi(p,w(),h());
     }
 
   if(auto c = Gothic::inst().camera()) {
