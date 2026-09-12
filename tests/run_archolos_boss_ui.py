@@ -13,7 +13,7 @@ import zipfile
 p = argparse.ArgumentParser()
 for name in ("executable", "game", "save", "output"):
     p.add_argument("--" + name, required=True, type=Path)
-p.add_argument("--mode", choices=("seed", "reload", "event", "focus-seed", "focus-reload"), required=True)
+p.add_argument("--mode", choices=("seed", "reload", "event", "event-seed", "event-reload", "focus-seed", "focus-reload"), required=True)
 p.add_argument("--reject-view", action="store_true", help="Reject a private v4 snapshot with a view pointer into its allocation")
 a = p.parse_args()
 exe, game, save, out = (getattr(a, name).resolve() for name in ("executable", "game", "save", "output"))
@@ -38,7 +38,7 @@ if a.reject_view:
 (out / "Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")
 env = {key: value for key, value in os.environ.items() if not key.startswith("OPENGOTHIC_")}
 env.update(OPENGOTHIC_PROFILE="1", OPENGOTHIC_BOSS_UI_PROBE=a.mode)
-if a.mode == "event":
+if a.mode.startswith("event"):
     env["OPENGOTHIC_BOSS_UI_CAPTURE"] = "1"
 try:
     with (out / "terminal.log").open("w") as log:
@@ -81,7 +81,8 @@ try:
                              for p in out.glob("save_slot_*.sav")}}, indent=2) + "\n")
         print(f"PASS {a.mode}: {out}")
         raise SystemExit(0)
-    started = {"seed": "synthetic start", "reload": "reload", "event": "event start"}[a.mode]
+    started = {"seed": "synthetic start", "reload": "reload", "event": "event start",
+               "event-seed": "event start", "event-reload": "event reload"}[a.mode]
     assert f"[BOSS_UI] {started} active=1" in trace, trace[-3000:]
     background = "[BOSS_UI] draw texture=BOSSBAR_BG.TGA rect=240,-29,800,99"
     full = "[BOSS_UI] draw texture=BOSSBAR.TGA rect=274,12,732,15"
@@ -100,16 +101,28 @@ try:
         assert trace.count("[BOSS_UI] view freed=") >= 2
         assert "[BOSS_UI] draw texture=" not in trace.split("[BOSS_UI] synthetic finish active=0", 1)[1]
     else:
-        before, after = trace.split("[BOSS_UI] event health active=1", 1)
-        assert full in before and half in after
-        assert trace.count("[BOSS_UI] event health active=1") == 1
-        marker = "[BOSS_UI] event finish active=1 state=3 dead=1"
-        assert marker in trace
-        cleanup = trace.split(marker, 1)[1]
-        assert cleanup.count("[BOSS_UI] view freed=") >= 2
-        assert "[BOSS_UI] event cleanup active=0" in cleanup
-        assert "[BOSS_UI] draw texture=" not in cleanup.split("[BOSS_UI] view freed=", 2)[2]
-        assert all((out / f"boss-ui-{phase}.png").is_file() for phase in ("full", "half", "cleanup"))
+        if a.mode == "event-reload":
+            assert "[BOSS_UI] event reload active=1 state=2 hp=750" in trace
+            assert half in trace and "[BOSS_UI] event health" not in trace
+        else:
+            before, after = trace.split("[BOSS_UI] event health active=1", 1)
+            assert full in before and half in after
+            assert trace.count("[BOSS_UI] event health active=1") == 1
+        if a.mode == "event-seed":
+            assert "[BOSS_UI] event save requested" in trace
+            assert "[BOSS_UI] event finish" not in trace
+            with zipfile.ZipFile(out / "save_slot_2.sav") as archive:
+                assert archive.testzip() is None and archive.read("game/compatibility")[:4] == b"\x04\0\0\0"
+        else:
+            marker = "[BOSS_UI] event finish active=1 state=3 dead=1"
+            assert marker in trace
+            cleanup = trace.split(marker, 1)[1]
+            assert cleanup.count("[BOSS_UI] view freed=") >= 2
+            assert "[BOSS_UI] event cleanup active=0" in cleanup
+            assert "[BOSS_UI] draw texture=" not in cleanup.split("[BOSS_UI] view freed=", 2)[2]
+        phases = ("restored" if a.mode == "event-reload" else "full", "half",
+                  "active" if a.mode == "event-seed" else "cleanup")
+        assert all((out / f"boss-ui-{phase}.png").is_file() for phase in phases)
 finally:
     assert hashlib.sha256(save.read_bytes()).digest() == original, "Source save changed"
 output_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()

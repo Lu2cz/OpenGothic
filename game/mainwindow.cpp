@@ -1663,12 +1663,20 @@ void MainWindow::render(){
           vm.call_function("START_BOSSUI",pl->handlePtr(),1);
           Log::i("[BOSS_UI] synthetic start active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
                  " hp=",pl->attribute(ATR_HITPOINTS));
-          } else if(std::string_view(mode)=="event") {
+          } else if(std::string_view(mode)=="event" || std::string_view(mode)=="event-seed") {
           vm.call_function<std::string>("RAZORBOSSCOMMAND",std::string_view{});
           auto* razor = w.findNpcByInstance(vm.find_symbol_by_name("RAZOR_ARMORED")->index());
           if(razor==nullptr)
             throw std::runtime_error("SQ416 fixture did not insert RAZOR_ARMORED");
-          pl->setPosition(razor->position()+Tempest::Vec3(200,0,0));
+          auto* approach = w.findPoint("PART12_SQ416_CAVE_09",false);
+          if(approach==nullptr)
+            throw std::runtime_error("SQ416 fixture approach waypoint missing");
+          pl->clearAiQueue();
+          pl->clearState(true);
+          pl->clearGoTo();
+          pl->setPosition(approach->position());
+          pl->setDirection(approach->direction());
+          pl->updateTransform();
           if(auto camera=Gothic::inst().camera())
             camera->reset(pl);
           const auto heroPos = pl->position(), razorPos = razor->position();
@@ -1677,6 +1685,12 @@ void MainWindow::render(){
           vm.call_function("EVENTSMANAGER_SQ416");
           pl->handle().flags = zenkit::NpcFlag(uint32_t(pl->handle().flags) | uint32_t(zenkit::NpcFlag::IMMORTAL));
           Log::i("[BOSS_UI] event start active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
+                 " state=",vm.find_symbol_by_name("SQ416_STARTBOSSFIGHT")->get_int()," hp=",razor->attribute(ATR_HITPOINTS));
+          } else if(std::string_view(mode)=="event-reload") {
+          auto* razor = w.findNpcByInstance(vm.find_symbol_by_name("RAZOR_ARMORED")->index());
+          if(razor==nullptr)
+            throw std::runtime_error("SQ416 restart lost RAZOR_ARMORED");
+          Log::i("[BOSS_UI] event reload active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
                  " state=",vm.find_symbol_by_name("SQ416_STARTBOSSFIGHT")->get_int()," hp=",razor->attribute(ATR_HITPOINTS));
           } else {
           Log::i("[BOSS_UI] reload active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
@@ -1779,14 +1793,19 @@ void MainWindow::render(){
         saveGame("save_slot_2.sav","Boss UI synthetic fixture");
         Log::i("[BOSS_UI] synthetic save requested");
         }
-      if(mode=="event" && profileFrames==30 && !bossUiProbeHealth) {
+      if((mode=="event" || mode=="event-seed") && profileFrames==30 && !bossUiProbeHealth) {
         bossUiProbeHealth = true;
         auto* razor = w.findNpcByInstance(vm.find_symbol_by_name("RAZOR_ARMORED")->index());
         razor->changeAttribute(ATR_HITPOINTS,-razor->attribute(ATR_HITPOINTS)/2,false);
         Log::i("[BOSS_UI] event health active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
                " hp=",razor->attribute(ATR_HITPOINTS));
         }
-      if(mode=="event" && profileFrames==60 && !bossUiProbeFinished) {
+      if(mode=="event-seed" && profileFrames==45 && !bossUiProbeSaved) {
+        bossUiProbeSaved = true;
+        saveGame("save_slot_2.sav","Active SQ416 boss fixture");
+        Log::i("[BOSS_UI] event save requested");
+        }
+      if((mode=="event" || mode=="event-reload") && profileFrames==60 && !bossUiProbeFinished) {
         bossUiProbeFinished = true;
         auto* razor = w.findNpcByInstance(vm.find_symbol_by_name("RAZOR_ARMORED")->index());
         razor->changeAttribute(ATR_HITPOINTS,-razor->attribute(ATR_HITPOINTS),false);
@@ -1794,7 +1813,7 @@ void MainWindow::render(){
         Log::i("[BOSS_UI] event finish active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
                " state=",vm.find_symbol_by_name("SQ416_STARTBOSSFIGHT")->get_int()," dead=",razor->isDead());
         }
-      if(mode=="event" && profileFrames==90 && !bossUiProbeCleaned) {
+      if((mode=="event" || mode=="event-reload") && profileFrames==90 && !bossUiProbeCleaned) {
         bossUiProbeCleaned = true;
         Log::i("[BOSS_UI] event cleanup active=",vm.find_symbol_by_name("BOSSUI")->get_int());
         }
@@ -2100,7 +2119,10 @@ void MainWindow::render(){
     if(sampling && std::getenv("OPENGOTHIC_BOSS_UI_CAPTURE")!=nullptr &&
        (profileFrames==0 || profileFrames==35 || profileFrames==95)) {
       sync.wait();
-      const char* phase = profileFrames==0 ? "full" : profileFrames==35 ? "half" : "cleanup";
+      const auto probe = std::getenv("OPENGOTHIC_BOSS_UI_PROBE");
+      const auto mode = std::string_view(probe ? probe : "");
+      const char* phase = profileFrames==0 ? (mode=="event-reload" ? "restored" : "full") :
+                          profileFrames==35 ? "half" : mode=="event-seed" ? "active" : "cleanup";
       auto file = string_frm("boss-ui-",phase,".png");
       auto capture = renderer.capture(cmdId,uiMesh[cmdId],numMesh[cmdId],inventory,video);
       device.readPixels(capture).save(file.c_str());
