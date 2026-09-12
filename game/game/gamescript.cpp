@@ -1545,6 +1545,11 @@ void GameScript::tick(uint64_t dt) {
     dma->tick(dt);
   }
 
+void GameScript::drawUi(Tempest::Painter& p, int width, int height) {
+  if(dma!=nullptr)
+    dma->drawUi(p,width,height);
+  }
+
 uint32_t GameScript::rand(uint32_t max) {
   return uint32_t(randGen())%max;
   }

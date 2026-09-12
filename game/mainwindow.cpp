@@ -224,6 +224,8 @@ void MainWindow::paintEvent(PaintEvent& event) {
 
       drawMsg(p);
 
+      world->script().drawUi(p,w(),h());
+
       auto focus = world->validateFocus(player.focus());
       paintFocus(p,focus,vp);
 
@@ -1292,6 +1294,8 @@ void MainWindow::render(){
     static double cityMeasuredAt=0;
     static bool forestProbeSaved=false;
     static bool aiWaitProbeSaved=false;
+    static bool bossUiProbeStarted=false;
+    static bool bossUiProbeSaved=false;
     static uint64_t aiWaitProbeTicket=0;
     static uint8_t aiWaitProbeStep=0;
     static size_t beachTorchCount=0;
@@ -1644,6 +1648,20 @@ void MainWindow::render(){
         Log::i("[MODAL_PROBE] in-game menu=",Gothic::inst().menuMain());
         setenv("OPENGOTHIC_UI_READY","1",1);
         }
+      if(auto mode=std::getenv("OPENGOTHIC_BOSS_UI_PROBE")) {
+        auto& w = *Gothic::inst().world();
+        auto& vm = w.script().getVm();
+        auto* pl = w.player();
+        if(std::string_view(mode)=="seed") {
+          vm.call_function("START_BOSSUI",pl->handlePtr(),1);
+          Log::i("[BOSS_UI] synthetic start active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
+                 " hp=",pl->attribute(ATR_HITPOINTS));
+          } else {
+          Log::i("[BOSS_UI] reload active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
+                 " hp=",pl->attribute(ATR_HITPOINTS));
+          }
+        bossUiProbeStarted = true;
+        }
       profileAt = profileEntry;
       Log::i("[ARCHOLOS_BEGIN] width=",swapchain.w()," height=",swapchain.h(),
              " scale=",Gothic::inst().settingsGetI("INTERNAL","vidResIndex"));
@@ -1721,6 +1739,27 @@ void MainWindow::render(){
         Gothic::inst().player()->stopItemStateAnim();
         if(recipeRereadFrame!=0)
           Log::i("[RECIPE_PROBE] end");
+        }
+      }
+    if(sampling && bossUiProbeStarted) {
+      const auto mode = std::string_view(std::getenv("OPENGOTHIC_BOSS_UI_PROBE"));
+      auto& w = *Gothic::inst().world();
+      auto& vm = w.script().getVm();
+      auto* pl = w.player();
+      if(mode=="seed" && profileFrames==30) {
+        pl->handle().attribute[ATR_HITPOINTS] /= 2;
+        vm.call_function("BOSSUI_FF");
+        Log::i("[BOSS_UI] synthetic health active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
+               " hp=",pl->attribute(ATR_HITPOINTS));
+        }
+      if(mode=="seed" && profileFrames==60 && !bossUiProbeSaved) {
+        bossUiProbeSaved = true;
+        saveGame("save_slot_2.sav","Boss UI synthetic fixture");
+        Log::i("[BOSS_UI] synthetic save requested");
+        }
+      if(mode=="reload" && profileFrames==60) {
+        vm.call_function("FINISH_BOSSUI");
+        Log::i("[BOSS_UI] synthetic finish active=",vm.find_symbol_by_name("BOSSUI")->get_int());
         }
       }
     if(sampling && std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) {

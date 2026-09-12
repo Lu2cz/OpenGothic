@@ -16,6 +16,8 @@
 #include "gothic.h"
 #include "gamemusic.h"
 #include "game/serialize.h"
+#include "resources.h"
+#include "utils/gthfont.h"
 #undef zError // miniz's zlib alias conflicts with the Gothic structure
 
 using namespace Tempest;
@@ -586,7 +588,7 @@ void DirectMemory::save(Serialize& out) {
   out.setEntry("game/compatibility");
   // ponytail: a complete virtual-memory snapshot requires identical scripts and
   // mapping ABI. Bump this version when changing the native memory layout.
-  out.write(uint32_t(2),scriptFingerprint,scriptVariables,scriptSymbols,ASMINT_InternalStack,musicThemePtr);
+  out.write(uint32_t(3),scriptFingerprint,scriptVariables,scriptSymbols,ASMINT_InternalStack,musicThemePtr);
   std::vector<uint32_t> values, instances;
   for(auto& s : vm.symbols()) {
     if(s.is_member()) continue;
@@ -618,6 +620,16 @@ void DirectMemory::save(Serialize& out) {
     out.write(ref.second,ptr);
     saveReference(out,ref.first);
     }
+  out.write(uint32_t(fontNames.size()));
+  for(const auto& [handle,name] : fontNames)
+    out.write(handle,name);
+  out.write(uint32_t(uiViewOrder.size()));
+  for(auto ptr : uiViewOrder) {
+    auto it = uiViews.find(ptr);
+    if(it==uiViews.end())
+      throw std::runtime_error("Invalid compatibility view order");
+    out.write(ptr,it->second.texture);
+    }
   std::vector<Interactive*> locks;
   auto& world = gameScript.world();
   for(uint32_t id=0;auto* lock=world.mobsiById(id);++id)
@@ -639,7 +651,7 @@ void DirectMemory::load(Serialize& in) {
   uint32_t version = 0;
   uint64_t fingerprint = 0;
   in.read(version,fingerprint);
-  if((version!=1 && version!=2) || fingerprint!=scriptFingerprint)
+  if((version!=1 && version!=2 && version!=3) || fingerprint!=scriptFingerprint)
     throw std::runtime_error("Incompatible script/compatibility snapshot");
   uint32_t variables = 0, symbols = 0;
   in.read(variables,symbols,ASMINT_InternalStack,musicThemePtr);
@@ -716,6 +728,32 @@ void DirectMemory::load(Serialize& in) {
     scriptReferences.emplace(std::make_pair(context,id),ptr);
     }
   mem32.validateCallbacks();
+  uiViews.clear();
+  uiViewOrder.clear();
+  fontNames.clear();
+  nextFontHandle = 0x10000000;
+  if(version>=3) {
+    in.read(count);
+    if(count>10000) throw std::runtime_error("Invalid compatibility font count");
+    for(uint32_t n=0;n<count;++n) {
+      uint32_t handle = 0;
+      std::string name;
+      in.read(handle,name);
+      if(handle<0x10000000 || name.size()>1024 || !fontNames.emplace(handle,std::move(name)).second)
+        throw std::runtime_error("Invalid compatibility font");
+      nextFontHandle = std::max(nextFontHandle,handle+1);
+      }
+    in.read(count);
+    if(count>10000) throw std::runtime_error("Invalid compatibility view count");
+    for(uint32_t n=0;n<count;++n) {
+      uint32_t ptr = 0;
+      std::string texture;
+      in.read(ptr,texture);
+      if(texture.size()>1024 || !mem32.deref<zCView>(ptr) || !uiViews.emplace(ptr,UiView{std::move(texture)}).second)
+        throw std::runtime_error("Invalid compatibility view");
+      uiViewOrder.push_back(ptr);
+      }
+    }
   if(version>=2) {
     in.read(count);
     if(count>100000) throw std::runtime_error("Invalid compatibility lock count");
@@ -2041,6 +2079,10 @@ int DirectMemory::mem_alloc(int amount, const char* comment) {
   }
 
 void DirectMemory::mem_free(int ptr) {
+  const auto view = Mem32::ptr32_t(ptr);
+  if(uiViews.erase(view)!=0 && std::getenv("OPENGOTHIC_BOSS_UI_PROBE")!=nullptr)
+    Log::i("[BOSS_UI] view freed=",view);
+  std::erase(uiViewOrder,view);
   mem32.free(Mem32::ptr32_t(ptr));
   }
 
@@ -2589,6 +2631,12 @@ void DirectMemory::setupUiFunctions() {
     view->VPOSY  = y1;
     view->VSIZEX = x2-x1;
     view->VSIZEY = y2-y1;
+    view->ALPHA  = 255;
+    uiViews[ptr] = {};
+    std::erase(uiViewOrder,ptr);
+    uiViewOrder.push_back(ptr);
+    if(std::getenv("OPENGOTHIC_BOSS_UI_PROBE")!=nullptr)
+      Log::i("[BOSS_UI] view constructed=",ptr);
     });
 
   cpu.register_thiscall(ZCVIEW__OPEN, [this](ptr32_t ptr) {
@@ -2597,7 +2645,8 @@ void DirectMemory::setupUiFunctions() {
       Log::e("LeGo: zCView__Open - unable to resolve address");
       return;
       }
-    Log::e("LeGo: zCView__Open");
+    view->ISOPEN = true;
+    view->ISCLOSED = false;
     });
 
   cpu.register_thiscall(ZCVIEW__CLOSE, [this](ptr32_t ptr) {
@@ -2606,6 +2655,8 @@ void DirectMemory::setupUiFunctions() {
       Log::e("LeGo: zCView__Close - unable to resolve address");
       return;
       }
+    view->ISOPEN = false;
+    view->ISCLOSED = true;
     });
 
   cpu.register_thiscall(ZCVIEW_TOP, [this](ptr32_t ptr) {
@@ -2613,6 +2664,10 @@ void DirectMemory::setupUiFunctions() {
     if(view==nullptr) {
       Log::e("LeGo: zCView__Top - unable to resolve address");
       return;
+      }
+    if(uiViews.contains(ptr)) {
+      std::erase(uiViewOrder,ptr);
+      uiViewOrder.push_back(ptr);
       }
     });
 
@@ -2633,8 +2688,8 @@ void DirectMemory::setupUiFunctions() {
       Log::e("LeGo: zCView__Move - unable to resolve address");
       return;
       }
-    view->VPOSX  = x;
-    view->VPOSY  = y;
+    view->VPOSX += x;
+    view->VPOSY += y;
     });
 
   cpu.register_thiscall(ZCVIEW__INSERTBACK, [this](ptr32_t ptr, std::string img) {
@@ -2642,8 +2697,10 @@ void DirectMemory::setupUiFunctions() {
     if(view==nullptr) {
       Log::e("LeGo: zCView__InsertBack - unable to resolve address");
       return;
-      }
-    Log::e("LeGo: zCView__InsertBack: ", img);
+    }
+    uiViews[ptr].texture = std::move(img);
+    if(std::getenv("OPENGOTHIC_BOSS_UI_PROBE")!=nullptr)
+      Log::i("[BOSS_UI] view texture=",uiViews[ptr].texture);
     });
 
   // ## Textures
@@ -2657,22 +2714,27 @@ void DirectMemory::setupUiFunctions() {
 void DirectMemory::setupFontFunctions() {
   const ptr32_t ZCFONTMAN__LOAD    = 7897808;
   const ptr32_t ZCFONTMAN__GETFONT = 7898288;
-  cpu.register_thiscall(ZCFONTMAN__LOAD, [](ptr32_t ptr, std::string font) {
-    Log::e("LeGo: zCFontMan__Load");
-    return 1234;
+  const ptr32_t ZCFONT__GETFONTY   = 7902432;
+  const ptr32_t ZCFONT__GETFONTX   = 7902448;
+  cpu.register_thiscall(ZCFONTMAN__LOAD, [this](ptr32_t, std::string font) {
+    for(const auto& [handle,name] : fontNames)
+      if(name==font)
+        return int32_t(handle);
+    while(fontNames.contains(nextFontHandle))
+      ++nextFontHandle;
+    const auto handle = nextFontHandle++;
+    fontNames.emplace(handle,std::move(font));
+    return int32_t(handle);
     });
-  cpu.register_thiscall(ZCFONTMAN__GETFONT, [](ptr32_t ptr, int handle) {
-    Log::e("LeGo: zCFontMan__GetFont");
+  cpu.register_thiscall(ZCFONTMAN__GETFONT, [](ptr32_t, int handle) {
     return handle;
     });
+  cpu.register_thiscall(ZCFONT__GETFONTY, [](ptr32_t) { return 20; });
+  cpu.register_thiscall(ZCFONT__GETFONTX, [](ptr32_t, int) { return 10; });
   }
 
 void DirectMemory::tickUi(uint64_t dt) {
-  if(auto* vScreen = mem32.deref<zCView>(memGame._ZCSESSION_VIEWPORT)) {
-    //TODO: report correct screen size
-    vScreen->PSIZEX = 800;
-    vScreen->PSIZEY = 600;
-    }
+  setUiSize(uiWidth,uiHeight);
 
   //NOTE: PRINT_EXT
   if(auto* vPrint = mem32.deref<const zCView>(memGame.ARRAY_VIEW[0])) {
@@ -2685,6 +2747,63 @@ void DirectMemory::tickUi(uint64_t dt) {
         }
       vList = vList->next!=0 ? mem32.deref<const zCList>(vList->next) : 0;
       }
+    }
+  }
+
+void DirectMemory::setUiSize(int width, int height) {
+  uiWidth = std::max(width,1);
+  uiHeight = std::max(height,1);
+  if(auto* view = mem32.deref<zCView>(memGame._ZCSESSION_VIEWPORT)) {
+    view->PSIZEX = uiWidth;
+    view->PSIZEY = uiHeight;
+    }
+  if(auto* hpBar = mem32.deref<oCViewStatusBar>(memGame.HPBAR)) {
+    // LeGo derives its interface scale from the native 180-pixel health bar.
+    hpBar->VSIZEX = int32_t((int64_t(180)*8192 + uiWidth/2)/uiWidth);
+    }
+  }
+
+void DirectMemory::drawUi(Tempest::Painter& p, int width, int height) {
+  setUiSize(width,height);
+  constexpr int virtualSize = 8192;
+  const auto toPixel = [](int value, int size) {
+    return int((int64_t(value)*size)/virtualSize);
+    };
+
+  for(auto it=uiViewOrder.begin(); it!=uiViewOrder.end();) {
+    auto state = uiViews.find(*it);
+    auto* view = state==uiViews.end() ? nullptr : mem32.deref<zCView>(*it);
+    if(view==nullptr) {
+      if(state!=uiViews.end())
+        uiViews.erase(state);
+      it = uiViewOrder.erase(it);
+      continue;
+      }
+    if(view->ISOPEN!=0 && view->ISCLOSED==0 && !state->second.texture.empty()) {
+      const auto* texture = Resources::loadTexture(state->second.texture);
+      const int x = toPixel(view->VPOSX,uiWidth), y = toPixel(view->VPOSY,uiHeight);
+      const int w = toPixel(view->VSIZEX,uiWidth), h = toPixel(view->VSIZEY,uiHeight);
+      if(texture!=nullptr && w>0 && h>0) {
+        p.setBrush(*texture);
+        p.drawRect(x,y,w,h,0,0,texture->w(),texture->h());
+        if(std::getenv("OPENGOTHIC_BOSS_UI_PROBE")!=nullptr)
+          Log::i("[BOSS_UI] draw texture=",state->second.texture," rect=",x,",",y,",",w,",",h);
+        }
+      }
+    ++it;
+    }
+
+  auto* view = mem32.deref<const zCView>(memGame.ARRAY_VIEW[0]);
+  auto* list = view!=nullptr && view->TEXTLINES_NEXT!=0 ? mem32.deref<const zCList>(view->TEXTLINES_NEXT) : nullptr;
+  while(list!=nullptr) {
+    if(auto* text = mem32.deref<const zCViewText>(list->data)) {
+      std::string value;
+      memFromString(value,text->text);
+      auto font = text->font>0 ? fontNames.find(uint32_t(text->font)) : fontNames.end();
+      if(!value.empty() && font!=fontNames.end())
+        Resources::font(font->second,Resources::FontType::Normal,1).drawText(p,toPixel(text->posx,uiWidth),toPixel(text->posy,uiHeight),value);
+      }
+    list = list->next!=0 ? mem32.deref<const zCList>(list->next) : nullptr;
     }
   }
 

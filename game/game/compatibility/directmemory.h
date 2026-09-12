@@ -2,6 +2,8 @@
 
 #include <zenkit/DaedalusScript.hh>
 #include <map>
+#include <unordered_map>
+#include <vector>
 
 #include "game/gamescript.h"
 
@@ -10,6 +12,9 @@
 
 class Interactive;
 class Npc;
+namespace Tempest {
+class Painter;
+}
 
 class DirectMemory {
   public:
@@ -24,6 +29,7 @@ class DirectMemory {
 
     // hooks
     void        tick(uint64_t dt);
+    void        drawUi(Tempest::Painter& p, int width, int height);
     void        eventPlayAni(std::string_view ani);
     Npc&        dialogSpeaker(Npc& npc);
     bool        setMusicZone(std::string_view zone, uint8_t tags);
@@ -204,6 +210,16 @@ class DirectMemory {
     void        setupUiFunctions();
     void        setupFontFunctions();
     void        tickUi(uint64_t dt);
+    void        setUiSize(int width, int height);
+    struct UiView {
+      std::string texture;
+      };
+    std::unordered_map<ptr32_t,UiView> uiViews;
+    std::vector<ptr32_t> uiViewOrder;
+    std::unordered_map<ptr32_t,std::string> fontNames;
+    ptr32_t     nextFontHandle = 0x10000000;
+    int         uiWidth = 800;
+    int         uiHeight = 600;
     //
     void        setupNpcFunctions();
     void        setupWorldFunctions();
