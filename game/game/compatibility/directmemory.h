@@ -29,7 +29,7 @@ class DirectMemory {
 
     // hooks
     void        tick(uint64_t dt);
-    void        drawUi(Tempest::Painter& p, int width, int height);
+    void        drawUi(Tempest::Painter& p, int width, int height, float barScale);
     int         focusBarY(int height);
     void        eventPlayAni(std::string_view ani);
     Npc&        dialogSpeaker(Npc& npc);
@@ -228,6 +228,7 @@ class DirectMemory {
     ptr32_t     nextFontHandle = 0x10000000;
     int         uiWidth = 800;
     int         uiHeight = 600;
+    float       uiBarScale = 1;
     //
     void        setupNpcFunctions();
     void        setupWorldFunctions();

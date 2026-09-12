@@ -6,6 +6,7 @@
 #include <cassert>
 #include <array>
 #include <charconv>
+#include <cmath>
 #include <limits>
 
 #include "world/objects/npc.h"
@@ -938,6 +939,21 @@ void DirectMemory::load(Serialize& in) {
   if(version==1)
     if(auto* lastMob = vm.find_symbol_by_name("G_PICKLOCK.LASTMOB"))
       lastMob->set_int(0);
+  // Older UI snapshots predate native resize dispatch. Seed LeGo's missing
+  // previous metrics from the saved viewport/HP convention, before tickUi
+  // replaces those metrics; its normal callback then rescales existing bars.
+  auto* screen = vm.find_symbol_by_name("PRINT_SCREEN");
+  auto* barX = vm.find_symbol_by_name("_BAR_SCREEN_X");
+  auto* barY = vm.find_symbol_by_name("_BAR_SCREEN_Y");
+  auto* barScale = vm.find_symbol_by_name("_BAR_SCALING");
+  auto* hpBar = mem32.deref<oCViewStatusBar>(memGame.HPBAR);
+  if(!uiViews.empty() && screen && screen->count()>=2 && barX && barY && barScale && hpBar &&
+     barX->get_int()==0 && screen->get_int(0)>0 && screen->get_int(1)>0 && hpBar->VSIZEX>0) {
+    barX->set_int(screen->get_int(0));
+    barY->set_int(screen->get_int(1));
+    const auto unitWidth = std::max(1l,std::lround(180.f*8192.f/float(screen->get_int(0))));
+    barScale->set_int(floatBitsToInt(float(hpBar->VSIZEX)/float(unitWidth)));
+    }
   restoreQuestCallbacks = false;
   if(std::getenv("OPENGOTHIC_PERSISTENCE_PROBE")!=nullptr)
     persistenceProbeRoot = uint32_t(vm.find_symbol_by_name("MEM_INFOBOX.RES")->get_int());
@@ -2938,8 +2954,9 @@ void DirectMemory::setUiSize(int width, int height) {
     view->PSIZEY = uiHeight;
     }
   if(auto* hpBar = mem32.deref<oCViewStatusBar>(memGame.HPBAR)) {
-    // LeGo derives its interface scale from the native 180-pixel health bar.
-    hpBar->VSIZEX = int32_t((int64_t(180)*8192 + uiWidth/2)/uiWidth);
+    // LeGo's authored status-bar width is 180, versus our 200-pixel outer art.
+    // Expose their shared responsive layout scale, not the native fill width.
+    hpBar->VSIZEX = int32_t(std::lround(180.f*uiBarScale*8192.f/float(uiWidth)));
     }
   }
 
@@ -2950,8 +2967,9 @@ int DirectMemory::focusBarY(int height) {
   return bar->VPOSY==0 ? 10 : int((int64_t(bar->VPOSY)*height)/8192);
   }
 
-void DirectMemory::drawUi(Tempest::Painter& p, int width, int height) {
-  const bool resized = uiWidth!=std::max(width,1) || uiHeight!=std::max(height,1);
+void DirectMemory::drawUi(Tempest::Painter& p, int width, int height, float barScale) {
+  const bool resized = uiWidth!=std::max(width,1) || uiHeight!=std::max(height,1) || uiBarScale!=barScale;
+  uiBarScale = barScale;
   setUiSize(width,height);
   if(resized) {
     // Native replacement for the installed screen-resolution callbacks. Refresh

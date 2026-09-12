@@ -90,7 +90,7 @@ class GameScript final {
     World&       world();
     uint64_t     tickCount() const;
     void         tick(uint64_t dt);
-    void         drawUi(Tempest::Painter& p, int width, int height);
+    void         drawUi(Tempest::Painter& p, int width, int height, float barScale);
     void         setNpcFocus(Npc& npc, Npc* focus);
     void         invalidateNpcFocus(Npc& npc);
     void         probeNpcFocus(Npc& npc, bool restored);

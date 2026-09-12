@@ -1545,9 +1545,9 @@ void GameScript::tick(uint64_t dt) {
     dma->tick(dt);
   }
 
-void GameScript::drawUi(Tempest::Painter& p, int width, int height) {
+void GameScript::drawUi(Tempest::Painter& p, int width, int height, float barScale) {
   if(dma!=nullptr)
-    dma->drawUi(p,width,height);
+    dma->drawUi(p,width,height,barScale);
   }
 
 void GameScript::setNpcFocus(Npc& npc, Npc* focus) {

@@ -72,19 +72,33 @@ try:
         assert "[BOSS_UI] event health active=1 hp=750" in trace
         assert "[BOSS_UI] event finish active=1 state=3 dead=1" in trace
         assert "[BOSS_UI] event cleanup active=0" in trace
-        phases = ("boss-full", "other", "none", "boss-half", "resized", "menu", "resumed", "cleanup")
+        assert "[BOSS_UI] XP delta=50" in trace and (out / "boss-ui-xp.png").is_file()
+        phases = ("boss-full", "other", "none", "boss-half", "resized", "resized-other", "resized-none", "menu", "resumed", "window-restored", "cleanup")
         assert all((out / f"boss-ui-{phase}.png").is_file() for phase in phases)
         captures = {name: [int(w), int(h), int(y)] for name, w, h, y in re.findall(
             r"\[BOSS_UI\] capture=(\S+) viewport=(\d+),(\d+) focus_y=(-?\d+)", trace)}
         assert all(phase in captures for phase in phases)
         assert captures["resized"][:2] != captures["boss-full"][:2], "Native resize did not occur"
+        assert captures["window-restored"][:2] == captures["boss-full"][:2], "Window size not restored"
+        backgrounds = {}
         for phase in phases[:-1]:
             before = trace.split(f"[BOSS_UI] capture={phase} ", 1)[0]
             frame = before.rsplit("[BOSS_UI] draw texture=BOSSBAR_BG.TGA", 1)[1]
+            bx, by, bw, bh = map(int, re.search(r"rect=(-?\d+),(-?\d+),(\d+),(\d+)", frame).groups())
+            backgrounds[phase] = (bx, by, bw, bh)
+            assert bx >= -2 and bx+bw <= captures[phase][0]+2, f"Boss bar clipped horizontally at {phase}"
+            assert abs(2*bx+bw-captures[phase][0]) <= 4, f"Boss bar not centered at {phase}"
             title = re.findall(r"\[BOSS_UI\] text=Armored razor rect=(-?\d+),(-?\d+),(\d+),(\d+)", frame)
             assert len(title) == 1, f"Missing or duplicate boss title before {phase}: {title}"
             x, y, width, height = map(int, title[0])
             assert abs(2*x + width - captures[phase][0]) <= 4, f"Boss title not centered at {phase}: {title[-1]}"
+            if phase in ("other", "resized-other"):
+                fx, fy, fw, fh = map(int, re.findall(r"\[BOSS_UI\] native bar=focus rect=(-?\d+),(-?\d+),(\d+),(\d+)", before)[-1])
+                assert fy+fh <= y or y+height <= fy, f"Focus bar overlaps boss title at {phase}"
+                fill = re.search(r"draw texture=BOSSBAR.TGA rect=(-?\d+),(-?\d+),(\d+),(\d+)", frame)
+                _, bar_y, _, bar_h = map(int, fill.groups())
+                assert fy+fh <= bar_y or bar_y+bar_h <= fy, f"Focus bar overlaps boss fill at {phase}"
+        assert all(abs(a-b) <= 4 for a, b in zip(backgrounds["boss-full"], backgrounds["window-restored"])), "Boss bar bounds not restored"
         cleanup = trace.split("[BOSS_UI] event cleanup active=0", 1)[1]
         assert "[BOSS_UI] draw texture=" not in cleanup and "[BOSS_UI] text=Armored razor" not in cleanup
         assert captures["boss-full"][2] >= captures["boss-full"][1]
@@ -118,9 +132,9 @@ try:
     started = {"seed": "synthetic start", "reload": "reload", "event": "event start",
                "event-seed": "event start", "event-reload": "event reload"}[a.mode]
     assert f"[BOSS_UI] {started} active=1" in trace, trace[-3000:]
-    background = "[BOSS_UI] draw texture=BOSSBAR_BG.TGA rect=240,-29,800,99"
-    full = "[BOSS_UI] draw texture=BOSSBAR.TGA rect=274,12,732,15"
-    half = "[BOSS_UI] draw texture=BOSSBAR.TGA rect=274,12,365,15"
+    background = "[BOSS_UI] draw texture=BOSSBAR_BG.TGA rect=160,-36,960,119"
+    full = "[BOSS_UI] draw texture=BOSSBAR.TGA rect=200,14,878,19"
+    half = "[BOSS_UI] draw texture=BOSSBAR.TGA rect=200,14,439,19"
     assert background in trace
     if a.mode == "seed":
         assert "[BOSS_UI] synthetic health active=1" in trace

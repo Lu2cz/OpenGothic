@@ -266,7 +266,7 @@ void MainWindow::paintEvent(PaintEvent& event) {
             }
           }
         }
-      world->script().drawUi(p,w(),h());
+      world->script().drawUi(p,w(),h(),statusBarScale());
       }
     }
 
@@ -701,11 +701,16 @@ void MainWindow::paintFocus(Painter& p, Rect rect) {
   p.drawRect(rect.x+rect.w-w,rect.y+rect.h-h,w,h, w,h, w2,h2);
   }
 
+float MainWindow::statusBarScale() const {
+  // Status bars share an 800x600 layout in framebuffer pixels. Scaling it to
+  // the viewport keeps script virtual positions and pixel-sized bars coherent.
+  return std::min(float(std::max(w(),1))/800.f,float(std::max(h(),1))/600.f)*Gothic::options().interfaceScale;
+  }
+
 void MainWindow::drawBar(Painter &p, const Tempest::Texture2d* bar, int x, int y, float v, AlignFlag flg) {
   if(barBack==nullptr || bar==nullptr)
     return;
-  const float scale   = Gothic::interfaceScale(this);
-  const float destW   = 200.f*scale*float(std::min(w(),800))/800.f;
+  const float destW   = 200.f*statusBarScale();
   const float k       = float(destW)/float(std::max(barBack->w(),1));
   const float destH   = float(barBack->h())*k;
   const float destHin = float(destH)*24.f/32.f;
@@ -719,6 +724,9 @@ void MainWindow::drawBar(Painter &p, const Tempest::Texture2d* bar, int x, int y
   if(flg & AlignBottom)
     y-=int(destH);
 
+  if(std::getenv("OPENGOTHIC_PROFILE") && std::getenv("OPENGOTHIC_BOSS_UI_PROBE"))
+    Log::i("[BOSS_UI] native bar=",(flg & AlignTop) ? "focus" : "player"," rect=",x,",",y,",",int(destW),",",int(destH));
+
   p.setBrush(*barBack);
   p.drawRect(x,y,int(destW),int(destH), 0,0,barBack->w(),barBack->h());
 
@@ -730,8 +738,7 @@ void MainWindow::drawBar(Painter &p, const Tempest::Texture2d* bar, int x, int y
   }
 
 void MainWindow::drawMsg(Tempest::Painter& p) {
-  const float scale   = Gothic::interfaceScale(this);
-  const float destW   = 200.f*scale*float(std::min(w(),800))/800.f;
+  const float destW   = 200.f*statusBarScale();
   const float k       = float(destW)/float(std::max(barBack->w(),1));
   const float destH   = float(barBack->h())*k;
 
@@ -1810,14 +1817,15 @@ void MainWindow::render(){
       if(bossGeometry && bossUiGeometryFrame!=profileFrames) {
         bossUiGeometryFrame = profileFrames;
         const char* target = nullptr;
-        if(profileFrames==0 || profileFrames==55) target = "boss";
-        if(profileFrames==15 || profileFrames==200) target = "other";
-        if(profileFrames==40) target = "none";
+        if(profileFrames==0 || profileFrames==55 || profileFrames==115) target = "boss";
+        if(profileFrames==15 || profileFrames==90 || profileFrames==240) target = "other";
+        if(profileFrames==40 || profileFrames==105) target = "none";
         if(target) {
           setenv("OPENGOTHIC_BOSS_UI_FOCUS",target,1);
           Log::i("[BOSS_UI] geometry focus=",target," frame=",profileFrames);
           }
         if(profileFrames==70) setFullscreen(true);
+        if(profileFrames==180) setFullscreen(false);
         if(profileFrames==120) {
           rootMenu.setMenu("MENU_LOG");
           rootMenu.setPlayer(*pl);
@@ -1826,6 +1834,11 @@ void MainWindow::render(){
         if(profileFrames==150) {
           Log::i("[BOSS_UI] geometry menu_close tick=",w.tickCount());
           rootMenu.closeAll();
+          }
+        if(profileFrames==260) {
+          const int before = pl->handle().exp;
+          vm.call_function("B_GIVEPLAYERXP",50);
+          Log::i("[BOSS_UI] XP delta=",pl->handle().exp-before);
           }
         }
       if(mode=="seed" && profileFrames==30) {
@@ -1851,7 +1864,7 @@ void MainWindow::render(){
         saveGame("save_slot_2.sav","Active SQ416 boss fixture");
         Log::i("[BOSS_UI] event save requested");
         }
-      if((mode=="event" || mode=="event-reload" || bossGeometry) && profileFrames==(bossGeometry ? 180u : 60u) && !bossUiProbeFinished) {
+      if((mode=="event" || mode=="event-reload" || bossGeometry) && profileFrames==(bossGeometry ? 220u : 60u) && !bossUiProbeFinished) {
         bossUiProbeFinished = true;
         auto* razor = w.findNpcByInstance(vm.find_symbol_by_name("RAZOR_ARMORED")->index());
         razor->changeAttribute(ATR_HITPOINTS,-razor->attribute(ATR_HITPOINTS),false);
@@ -1859,7 +1872,7 @@ void MainWindow::render(){
         Log::i("[BOSS_UI] event finish active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
                " state=",vm.find_symbol_by_name("SQ416_STARTBOSSFIGHT")->get_int()," dead=",razor->isDead());
         }
-      if((mode=="event" || mode=="event-reload" || bossGeometry) && profileFrames==(bossGeometry ? 210u : 90u) && !bossUiProbeCleaned) {
+      if((mode=="event" || mode=="event-reload" || bossGeometry) && profileFrames==(bossGeometry ? 250u : 90u) && !bossUiProbeCleaned) {
         bossUiProbeCleaned = true;
         Log::i("[BOSS_UI] event cleanup active=",vm.find_symbol_by_name("BOSSUI")->get_int());
         }
@@ -2169,10 +2182,14 @@ void MainWindow::render(){
         case 20: bossCapture="other"; break;
         case 45: bossCapture="none"; break;
         case 60: bossCapture="boss-half"; break;
-        case 110: bossCapture="resized"; break;
+        case 80: bossCapture="resized"; break;
+        case 100: bossCapture="resized-other"; break;
+        case 110: bossCapture="resized-none"; break;
         case 140: bossCapture="menu"; break;
         case 170: bossCapture="resumed"; break;
-        case 215: bossCapture="cleanup"; break;
+        case 210: bossCapture="window-restored"; break;
+        case 255: bossCapture="cleanup"; break;
+        case 270: bossCapture="xp"; break;
         }
       }
     if(sampling && std::getenv("OPENGOTHIC_BOSS_UI_CAPTURE")!=nullptr &&
@@ -2617,7 +2634,7 @@ void MainWindow::render(){
           }
         }
       }
-    if(sampling && ++profileFrames==(bossGeometry ? 240u : std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
+    if(sampling && ++profileFrames==(bossGeometry ? 280u : std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,
