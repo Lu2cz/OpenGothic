@@ -360,6 +360,7 @@ std::unique_ptr<Npc> WorldObjects::takeNpc(const Npc* ptr) {
   for(size_t i=0; i<npcArr.size(); ++i){
     auto& npc=*npcArr[i];
     if(&npc==ptr){
+      owner.script().invalidateNpcFocus(npc);
       auto ret=std::move(npcArr[i]);
       npcArr.erase(npcArr.begin() + int32_t(i));
       return ret;
@@ -1005,6 +1006,7 @@ void WorldObjects::resetPositionToTA() {
     if(n.resetPositionToTA()){
       ++i;
       } else {
+      owner.script().invalidateNpcFocus(n);
       npcInvalid.emplace_back(std::move(npcArr[i]));
       npcArr.erase(npcArr.begin()+int(i));
 

@@ -286,8 +286,13 @@ void DirectMemory::setNpcFocus(Npc& npc, Npc* focus) {
     clearNpcFocus(npc);
     return;
     }
-  pruneFocusNpcs();
   auto instance = focus->handlePtr();
+  // Existing bindings are invalidated by native world removal. Only a newly
+  // encountered target needs the linear world-membership check.
+  if(focusNpcAddress.find(instance)==focusNpcAddress.end() && !isLiveNpc(instance)) {
+    clearNpcFocus(npc);
+    return;
+    }
   auto [it,inserted] = focusNpcAddress.emplace(instance,0);
   if(inserted) {
     it->second = mem32.alloc(4,"focused OCNPC");
@@ -305,6 +310,22 @@ void DirectMemory::clearNpcFocus(Npc& npc) {
         std::memset(bytes,0,cls->class_size());
     }
   npc.handle().focus_vob = 0;
+  }
+
+void DirectMemory::invalidateNpcFocus(Npc& npc) {
+  clearNpcFocus(npc);
+  auto it = focusNpcAddress.find(npc.handlePtr());
+  if(it==focusNpcAddress.end())
+    return;
+  const auto ptr = it->second;
+  // Retain the zeroed allocation: scripts may still hold its virtual address.
+  mem32.writeInt(ptr,0);
+  focusNpc.erase(ptr);
+  focusNpcAddress.erase(it);
+  auto& world = gameScript.world();
+  for(uint32_t id=0;auto* observer=world.npcById(id);++id)
+    if(uint32_t(observer->handle().focus_vob)==ptr)
+      observer->handle().focus_vob = 0;
   }
 
 bool DirectMemory::isLiveNpc(const std::shared_ptr<zenkit::INpc>& npc) const {
@@ -328,6 +349,10 @@ void DirectMemory::pruneFocusNpcs() {
   }
 
 void DirectMemory::resetWorldReferences() {
+  for(const auto& [ptr,npc]:focusNpc)
+    mem32.writeInt(ptr,0);
+  focusNpc.clear();
+  focusNpcAddress.clear();
   for(auto it=scriptReferences.begin(); it!=scriptReferences.end();) {
     auto context = it->first.first;
     if(!dynamic_cast<zenkit::INpc*>(context.get()) && !dynamic_cast<zenkit::IItem*>(context.get())) {
@@ -516,6 +541,74 @@ void DirectMemory::verifyWorldTransitionProbe(Npc& npc) {
   vm.call_function("FF_REMOVE",int32_t(vm.find_symbol_by_name("TIMER_SETPAUSE")->index()));
   worldProbeRecurringTimer = 0;
   Log::i("[WORLD_PROBE] restart_bindings=1 recurring_dispatches=",worldProbeRecurringDispatches);
+  }
+
+void DirectMemory::probeNpcFocus(Npc& npc, bool restored) {
+  auto check = [](bool ok) { if(!ok) throw std::runtime_error("NPC focus lifetime regression"); };
+  auto& world = gameScript.world();
+  auto* storage = vm.find_symbol_by_name("MEM_INFOBOX.RES");
+  auto isNpc = [&](ptr32_t ptr) { return vm.call_function<int>("HLP_IS_OCNPC",int32_t(ptr))!=0; };
+  if(restored) {
+    const auto root = uint32_t(storage->get_int());
+    check(mem32.isAllocation(root,16,"NPC focus probe") && mem32.readInt(root)==0x464f4331);
+    for(uint32_t off:{4u,8u}) {
+      const auto ptr = uint32_t(mem32.readInt(root+off));
+      check(!isNpc(ptr) && mem_ptrtoinst(ptr)==nullptr);
+      }
+    const auto ptr = uint32_t(mem32.readInt(root+12));
+    auto handle = std::dynamic_pointer_cast<zenkit::INpc>(mem_ptrtoinst(ptr));
+    check(isNpc(ptr) && handle && isLiveNpc(handle));
+    auto* target = static_cast<Npc*>(handle->user_ptr);
+    setNpcFocus(npc,target);
+    check(uint32_t(npc.handle().focus_vob)==ptr);
+    world.removeNpc(*target);
+    check(npc.handle().focus_vob==0 && !isNpc(ptr) && mem_ptrtoinst(ptr)==nullptr);
+    Log::i("[NPC_FOCUS] restart bindings=1 tombstones=1 removed=1");
+    return;
+    }
+  const auto cls = vm.find_symbol_by_name("RAZOR_ARMORED")->index();
+  auto* a = world.addNpc(cls,npc.position()+Tempest::Vec3(200,0,0));
+  auto* b = world.addNpc(cls,npc.position()+Tempest::Vec3(400,0,0));
+  check(a && b);
+  auto retained = a->handlePtr();
+  setNpcFocus(npc,a);
+  const auto first = uint32_t(npc.handle().focus_vob);
+  check(first && isNpc(first) && mem_ptrtoinst(first)==retained);
+  check(mem32.isAllocation(first,4,"focused OCNPC") &&
+        !mem32.isAllocation(first+4,4,"focused OCNPC") &&
+        !mem32.isAllocation(first,16,"focused OCNPC") &&
+        !mem32.isAllocation(first,4,"wrong type"));
+  setNpcFocus(npc,b);
+  const auto second = uint32_t(npc.handle().focus_vob);
+  check(second && second!=first && isNpc(second) && mem_ptrtoinst(second)==b->handlePtr());
+  setNpcFocus(npc,static_cast<Npc*>(nullptr));
+  check(npc.handle().focus_vob==0);
+  world.removeNpc(*a);
+  // Check before any subsequent target selection or save can prune mappings.
+  check(!isNpc(first) && mem_ptrtoinst(first)==nullptr && retained->user_ptr==a);
+  setNpcFocus(npc,a);
+  check(npc.handle().focus_vob==0);
+  setNpcFocus(npc,b);
+  world.removeNpc(*b);
+  check(npc.handle().focus_vob==0 && !isNpc(second) && mem_ptrtoinst(second)==nullptr);
+  auto* c = world.addNpc(cls,npc.position()+Tempest::Vec3(600,0,0));
+  check(c!=nullptr);
+  setNpcFocus(npc,c);
+  const auto third = uint32_t(npc.handle().focus_vob);
+  check(third && third!=first && third!=second && mem_ptrtoinst(third)==c->handlePtr());
+  // Simulate allocator address reuse while the old script handle survives.
+  retained->user_ptr = c;
+  const bool reused = !isNpc(first) && mem_ptrtoinst(first)==nullptr && mem_ptrtoinst(third)==c->handlePtr();
+  retained->user_ptr = a;
+  check(reused);
+  const auto root = mem32.alloc(16,"NPC focus probe");
+  mem32.writeInt(root,0x464f4331);
+  mem32.writeInt(root+4,int32_t(first));
+  mem32.writeInt(root+8,int32_t(second));
+  mem32.writeInt(root+12,int32_t(third));
+  storage->set_int(int32_t(root));
+  clearNpcFocus(npc);
+  Log::i("[NPC_FOCUS] targets=1 null=1 retained_handle=1 removed=1 reuse=1");
   }
 
 void DirectMemory::probeLockFocus(Npc& npc, Interactive& lock, bool restored) {
@@ -2061,10 +2154,12 @@ std::shared_ptr<zenkit::DaedalusInstance> DirectMemory::mem_ptrtoinst(ptr32_t ad
   if(address==0)
     Log::d("mem_ptrtoinst: address is null");
   if(auto it=focusNpc.find(address); it!=focusNpc.end()) {
-    if(auto npc=it->second.lock(); npc && isLiveNpc(npc))
+    if(auto npc=it->second.lock())
       return npc;
     mem32.writeInt(address,0);
     }
+  if(mem32.isAllocation(address,4,"focused OCNPC"))
+    return nullptr;
   if(scriptVariables<=address && address<scriptVariables + ptr32_t(vm.symbols().size())*ptr32_t(sizeof(ScriptVar))) {
     // HACK: need to be consistent with _takeref
     uint32_t sId = (address-scriptVariables)/ptr32_t(sizeof(ScriptVar));

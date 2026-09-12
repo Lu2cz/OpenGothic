@@ -13,7 +13,7 @@ import zipfile
 p = argparse.ArgumentParser()
 for name in ("executable", "game", "save", "output"):
     p.add_argument("--" + name, required=True, type=Path)
-p.add_argument("--mode", choices=("seed", "reload", "event"), required=True)
+p.add_argument("--mode", choices=("seed", "reload", "event", "focus-seed", "focus-reload"), required=True)
 p.add_argument("--reject-view", action="store_true", help="Reject a private v4 snapshot with a view pointer into its allocation")
 a = p.parse_args()
 exe, game, save, out = (getattr(a, name).resolve() for name in ("executable", "game", "save", "output"))
@@ -66,6 +66,21 @@ try:
             cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=180)
     assert result.returncode == 0, f"Game exited {result.returncode}"
     trace = (out / "terminal.log").read_text(errors="replace")
+    if a.mode.startswith("focus-"):
+        marker = ("targets=1 null=1 retained_handle=1 removed=1 reuse=1" if a.mode == "focus-seed"
+                  else "restart bindings=1 tombstones=1 removed=1")
+        assert f"[NPC_FOCUS] {marker}" in trace, trace[-3000:]
+        if a.mode == "focus-seed":
+            with zipfile.ZipFile(out / "save_slot_2.sav") as archive:
+                assert archive.testzip() is None and archive.read("game/compatibility")[:4] == b"\x04\0\0\0"
+        else:
+            assert not (out / "save_slot_2.sav").exists()
+        (out / "manifest.json").write_text(json.dumps({"executable": executable_hash,
+            "input_save": source_hash, "mode": a.mode,
+            "output_saves": {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                             for p in out.glob("save_slot_*.sav")}}, indent=2) + "\n")
+        print(f"PASS {a.mode}: {out}")
+        raise SystemExit(0)
     started = {"seed": "synthetic start", "reload": "reload", "event": "event start"}[a.mode]
     assert f"[BOSS_UI] {started} active=1" in trace, trace[-3000:]
     background = "[BOSS_UI] draw texture=BOSSBAR_BG.TGA rect=240,-29,800,99"

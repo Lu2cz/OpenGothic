@@ -1657,7 +1657,9 @@ void MainWindow::render(){
         auto& w = *Gothic::inst().world();
         auto& vm = w.script().getVm();
         auto* pl = w.player();
-        if(std::string_view(mode)=="seed") {
+        if(std::string_view(mode).starts_with("focus-")) {
+          w.script().probeNpcFocus(*pl,std::string_view(mode)=="focus-reload");
+          } else if(std::string_view(mode)=="seed") {
           vm.call_function("START_BOSSUI",pl->handlePtr(),1);
           Log::i("[BOSS_UI] synthetic start active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
                  " hp=",pl->attribute(ATR_HITPOINTS));
@@ -1772,7 +1774,7 @@ void MainWindow::render(){
         Log::i("[BOSS_UI] synthetic health active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
                " hp=",pl->attribute(ATR_HITPOINTS));
         }
-      if(mode=="seed" && profileFrames==60 && !bossUiProbeSaved) {
+      if((mode=="seed" || mode=="focus-seed") && profileFrames==60 && !bossUiProbeSaved) {
         bossUiProbeSaved = true;
         saveGame("save_slot_2.sav","Boss UI synthetic fixture");
         Log::i("[BOSS_UI] synthetic save requested");

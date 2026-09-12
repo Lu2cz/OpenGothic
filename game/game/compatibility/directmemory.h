@@ -37,6 +37,8 @@ class DirectMemory {
     void        setNpcFocus(Npc& npc, Interactive* focus, int pickLockProgress);
     void        setNpcFocus(Npc& npc, Npc* focus);
     void        clearNpcFocus(Npc& npc);
+    void        invalidateNpcFocus(Npc& npc);
+    void        probeNpcFocus(Npc& npc, bool restored);
     void        resetWorldReferences();
     void        probeLockFocus(Npc& npc, Interactive& lock, bool restored);
     void        beginWorldTransitionProbe(Npc& npc, Interactive& lock);

@@ -130,11 +130,12 @@ Mem32::Type Mem32::regionType(ptr32_t address, uint32_t size) const {
   }
 
 bool Mem32::isAllocation(ptr32_t address, uint32_t size, std::string_view comment) const {
-  for(const auto& r:region)
-    if(r.address==address && r.status==S_Allocated && r.type==Type::plain &&
-       r.size==((size+memAlign-1)/memAlign)*memAlign && r.comment==comment)
-      return true;
-  return false;
+  // Splitting/coalescing regions and snapshot loading preserve address order.
+  const auto r = std::lower_bound(region.begin(),region.end(),address,[](const Region& r, ptr32_t ptr) {
+    return r.address<ptr;
+    });
+  return r!=region.end() && r->address==address && r->status==S_Allocated && r->type==Type::plain &&
+         r->size==((size+memAlign-1)/memAlign)*memAlign && r->comment==comment;
   }
 
 void Mem32::validateCallbacks() const {

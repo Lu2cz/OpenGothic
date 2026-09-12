@@ -1559,6 +1559,16 @@ int GameScript::focusBarY(int height) {
   return dma==nullptr ? 10 : dma->focusBarY(height);
   }
 
+void GameScript::invalidateNpcFocus(Npc& npc) {
+  if(dma)
+    dma->invalidateNpcFocus(npc);
+  }
+
+void GameScript::probeNpcFocus(Npc& npc, bool restored) {
+  if(dma)
+    dma->probeNpcFocus(npc,restored);
+  }
+
 uint32_t GameScript::rand(uint32_t max) {
   return uint32_t(randGen())%max;
   }
