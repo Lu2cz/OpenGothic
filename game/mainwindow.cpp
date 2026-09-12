@@ -1298,6 +1298,9 @@ void MainWindow::render(){
     static bool aiWaitProbeSaved=false;
     static bool bossUiProbeStarted=false;
     static bool bossUiProbeSaved=false;
+    static bool bossUiProbeHealth=false;
+    static bool bossUiProbeFinished=false;
+    static bool bossUiProbeCleaned=false;
     static uint64_t aiWaitProbeTicket=0;
     static uint8_t aiWaitProbeStep=0;
     static size_t beachTorchCount=0;
@@ -1668,6 +1671,7 @@ void MainWindow::render(){
           vm.find_symbol_by_name("SQ416_HUNTERSSLEEP")->set_int(2);
           vm.find_symbol_by_name("SQ416_STARTBOSSFIGHT")->set_int(1);
           vm.call_function("EVENTSMANAGER_SQ416");
+          pl->handle().flags = zenkit::NpcFlag(uint32_t(pl->handle().flags) | uint32_t(zenkit::NpcFlag::IMMORTAL));
           Log::i("[BOSS_UI] event start active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
                  " state=",vm.find_symbol_by_name("SQ416_STARTBOSSFIGHT")->get_int()," hp=",razor->attribute(ATR_HITPOINTS));
           } else {
@@ -1771,21 +1775,25 @@ void MainWindow::render(){
         saveGame("save_slot_2.sav","Boss UI synthetic fixture");
         Log::i("[BOSS_UI] synthetic save requested");
         }
-      if(mode=="event" && profileFrames==30) {
+      if(mode=="event" && profileFrames==30 && !bossUiProbeHealth) {
+        bossUiProbeHealth = true;
         auto* razor = w.findNpcByInstance(vm.find_symbol_by_name("RAZOR_ARMORED")->index());
         razor->changeAttribute(ATR_HITPOINTS,-razor->attribute(ATR_HITPOINTS)/2,false);
         Log::i("[BOSS_UI] event health active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
                " hp=",razor->attribute(ATR_HITPOINTS));
         }
-      if(mode=="event" && profileFrames==60) {
+      if(mode=="event" && profileFrames==60 && !bossUiProbeFinished) {
+        bossUiProbeFinished = true;
         auto* razor = w.findNpcByInstance(vm.find_symbol_by_name("RAZOR_ARMORED")->index());
         razor->changeAttribute(ATR_HITPOINTS,-razor->attribute(ATR_HITPOINTS),false);
         vm.call_function("EVENTSMANAGER_SQ416");
         Log::i("[BOSS_UI] event finish active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
                " state=",vm.find_symbol_by_name("SQ416_STARTBOSSFIGHT")->get_int()," dead=",razor->isDead());
         }
-      if(mode=="event" && profileFrames==90)
+      if(mode=="event" && profileFrames==90 && !bossUiProbeCleaned) {
+        bossUiProbeCleaned = true;
         Log::i("[BOSS_UI] event cleanup active=",vm.find_symbol_by_name("BOSSUI")->get_int());
+        }
       if(mode=="reload" && profileFrames==60) {
         vm.call_function("FINISH_BOSSUI");
         Log::i("[BOSS_UI] synthetic finish active=",vm.find_symbol_by_name("BOSSUI")->get_int());

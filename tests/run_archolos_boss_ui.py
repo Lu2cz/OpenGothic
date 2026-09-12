@@ -87,6 +87,7 @@ try:
     else:
         before, after = trace.split("[BOSS_UI] event health active=1", 1)
         assert full in before and half in after
+        assert trace.count("[BOSS_UI] event health active=1") == 1
         marker = "[BOSS_UI] event finish active=1 state=3 dead=1"
         assert marker in trace
         cleanup = trace.split(marker, 1)[1]

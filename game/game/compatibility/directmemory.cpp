@@ -2894,7 +2894,8 @@ void DirectMemory::drawUi(Tempest::Painter& p, int width, int height) {
       auto font = text->font>0 ? fontNames.find(uint32_t(text->font)) : fontNames.end();
       if(!value.empty() && font!=fontNames.end()) {
         const auto color = uint32_t(text->colored!=0 ? text->color : -1);
-        Resources::font(font->second,Resources::FontType::Normal,1).drawText(p,toPixel(text->posx,uiWidth),toPixel(text->posy,uiHeight),value,
+        auto& gfont = Resources::font(font->second,Resources::FontType::Normal,1);
+        gfont.drawText(p,toPixel(text->posx,uiWidth),toPixel(text->posy,uiHeight)+gfont.pixelSize(),value,
           Color(float((color>>16)&0xFF)/255.f,float((color>>8)&0xFF)/255.f,float(color&0xFF)/255.f,float(color>>24)/255.f));
         }
       }
