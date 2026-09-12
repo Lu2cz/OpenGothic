@@ -610,6 +610,24 @@ void DirectMemory::probeNpcFocus(Npc& npc, bool restored) {
   storage->set_int(int32_t(root));
   clearNpcFocus(npc);
   Log::i("[NPC_FOCUS] targets=1 null=1 retained_handle=1 removed=1 reuse=1");
+  // Exercise installed view destruction before drawing or a new constructor
+  // can hide stale registration. Reuse the exact virtual address as raw data.
+  const auto priorOrder = uiViewOrder;
+  const auto priorViews = uiViews.size();
+  const int viewHandle = vm.call_function<int>("VIEW_CREATE",0,0,100,100);
+  check(uiViewOrder.size()==priorOrder.size()+1 && uiViews.size()==priorViews+1);
+  const auto viewPtr = uiViewOrder.back();
+  vm.call_function("VIEW_SETTEXTURE",viewHandle,std::string_view("BOSSBAR.TGA"));
+  vm.call_function("VIEW_OPEN",viewHandle);
+  check(uiViews.at(viewPtr).texture=="BOSSBAR.TGA");
+  vm.call_function("DELETE",viewHandle); // Same handle destructor/free path as BAR_DELETE.
+  auto absent = [&]() { return !uiViews.contains(viewPtr) && uiViews.size()==priorViews && uiViewOrder==priorOrder; };
+  if(!absent()) throw std::runtime_error("View free retained UI registration");
+  check(mem32.alloc(viewPtr,sizeof(zCView),"non-view reuse probe")==viewPtr);
+  mem32.writeInt(viewPtr,0x52415731);
+  if(!absent()) throw std::runtime_error("Non-view reuse retained UI registration");
+  mem32.free(viewPtr);
+  Log::i("[VIEW_REUSE] installed_delete=1 unregistered=1 raw_address_reuse=1 constructor_calls=0");
   }
 
 void DirectMemory::probeLockFocus(Npc& npc, Interactive& lock, bool restored) {

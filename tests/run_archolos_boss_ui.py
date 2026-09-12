@@ -119,6 +119,7 @@ try:
                   else "restart bindings=1 tombstones=1 removed=1")
         assert f"[NPC_FOCUS] {marker}" in trace, trace[-3000:]
         if a.mode == "focus-seed":
+            assert "[VIEW_REUSE] installed_delete=1 unregistered=1 raw_address_reuse=1 constructor_calls=0" in trace
             with zipfile.ZipFile(out / "save_slot_2.sav") as archive:
                 assert archive.testzip() is None and archive.read("game/compatibility")[:4] == b"\x04\0\0\0"
         else:
