@@ -2729,8 +2729,17 @@ void DirectMemory::setupFontFunctions() {
   cpu.register_thiscall(ZCFONTMAN__GETFONT, [](ptr32_t, int handle) {
     return handle;
     });
-  cpu.register_thiscall(ZCFONT__GETFONTY, [](ptr32_t) { return 20; });
-  cpu.register_thiscall(ZCFONT__GETFONTX, [](ptr32_t, int) { return 10; });
+  cpu.register_thiscall(ZCFONT__GETFONTY, [this](ptr32_t handle) {
+    auto font = fontNames.find(handle);
+    return font==fontNames.end() ? 0 : Resources::font(font->second,Resources::FontType::Normal,1).pixelSize();
+    });
+  cpu.register_thiscall(ZCFONT__GETFONTX, [this](ptr32_t handle, int glyph) {
+    auto font = fontNames.find(handle);
+    if(font==fontNames.end())
+      return 0;
+    const char ch = char(uint8_t(glyph));
+    return Resources::font(font->second,Resources::FontType::Normal,1).textSize(std::string_view(&ch,1)).w;
+    });
   }
 
 void DirectMemory::tickUi(uint64_t dt) {
