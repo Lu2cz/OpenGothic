@@ -1550,6 +1550,15 @@ void GameScript::drawUi(Tempest::Painter& p, int width, int height) {
     dma->drawUi(p,width,height);
   }
 
+void GameScript::setNpcFocus(Npc& npc, Npc* focus) {
+  if(dma!=nullptr)
+    dma->setNpcFocus(npc,focus);
+  }
+
+int GameScript::focusBarY(int height) {
+  return dma==nullptr ? 10 : dma->focusBarY(height);
+  }
+
 uint32_t GameScript::rand(uint32_t max) {
   return uint32_t(randGen())%max;
   }

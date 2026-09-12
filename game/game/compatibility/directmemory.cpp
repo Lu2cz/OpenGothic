@@ -276,6 +276,27 @@ void DirectMemory::setNpcFocus(Npc& npc, Interactive* focus, int pickLockProgres
   npc.handle().focus_vob = int32_t(address);
   }
 
+void DirectMemory::setNpcFocus(Npc& npc, Npc* focus) {
+  if(focus==nullptr) {
+    clearNpcFocus(npc);
+    return;
+    }
+  auto* vtable = vm.find_symbol_by_name("OCNPC_VTBL");
+  if(vtable==nullptr) {
+    clearNpcFocus(npc);
+    return;
+    }
+  pruneFocusNpcs();
+  auto instance = focus->handlePtr();
+  auto [it,inserted] = focusNpcAddress.emplace(instance,0);
+  if(inserted) {
+    it->second = mem32.alloc(4,"focused OCNPC");
+    focusNpc.emplace(it->second,instance);
+    }
+  mem32.writeInt(it->second,vtable->get_int());
+  npc.handle().focus_vob = int32_t(it->second);
+  }
+
 void DirectMemory::clearNpcFocus(Npc& npc) {
   if(auto address = uint32_t(npc.handle().focus_vob)) {
     auto* cls = vm.find_symbol_by_name("OCMOBLOCKABLE");
@@ -284,6 +305,26 @@ void DirectMemory::clearNpcFocus(Npc& npc) {
         std::memset(bytes,0,cls->class_size());
     }
   npc.handle().focus_vob = 0;
+  }
+
+bool DirectMemory::isLiveNpc(const std::shared_ptr<zenkit::INpc>& npc) const {
+  auto& world = gameScript.world();
+  const auto id = world.npcId(static_cast<Npc*>(npc->user_ptr));
+  auto* live = world.npcById(id);
+  return live!=nullptr && live->handlePtr()==npc;
+  }
+
+void DirectMemory::pruneFocusNpcs() {
+  for(auto it=focusNpcAddress.begin(); it!=focusNpcAddress.end();) {
+    auto npc = it->first.lock();
+    if(npc && isLiveNpc(npc)) {
+      ++it;
+      continue;
+      }
+    mem32.writeInt(it->second,0);
+    focusNpc.erase(it->second);
+    it = focusNpcAddress.erase(it);
+    }
   }
 
 void DirectMemory::resetWorldReferences() {
@@ -585,10 +626,11 @@ auto DirectMemory::loadReference(Serialize& in) -> std::shared_ptr<zenkit::Daeda
 void DirectMemory::save(Serialize& out) {
   if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_PERSISTENCE_SAVE_FAILURE")!=nullptr)
     throw std::runtime_error("Injected compatibility save failure");
+  pruneFocusNpcs();
   out.setEntry("game/compatibility");
   // ponytail: a complete virtual-memory snapshot requires identical scripts and
   // mapping ABI. Bump this version when changing the native memory layout.
-  out.write(uint32_t(3),scriptFingerprint,scriptVariables,scriptSymbols,ASMINT_InternalStack,musicThemePtr);
+  out.write(uint32_t(4),scriptFingerprint,scriptVariables,scriptSymbols,ASMINT_InternalStack,musicThemePtr);
   std::vector<uint32_t> values, instances;
   for(auto& s : vm.symbols()) {
     if(s.is_member()) continue;
@@ -630,6 +672,15 @@ void DirectMemory::save(Serialize& out) {
       throw std::runtime_error("Invalid compatibility view order");
     out.write(ptr,it->second.texture);
     }
+  std::vector<std::pair<ptr32_t,std::shared_ptr<zenkit::DaedalusInstance>>> focus;
+  for(const auto& [ptr,npc]:focusNpc)
+    if(auto instance=npc.lock(); instance && isLiveNpc(instance))
+      focus.emplace_back(ptr,std::move(instance));
+  out.write(uint32_t(focus.size()));
+  for(const auto& [ptr,npc]:focus) {
+    out.write(ptr);
+    saveReference(out,npc);
+    }
   std::vector<Interactive*> locks;
   auto& world = gameScript.world();
   for(uint32_t id=0;auto* lock=world.mobsiById(id);++id)
@@ -651,7 +702,7 @@ void DirectMemory::load(Serialize& in) {
   uint32_t version = 0;
   uint64_t fingerprint = 0;
   in.read(version,fingerprint);
-  if((version!=1 && version!=2 && version!=3) || fingerprint!=scriptFingerprint)
+  if((version!=1 && version!=2 && version!=3 && version!=4) || fingerprint!=scriptFingerprint)
     throw std::runtime_error("Incompatible script/compatibility snapshot");
   uint32_t variables = 0, symbols = 0;
   in.read(variables,symbols,ASMINT_InternalStack,musicThemePtr);
@@ -701,6 +752,8 @@ void DirectMemory::load(Serialize& in) {
     if(name=="ASMINT_CallTarget" && size==sizeof(ASMINT_CallTarget)) return &ASMINT_CallTarget;
     return nullptr;
     });
+  focusNpc.clear();
+  focusNpcAddress.clear();
   ASMINT_CallTargetPtr = mem32.pinAddress("ASMINT_CallTarget");
   scriptReferences.clear();
   in.read(count);
@@ -739,7 +792,7 @@ void DirectMemory::load(Serialize& in) {
       uint32_t handle = 0;
       std::string name;
       in.read(handle,name);
-      if(handle<0x10000000 || name.size()>1024 || !fontNames.emplace(handle,std::move(name)).second)
+      if(handle<0x10000000 || handle>=0x80000000 || name.size()>1024 || !fontNames.emplace(handle,std::move(name)).second)
         throw std::runtime_error("Invalid compatibility font");
       nextFontHandle = std::max(nextFontHandle,handle+1);
       }
@@ -749,9 +802,24 @@ void DirectMemory::load(Serialize& in) {
       uint32_t ptr = 0;
       std::string texture;
       in.read(ptr,texture);
-      if(texture.size()>1024 || !mem32.deref<zCView>(ptr) || !uiViews.emplace(ptr,UiView{std::move(texture)}).second)
+      if(texture.size()>1024 || !mem32.isAllocation(ptr,sizeof(zCView),"") ||
+         !uiViews.emplace(ptr,UiView{std::move(texture)}).second)
         throw std::runtime_error("Invalid compatibility view");
       uiViewOrder.push_back(ptr);
+      }
+    if(version>=4) {
+      in.read(count);
+      if(count>10000) throw std::runtime_error("Invalid compatibility focus count");
+      auto* vtable = vm.find_symbol_by_name("OCNPC_VTBL");
+      for(uint32_t n=0;n<count;++n) {
+        uint32_t ptr = 0;
+        in.read(ptr);
+        auto npc = std::dynamic_pointer_cast<zenkit::INpc>(loadReference(in));
+        if(vtable==nullptr || npc==nullptr || !isLiveNpc(npc) || !mem32.isAllocation(ptr,4,"focused OCNPC") ||
+           mem32.readInt(ptr)!=vtable->get_int() || !focusNpc.emplace(ptr,npc).second ||
+           !focusNpcAddress.emplace(npc,ptr).second)
+          throw std::runtime_error("Invalid compatibility focus binding");
+        }
       }
     }
   if(version>=2) {
@@ -1992,6 +2060,11 @@ auto DirectMemory::_takeref(zenkit::DaedalusVm& vm) -> zenkit::DaedalusNakedCall
 std::shared_ptr<zenkit::DaedalusInstance> DirectMemory::mem_ptrtoinst(ptr32_t address) {
   if(address==0)
     Log::d("mem_ptrtoinst: address is null");
+  if(auto it=focusNpc.find(address); it!=focusNpc.end()) {
+    if(auto npc=it->second.lock(); npc && isLiveNpc(npc))
+      return npc;
+    mem32.writeInt(address,0);
+    }
   if(scriptVariables<=address && address<scriptVariables + ptr32_t(vm.symbols().size())*ptr32_t(sizeof(ScriptVar))) {
     // HACK: need to be consistent with _takeref
     uint32_t sId = (address-scriptVariables)/ptr32_t(sizeof(ScriptVar));
@@ -2720,8 +2793,12 @@ void DirectMemory::setupFontFunctions() {
     for(const auto& [handle,name] : fontNames)
       if(name==font)
         return int32_t(handle);
-    while(fontNames.contains(nextFontHandle))
+    while(nextFontHandle<0x80000000 && fontNames.contains(nextFontHandle))
       ++nextFontHandle;
+    if(nextFontHandle>=0x80000000) {
+      Log::e("LeGo: zCFontMan__Load - exhausted font handles");
+      return 0;
+      }
     const auto handle = nextFontHandle++;
     fontNames.emplace(handle,std::move(font));
     return int32_t(handle);
@@ -2733,12 +2810,11 @@ void DirectMemory::setupFontFunctions() {
     auto font = fontNames.find(handle);
     return font==fontNames.end() ? 0 : Resources::font(font->second,Resources::FontType::Normal,1).pixelSize();
     });
-  cpu.register_thiscall(ZCFONT__GETFONTX, [this](ptr32_t handle, int glyph) {
+  cpu.register_thiscall(ZCFONT__GETFONTX, [this](ptr32_t handle, std::string text) {
     auto font = fontNames.find(handle);
     if(font==fontNames.end())
       return 0;
-    const char ch = char(uint8_t(glyph));
-    return Resources::font(font->second,Resources::FontType::Normal,1).textSize(std::string_view(&ch,1)).w;
+    return Resources::font(font->second,Resources::FontType::Normal,1).textSize(text).w;
     });
   }
 
@@ -2770,6 +2846,13 @@ void DirectMemory::setUiSize(int width, int height) {
     // LeGo derives its interface scale from the native 180-pixel health bar.
     hpBar->VSIZEX = int32_t((int64_t(180)*8192 + uiWidth/2)/uiWidth);
     }
+  }
+
+int DirectMemory::focusBarY(int height) {
+  auto* bar = mem32.deref<oCViewStatusBar>(memGame.FOCUSBAR);
+  if(bar==nullptr)
+    return 10;
+  return bar->VPOSY==0 ? 10 : int((int64_t(bar->VPOSY)*height)/8192);
   }
 
 void DirectMemory::drawUi(Tempest::Painter& p, int width, int height) {

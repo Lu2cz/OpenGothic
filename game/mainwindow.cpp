@@ -224,9 +224,10 @@ void MainWindow::paintEvent(PaintEvent& event) {
 
       drawMsg(p);
 
-      world->script().drawUi(p,w(),h());
-
       auto focus = world->validateFocus(player.focus());
+      if(auto pl = Gothic::inst().player())
+        world->script().setNpcFocus(*pl,focus.npc);
+
       paintFocus(p,focus,vp);
 
       if(auto pl = Gothic::inst().player()){
@@ -254,6 +255,7 @@ void MainWindow::paintEvent(PaintEvent& event) {
           }
         }
       }
+    world->script().drawUi(p,w(),h());
     }
 
   if(auto c = Gothic::inst().camera()) {
@@ -614,7 +616,7 @@ void MainWindow::paintFocus(Painter& p, const Focus& focus, const Matrix4x4& vp)
 
   if(focus.npc!=nullptr && !focus.npc->isDead()) {
     float hp = float(focus.npc->attribute(ATR_HITPOINTS))/float(focus.npc->attribute(ATR_HITPOINTSMAX));
-    drawBar(p,barHp, w()/2,10, hp, AlignHCenter|AlignTop);
+    drawBar(p,barHp, w()/2,world->script().focusBarY(h()), hp, AlignHCenter|AlignTop);
     }
 
   const int foc = Gothic::settingsGetI("GAME","highlightMeleeFocus");
