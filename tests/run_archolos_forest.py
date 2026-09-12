@@ -18,6 +18,7 @@ original = hashlib.sha256(save.read_bytes()).hexdigest()
 out.mkdir(parents=True, exist_ok=False)
 shutil.copy2(save, out / "save_slot_1.sav")
 (out / "source.sha256").write_text(original)
+(out / "executable.sha256").write_text(hashlib.sha256(exe.read_bytes()).hexdigest())
 (out / "Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")
 env = {k: v for k, v in os.environ.items() if not k.startswith("OPENGOTHIC_")}
 env.update(OPENGOTHIC_PROFILE="1", OPENGOTHIC_FOREST_PROBE="1", OPENGOTHIC_TRIALOG_TRACE="1")
@@ -33,6 +34,7 @@ try:
     assert "[FOREST_PROBE] complete" in trace, "Cutscene did not return control"
     assert "[FOREST_PROBE] save finalized" in trace
     if not a.baseline:
+        assert "[FOREST_PROBE] player control verified" in trace
         assert "[FOREST_PROBE] speaker reset verified" in trace
         assert "Go bother someone else." not in trace
         assert "_TRIA_Copy: Invalid NPC" not in trace

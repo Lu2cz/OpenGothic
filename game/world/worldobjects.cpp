@@ -123,7 +123,7 @@ void WorldObjects::load(Serialize &fin) {
 
 void WorldObjects::save(Serialize &fout) {
   fout.setEntry("worlds/",fout.worldName(),"/version");
-  fout.write(Serialize::Version::Current);
+  fout.write(fout.version());
 
   for(size_t i=0; i<npcArr.size(); ++i)
     npcArr[i]->save(fout,i,"/npc/");
@@ -223,6 +223,12 @@ void WorldObjects::tick(uint64_t dt, uint64_t dtPlayer) {
   auto cpos  = camera!=nullptr ? camera->originLwc() : Vec3();
   auto plPos = pl!=nullptr ? pl->position() : cpos;
   for(auto& i:npcArr) {
+    if(Gothic::inst().isNpcInDialog(*i)) {
+      npcNear.push_back(i.get());
+      if(i.get()!=pl)
+        i->setProcessPolicy(NpcProcessPolicy::AiNormal);
+      continue;
+      }
     float dist = (i->position()-plPos).quadLength();
     if(dist<nearDist){
       npcNear.push_back(i.get());
@@ -366,6 +372,7 @@ void WorldObjects::removeNpc(Npc& npc) {
   auto ptr = takeNpc(&npc);
   if(ptr==nullptr)
     return;
+  ptr->clearAiQueue();
   auto& point = owner.deadPoint();
   npc.attachToPoint(nullptr);
   npc.setPosition(point.position());

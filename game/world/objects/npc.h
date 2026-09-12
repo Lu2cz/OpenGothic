@@ -374,6 +374,9 @@ class Npc final {
 
     bool      isAiQueueEmpty() const;
     bool      isAiBusy() const;
+    bool      isAiNavigationActive() const;
+    uint64_t  aiWaitTicket() const;
+    bool      isAiActionPending(uint64_t ticket) const;
     void      clearAiQueue();
 
     auto      currentWayPoint() const -> const WayPoint* { return currentFp; }
@@ -607,6 +610,7 @@ class Npc final {
     ScriptFn                       aiPrevState;
     AiQueue                        aiQueue;
     AiQueue                        aiQueueOverlay;
+    uint64_t                       aiActionTicket=0;
     std::vector<Routine>           routines;
 
     Interactive*                   currentInteract=nullptr;

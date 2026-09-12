@@ -28,6 +28,7 @@
 #include "utils/string_frm.h"
 #include "world/triggers/abstracttrigger.h"
 #include "world/objects/npc.h"
+#include "world/aiqueue.h"
 #include "game/serialize.h"
 #include "game/globaleffects.h"
 #include "utils/gthfont.h"
@@ -1145,6 +1146,8 @@ void MainWindow::saveGame(std::string_view slot, std::string_view name) {
       Tempest::WFile f(temporary);
       {
       Serialize s(f);
+      if(auto mode=std::getenv("OPENGOTHIC_AI_WAIT_PROBE"); mode!=nullptr && std::string_view(mode)=="legacy-nav-seed")
+        s.setVersion(55);
       game->save(s,name,pm);
       }
       if(!f.flush()) throw std::runtime_error("unable to flush savegame file");
@@ -1275,6 +1278,7 @@ void MainWindow::render(){
     static unsigned dialogProbeRounds=0;
     static bool dialogProbePending=false;
     static bool captainProbeSaved=false;
+    static bool captainFixtureSaved=false;
     static bool beachProbeSaved=false;
     static bool cityProbeSaved=false;
     static bool worldProbeTransitioned=false;
@@ -1287,6 +1291,9 @@ void MainWindow::render(){
     static Tempest::Vec3 worldProbeWalkStart;
     static double cityMeasuredAt=0;
     static bool forestProbeSaved=false;
+    static bool aiWaitProbeSaved=false;
+    static uint64_t aiWaitProbeTicket=0;
+    static uint8_t aiWaitProbeStep=0;
     static size_t beachTorchCount=0;
     static Item* beachTorch=nullptr;
     static float beachTorchStartY=0;
@@ -1296,6 +1303,8 @@ void MainWindow::render(){
     const double profileEntry = profileEnabled ? profileNow() : 0;
     const bool profileReady = profileEnabled && Gothic::inst().world()!=nullptr &&
                               Gothic::inst().checkLoading()==Gothic::LoadState::Idle;
+    const auto aiWaitMode = std::getenv("OPENGOTHIC_AI_WAIT_PROBE");
+    const bool legacyNavProbe = aiWaitMode!=nullptr && std::string_view(aiWaitMode).starts_with("legacy-nav");
     if(profileReady && loadedAt==0) {
 
       if(std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_GATE_PROBE"))=="open")
@@ -1311,7 +1320,7 @@ void MainWindow::render(){
       keyUpEvent(escape);
       loadedAt = profileEntry;
       }
-    bool sampling = profileReady && profileEntry-loadedAt>=10000;
+    bool sampling = profileReady && (legacyNavProbe || profileEntry-loadedAt>=10000);
     if(sampling && profileAt==0) {
       if(auto mode=std::getenv("OPENGOTHIC_CITY_PROBE")) {
         auto& w = *Gothic::inst().world();
@@ -1395,14 +1404,83 @@ void MainWindow::render(){
         fabio->startDialog(*w.player());
         Log::i("[FOREST_PROBE] started Fabio dialogue");
         }
+      if(auto mode=std::getenv("OPENGOTHIC_AI_WAIT_PROBE")) {
+        auto& w = *Gothic::inst().world();
+        auto& self = *w.player();
+        auto* target = w.findNpcByInstance(w.script().getVm().find_symbol_by_name("NONE_1_JORN")->index());
+        auto* other = w.findNpcByInstance(w.script().getVm().find_symbol_by_name("NONE_5_FABIO")->index());
+        if(target==nullptr || other==nullptr || dialogs.isActive() || w.currentCs()!=nullptr)
+          throw std::runtime_error("AI wait persistence probe needs normal world control");
+        if(std::string_view(mode)=="seed") {
+          self.clearAiQueue();
+          target->clearAiQueue();
+          target->aiPush(AiQueue::aiWait(16000));
+          self.aiPush(AiQueue::aiWaitTillEnd(*target,target->aiWaitTicket()));
+          Log::i("[AI_WAIT_PROBE] seeded self_empty=",self.isAiQueueEmpty()," target_busy=",target->isAiBusy());
+          }
+        if(std::string_view(mode)=="edges") {
+          self.clearAiQueue();
+          target->clearAiQueue();
+          other->clearAiQueue();
+          auto* point=w.findPoint("PART_13_NAV_11",false);
+          if(point==nullptr)
+            throw std::runtime_error("AI wait edge probe needs navigation point");
+          self.setPosition(point->position()+Tempest::Vec3(0,0,120));
+          target->setPosition(point->position());
+          other->setPosition(point->position()+Tempest::Vec3(100,0,0));
+          target->setProcessPolicy(NpcProcessPolicy::AiNormal);
+          other->setProcessPolicy(NpcProcessPolicy::AiNormal);
+          self.aiPush(AiQueue::aiWaitTillEnd(*target,target->aiWaitTicket()));
+          self.aiPush(AiQueue::aiWaitTillEnd(self,self.aiWaitTicket()));
+          target->aiPush(AiQueue::aiWait(1));
+          aiWaitProbeTicket=target->aiWaitTicket();
+          Log::i("[AI_WAIT_PROBE] edges started");
+          }
+        if(std::string_view(mode)=="legacy-nav-seed") {
+          auto* point=w.findPoint("PART_13_NAV_11",false);
+          if(point==nullptr)
+            throw std::runtime_error("AI wait legacy navigation probe needs navigation point");
+          self.clearAiQueue();
+          target->clearAiQueue();
+          target->setPosition(point->position()+Tempest::Vec3(0,0,300));
+          target->setProcessPolicy(NpcProcessPolicy::AiNormal);
+          target->aiPush(AiQueue::aiGoToPoint(*point));
+          aiWaitProbeTicket=target->aiWaitTicket();
+          Log::i("[AI_WAIT_PROBE] legacy navigation seeded ticket=",aiWaitProbeTicket);
+          }
+        if(std::string_view(mode)=="legacy-nav-reload") {
+          self.clearAiQueue();
+          aiWaitProbeTicket=target->aiWaitTicket();
+          if(aiWaitProbeTicket==0)
+            throw std::runtime_error("AI wait legacy navigation ticket was not restored");
+          Log::i("[AI_WAIT_PROBE] legacy navigation restored ticket=",aiWaitProbeTicket);
+          }
+        }
       if(std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr) {
         auto& w = *Gothic::inst().world();
         auto& vm = w.script().getVm();
         auto npc = w.findNpcByInstance(vm.find_symbol_by_name("NONE_1_JORN")->index());
         auto pl = w.player();
-        pl->setPosition(npc->position()+Tempest::Vec3(120,0,0));
-        npc->startDialog(*pl);
-        Log::i("[CAPTAIN_PROBE] started Jorn dialogue");
+        if(std::string_view(std::getenv("OPENGOTHIC_CAPTAIN_PROBE"))=="prepare") {
+          auto* point=w.findPoint("SHIP_JORN_02",false);
+          if(npc==nullptr || point==nullptr || !w.script().probeCaptainFixture(*pl,*npc))
+            throw std::runtime_error("Captain fixture requires the fresh ship scene");
+          npc->clearAiQueue();
+          npc->setPosition(point->position());
+          pl->setPosition(point->position()+Tempest::Vec3(120,0,0));
+          Log::i("[CAPTAIN_PROBE] fixture ready");
+          captainFixtureSaved=true;
+          saveGame("save_slot_2.sav","Captain fixture");
+          } else {
+          auto* point=w.findPoint("SHIP_JORN_02",false);
+          if(npc==nullptr || point==nullptr)
+            throw std::runtime_error("Captain probe requires the ship scene");
+          npc->clearGoTo();
+          npc->setPosition(point->position());
+          pl->setPosition(point->position()+Tempest::Vec3(120,0,0));
+          npc->startDialog(*pl);
+          Log::i("[CAPTAIN_PROBE] started Jorn dialogue");
+          }
         }
       if(std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr) {
         auto& w = *Gothic::inst().world();
@@ -2015,6 +2093,10 @@ void MainWindow::render(){
       Log::i("[CAPTAIN_PROBE] save finalized");
       Tempest::SystemApi::exit();
       }
+    if(sampling && std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr && captainFixtureSaved) {
+      Log::i("[CAPTAIN_PROBE] fixture finalized");
+      Tempest::SystemApi::exit();
+      }
     if(sampling && std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr && !captainProbeSaved && profileFrames%300==0) {
       auto& w = *Gothic::inst().world();
       auto& vm = w.script().getVm();
@@ -2059,15 +2141,124 @@ void MainWindow::render(){
           device.readPixels(textureCast<const Texture2d&>(shot)).save(profileFrames==300 ? "forest-line-300.png" : "forest-line-600.png");
           }
         if(chosen && !running && !dialogs.isActive() && w.currentCs()==nullptr) {
+          if(!w.player()->isPlayer())
+            throw std::runtime_error("Forest dialogue did not restore player control");
           for(auto name : {"NONE_1_JORN","NONE_5_FABIO"}) {
             auto n = w.findNpcByInstance(vm.find_symbol_by_name(name)->index());
             if(&w.script().dialogSpeaker(*n)!=n)
               throw std::runtime_error("Trialogue speaker leaked after finish");
             }
+          Log::i("[FOREST_PROBE] player control verified");
           Log::i("[FOREST_PROBE] speaker reset verified");
           Log::i("[FOREST_PROBE] complete");
           saveGame("save_slot_2.sav","Forest dialogue test");
           forestProbeSaved=true;
+          }
+        }
+      }
+    if(sampling) {
+      if(auto mode=std::getenv("OPENGOTHIC_AI_WAIT_PROBE")) {
+        auto& self = *Gothic::inst().world()->player();
+        auto& w = *Gothic::inst().world();
+        auto* target = w.findNpcByInstance(w.script().getVm().find_symbol_by_name("NONE_1_JORN")->index());
+        auto* other = w.findNpcByInstance(w.script().getVm().find_symbol_by_name("NONE_5_FABIO")->index());
+        if(std::string_view(mode)=="edges") {
+          if(aiWaitProbeStep==0 && self.isAiQueueEmpty()) {
+            Log::i("[AI_WAIT_PROBE] empty=1");
+            Log::i("[AI_WAIT_PROBE] self=1");
+            self.aiPush(AiQueue::aiWaitTillEnd(*target,aiWaitProbeTicket));
+            aiWaitProbeStep=1;
+            }
+          if(aiWaitProbeStep==1 && self.isAiQueueEmpty()) {
+            Log::i("[AI_WAIT_PROBE] completed=1");
+            target->clearAiQueue();
+            target->aiPush(AiQueue::aiWait(250));
+            aiWaitProbeTicket=target->aiWaitTicket();
+            self.aiPush(AiQueue::aiWaitTillEnd(*target,aiWaitProbeTicket));
+            target->aiPush(AiQueue::aiWait(4000));
+            aiWaitProbeStep=2;
+            }
+          if(aiWaitProbeStep==2 && self.isAiQueueEmpty() && target->isAiBusy()) {
+            Log::i("[AI_WAIT_PROBE] snapshot=1");
+            self.clearAiQueue();
+            target->clearAiQueue();
+            other->clearAiQueue();
+            target->aiPush(AiQueue::aiWait(500));
+            other->aiPush(AiQueue::aiWait(250));
+            target->aiPush(AiQueue::aiWaitTillEnd(*other,other->aiWaitTicket()));
+            other->aiPush(AiQueue::aiWaitTillEnd(*target,target->aiWaitTicket()));
+            aiWaitProbeStep=3;
+            }
+          if(aiWaitProbeStep==3 && target->isAiQueueEmpty() && other->isAiQueueEmpty()) {
+            Log::i("[AI_WAIT_PROBE] reciprocal=1");
+            target->aiPush(AiQueue::aiWait(4000));
+            self.aiPush(AiQueue::aiWaitTillEnd(*target,target->aiWaitTicket()));
+            aiWaitProbeStep=4;
+            }
+          if(aiWaitProbeStep==4 && !self.isAiQueueEmpty() && target->isAiBusy()) {
+            w.removeNpc(*target);
+            aiWaitProbeStep=5;
+            }
+          if(aiWaitProbeStep==5 && !aiWaitProbeSaved && self.isAiQueueEmpty()) {
+            Log::i("[AI_WAIT_PROBE] removed=1");
+            Log::i("[AI_WAIT_PROBE] edges complete");
+            aiWaitProbeSaved=true;
+            saveGame("save_slot_2.sav","AI wait edge test");
+            }
+          if(profileFrames>=720 && !aiWaitProbeSaved)
+            throw std::runtime_error("AI wait edge probe timed out");
+          }
+        if(std::string_view(mode)=="seed" && !aiWaitProbeSaved && profileFrames==30) {
+          if(self.isAiQueueEmpty())
+            throw std::runtime_error("AI wait persistence probe was not queued");
+          Log::i("[AI_WAIT_PROBE] save pending=1");
+          aiWaitProbeSaved=true;
+          saveGame("save_slot_2.sav","AI wait persistence test");
+          }
+        if(std::string_view(mode)=="reload" && profileFrames==0) {
+          if(self.isAiQueueEmpty())
+            throw std::runtime_error("AI wait was lost on reload");
+          Log::i("[AI_WAIT_PROBE] restored pending=1");
+          }
+        if(std::string_view(mode)=="reload" && profileFrames==120) {
+          if(self.isAiQueueEmpty())
+            throw std::runtime_error("AI wait did not block after reload");
+          Log::i("[AI_WAIT_PROBE] still pending=1");
+          }
+        if(std::string_view(mode)=="reload" && !aiWaitProbeSaved && profileFrames==420) {
+          if(!self.isAiQueueEmpty())
+            throw std::runtime_error("AI wait did not finish after reload");
+          Log::i("[AI_WAIT_PROBE] complete");
+          aiWaitProbeSaved=true;
+          saveGame("save_slot_2.sav","AI wait persistence test");
+          }
+        if(std::string_view(mode)=="legacy-nav-seed" && !aiWaitProbeSaved && profileFrames==30) {
+          if(!target->isAiNavigationActive() || !target->isAiActionPending(aiWaitProbeTicket))
+            throw std::runtime_error("AI wait legacy navigation was not active before save");
+          Log::i("[AI_WAIT_PROBE] legacy navigation save pending=1");
+          aiWaitProbeSaved=true;
+          saveGame("save_slot_2.sav","AI wait legacy navigation test");
+          }
+        if(std::string_view(mode)=="legacy-nav-reload" && profileFrames==30) {
+          if(self.isAiQueueEmpty() || !target->isAiNavigationActive() || !target->isAiActionPending(aiWaitProbeTicket))
+            throw std::runtime_error("AI wait legacy navigation did not block after reload");
+          Log::i("[AI_WAIT_PROBE] legacy navigation still pending=1");
+          }
+        if(std::string_view(mode)=="legacy-nav-reload" && profileFrames==0) {
+          if(!target->isAiNavigationActive() || !target->isAiActionPending(aiWaitProbeTicket))
+            throw std::runtime_error("AI wait legacy navigation was not active after reload");
+          self.aiPush(AiQueue::aiWaitTillEnd(*target,aiWaitProbeTicket));
+          }
+        if(std::string_view(mode)=="legacy-nav-reload" && !aiWaitProbeSaved && profileFrames==420) {
+          if(!self.isAiQueueEmpty())
+            throw std::runtime_error("AI wait legacy navigation did not finish after reload");
+          Log::i("[AI_WAIT_PROBE] legacy navigation complete");
+          aiWaitProbeSaved=true;
+          saveGame("save_slot_2.sav","AI wait legacy navigation test");
+          }
+        if(aiWaitProbeSaved && Gothic::inst().checkLoading()==Gothic::LoadState::Idle) {
+          Log::i("[AI_WAIT_PROBE] save finalized");
+          Tempest::SystemApi::exit();
           }
         }
       }
@@ -2255,7 +2446,7 @@ void MainWindow::render(){
           }
         }
       }
-    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u))))))) {
+    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,

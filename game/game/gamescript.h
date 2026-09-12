@@ -75,6 +75,7 @@ class GameScript final {
     void         saveVar(Serialize& fout);
     void         loadVar(Serialize& fin);
     void         probePersistence(bool finish);
+    bool         probeCaptainFixture(Npc& player, Npc& jorn);
     void         probeLockFocus(Npc& npc, Interactive& lock, bool restored);
     void         beginWorldTransitionProbe(Npc& npc, Interactive& lock);
     void         checkWorldTransitionProbe(Npc& npc, Interactive* returnedLock);
@@ -398,6 +399,7 @@ class GameScript final {
     void ai_setwalkmode      (std::shared_ptr<zenkit::INpc> npcRef, int modeBits);
     void ai_wait             (std::shared_ptr<zenkit::INpc> npcRef, float ms);
     void ai_waitms           (std::shared_ptr<zenkit::INpc> npcRef, int ms);
+    void ai_waittillend      (std::shared_ptr<zenkit::INpc> selfRef, std::shared_ptr<zenkit::INpc> targetRef);
     void ai_aligntowp        (std::shared_ptr<zenkit::INpc> npcRef);
     void ai_gotowp           (std::shared_ptr<zenkit::INpc> npcRef, std::string_view waypoint);
     void ai_gotofp           (std::shared_ptr<zenkit::INpc> npcRef, std::string_view waypoint);
