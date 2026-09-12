@@ -1,6 +1,7 @@
 """Exercise Archolos's installed boss UI script through a private save."""
 import argparse
 import hashlib
+import json
 import os
 from pathlib import Path
 import shutil
@@ -14,6 +15,8 @@ p.add_argument("--mode", choices=("seed", "reload"), required=True)
 a = p.parse_args()
 exe, game, save, out = (getattr(a, name).resolve() for name in ("executable", "game", "save", "output"))
 original = hashlib.sha256(save.read_bytes()).digest()
+source_hash = original.hex()
+executable_hash = hashlib.sha256(exe.read_bytes()).hexdigest()
 out.mkdir(parents=True, exist_ok=False)
 shutil.copy2(save, out / "save_slot_1.sav")
 (out / "Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")
@@ -39,4 +42,8 @@ try:
         assert trace.count("[BOSS_UI] view freed=") >= 2
 finally:
     assert hashlib.sha256(save.read_bytes()).digest() == original, "Source save changed"
+output_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                 for p in out.glob("save_slot_*.sav")}
+(out / "manifest.json").write_text(json.dumps({"executable": executable_hash,
+    "input_save": source_hash, "output_saves": output_hashes}, indent=2) + "\n")
 print(f"PASS synthetic {a.mode}: {out}")
