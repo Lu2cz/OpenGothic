@@ -147,16 +147,12 @@ Size GthFont::textSize(const uint8_t* b, const uint8_t* e) const {
   int x  = 0, y = h;
   int totalW = 0;
 
-  for(size_t i=0;;) {
+  for(size_t i=0;b+i!=e;) {
     uint8_t id = b[i];
-    if(b+i==e) {
-      totalW = std::max(totalW,x);
-      break;
-      }
-    else if(id=='\n') {
+    if(id=='\n') {
       totalW = std::max(totalW,x);
       ++i;
-      while(b[i]==' ' && b+i!=e)
+      while(b+i!=e && b[i]==' ')
         ++i;
       y+=h;
       x=0;
@@ -171,6 +167,7 @@ Size GthFont::textSize(const uint8_t* b, const uint8_t* e) const {
       ++i;
       }
     }
+  totalW = std::max(totalW,x);
 
   return Size(totalW,y);
   }
