@@ -101,6 +101,10 @@ Size GthFont::processText(Painter* p, int bx, int by, int bw, int bh,
   }
 
 void GthFont::drawText(Tempest::Painter &p, int bx, int by, std::string_view txtChar) const {
+  drawText(p,bx,by,txtChar,color);
+  }
+
+void GthFont::drawText(Tempest::Painter &p, int bx, int by, std::string_view txtChar, const Color& clr) const {
   if(tex==nullptr || txtChar.empty())
     return;
 
@@ -108,7 +112,7 @@ void GthFont::drawText(Tempest::Painter &p, int bx, int by, std::string_view txt
   const auto&    fnt = *pfnt;
 
   auto b = p.brush();
-  p.setBrush(Brush(*tex,color));
+  p.setBrush(Brush(*tex,clr));
 
   int   h  = pixelSize();
   int   x  = bx, y=by-h;

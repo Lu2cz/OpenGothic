@@ -1656,6 +1656,18 @@ void MainWindow::render(){
           vm.call_function("START_BOSSUI",pl->handlePtr(),1);
           Log::i("[BOSS_UI] synthetic start active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
                  " hp=",pl->attribute(ATR_HITPOINTS));
+          } else if(std::string_view(mode)=="event") {
+          auto* razor = w.findNpcByInstance(vm.find_symbol_by_name("RAZOR_ARMORED")->index());
+          if(razor==nullptr)
+            razor = w.addNpc(vm.find_symbol_by_name("RAZOR_ARMORED")->index(),pl->position()+Tempest::Vec3(200,0,0));
+          if(razor==nullptr)
+            throw std::runtime_error("SQ416 fixture could not spawn RAZOR_ARMORED");
+          vm.find_symbol_by_name("MIS_SQ416")->set_int(vm.find_symbol_by_name("LOG_RUNNING")->get_int());
+          vm.find_symbol_by_name("SQ416_HUNTERSSLEEP")->set_int(2);
+          vm.find_symbol_by_name("SQ416_STARTBOSSFIGHT")->set_int(1);
+          vm.call_function("EVENTSMANAGER_SQ416");
+          Log::i("[BOSS_UI] event start active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
+                 " state=",vm.find_symbol_by_name("SQ416_STARTBOSSFIGHT")->get_int()," hp=",razor->attribute(ATR_HITPOINTS));
           } else {
           Log::i("[BOSS_UI] reload active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
                  " hp=",pl->attribute(ATR_HITPOINTS));
@@ -1757,6 +1769,21 @@ void MainWindow::render(){
         saveGame("save_slot_2.sav","Boss UI synthetic fixture");
         Log::i("[BOSS_UI] synthetic save requested");
         }
+      if(mode=="event" && profileFrames==30) {
+        auto* razor = w.findNpcByInstance(vm.find_symbol_by_name("RAZOR_ARMORED")->index());
+        razor->changeAttribute(ATR_HITPOINTS,-razor->attribute(ATR_HITPOINTS)/2,false);
+        Log::i("[BOSS_UI] event health active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
+               " hp=",razor->attribute(ATR_HITPOINTS));
+        }
+      if(mode=="event" && profileFrames==60) {
+        auto* razor = w.findNpcByInstance(vm.find_symbol_by_name("RAZOR_ARMORED")->index());
+        razor->changeAttribute(ATR_HITPOINTS,-razor->attribute(ATR_HITPOINTS),false);
+        vm.call_function("EVENTSMANAGER_SQ416");
+        Log::i("[BOSS_UI] event finish active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
+               " state=",vm.find_symbol_by_name("SQ416_STARTBOSSFIGHT")->get_int()," dead=",razor->isDead());
+        }
+      if(mode=="event" && profileFrames==90)
+        Log::i("[BOSS_UI] event cleanup active=",vm.find_symbol_by_name("BOSSUI")->get_int());
       if(mode=="reload" && profileFrames==60) {
         vm.call_function("FINISH_BOSSUI");
         Log::i("[BOSS_UI] synthetic finish active=",vm.find_symbol_by_name("BOSSUI")->get_int());
