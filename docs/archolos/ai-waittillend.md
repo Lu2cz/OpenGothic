@@ -92,4 +92,5 @@ fixtures are rejection evidence, not supported load boundaries.
 Visual actor/camera staging remains a separate investigation in
 [#21](https://github.com/Lu2cz/OpenGothic/issues/21). World-render screenshots
 show an empty later camera shot even though required speech now plays; speaker
-logs alone do not establish visual correctness. PR #20 remains draft/uninstalled.
+logs alone do not establish visual correctness. Integration and installed-app
+verification are recorded in [#6](https://github.com/Lu2cz/OpenGothic/issues/6).

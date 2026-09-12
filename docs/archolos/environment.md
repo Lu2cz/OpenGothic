@@ -94,6 +94,10 @@ binaries reject v2 saves; keep pre-upgrade saves with rollback binaries. See
 [lockpick regression coverage](lockpick-regression.md) for ownership, migration
 and exact verification boundaries.
 
+NPC queue synchronization writes native world saves version 56 and reads version 55.
+Keep rollback saves paired with their executable: older binaries cannot read the new
+queue layout safely. See [AI wait coverage and supported save boundaries](ai-waittillend.md).
+
 Before replacing either shared app, ensure no test/build/game run conflicts; preserve
 the prior playable executable, test the candidate privately, and verify the bundle's
 ad-hoc signature. Record candidate source/dependency revisions, executable hashes,
