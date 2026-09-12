@@ -2075,13 +2075,23 @@ void MainWindow::render(){
     numMesh[cmdId].update(device,numOverlay);
     profileStamp(3);
 
+    const auto imageId = swapchain.currentImage();
     CommandBuffer& cmd = commands[cmdId];
     {
     auto enc = cmd.startEncoding(device);
-    renderer.draw(enc,cmdId,swapchain.currentImage(),uiMesh[cmdId],numMesh[cmdId],inventory,video);
+    renderer.draw(enc,cmdId,imageId,uiMesh[cmdId],numMesh[cmdId],inventory,video);
     }
     profileStamp(4);
     sync = device.submit(cmd);
+    if(sampling && std::getenv("OPENGOTHIC_BOSS_UI_CAPTURE")!=nullptr &&
+       (profileFrames==0 || profileFrames==35 || profileFrames==95)) {
+      sync.wait();
+      const char* phase = profileFrames==0 ? "full" : profileFrames==35 ? "half" : "cleanup";
+      auto file = string_frm("boss-ui-",phase,".png");
+      auto capture = renderer.capture(cmdId,uiMesh[cmdId],numMesh[cmdId],inventory,video);
+      device.readPixels(capture).save(file.c_str());
+      Log::i("[BOSS_UI] capture=",phase);
+      }
     device.present(swapchain);
     profileStamp(5);
     cmdId = (cmdId+1u)%Resources::MaxFramesInFlight;

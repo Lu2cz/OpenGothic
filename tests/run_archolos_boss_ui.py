@@ -22,6 +22,8 @@ shutil.copy2(save, out / "save_slot_1.sav")
 (out / "Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")
 env = {key: value for key, value in os.environ.items() if not key.startswith("OPENGOTHIC_")}
 env.update(OPENGOTHIC_PROFILE="1", OPENGOTHIC_BOSS_UI_PROBE=a.mode)
+if a.mode == "event":
+    env["OPENGOTHIC_BOSS_UI_CAPTURE"] = "1"
 try:
     with (out / "terminal.log").open("w") as log:
         result = subprocess.run([str(exe), "-g", str(game), "-game:TheChroniclesOfMyrtana.ini",
@@ -56,10 +58,11 @@ try:
         assert cleanup.count("[BOSS_UI] view freed=") >= 2
         assert "[BOSS_UI] event cleanup active=0" in cleanup
         assert "[BOSS_UI] draw texture=" not in cleanup.split("[BOSS_UI] view freed=", 2)[2]
+        assert all((out / f"boss-ui-{phase}.png").is_file() for phase in ("full", "half", "cleanup"))
 finally:
     assert hashlib.sha256(save.read_bytes()).digest() == original, "Source save changed"
 output_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-                 for p in out.glob("save_slot_*.sav")}
+                 for p in (*out.glob("save_slot_*.sav"), *out.glob("boss-ui-*.png"))}
 (out / "manifest.json").write_text(json.dumps({"executable": executable_hash,
     "input_save": source_hash, "output_saves": output_hashes}, indent=2) + "\n")
 print(f"PASS synthetic {a.mode}: {out}")

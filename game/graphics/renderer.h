@@ -30,8 +30,13 @@ class Renderer final {
     void dbgDraw(Tempest::Painter& painter);
 
     Tempest::Attachment screenshoot(uint8_t frameId);
+    Tempest::Attachment capture(uint8_t frameId, Tempest::VectorImage::Mesh& uiLayer, Tempest::VectorImage::Mesh& numOverlay,
+                                InventoryMenu& inventory, VideoWidget& video);
 
   private:
+    void draw(Tempest::Encoder<Tempest::CommandBuffer>& cmd, uint8_t cmdId, Tempest::Attachment& result,
+              Tempest::VectorImage::Mesh& uiLayer, Tempest::VectorImage::Mesh& numOverlay,
+              InventoryMenu& inventory, VideoWidget& video);
     enum Quality : uint8_t {
       None,
       VolumetricLQ,
