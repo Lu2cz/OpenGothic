@@ -225,6 +225,18 @@ void MainWindow::paintEvent(PaintEvent& event) {
       drawMsg(p);
 
       auto focus = world->validateFocus(player.focus());
+      if(std::getenv("OPENGOTHIC_PROFILE") && std::getenv("OPENGOTHIC_BOSS_UI_PROBE")) {
+        if(auto target=std::getenv("OPENGOTHIC_BOSS_UI_FOCUS")) {
+          focus = Focus();
+          if(std::string_view(target)!="none") {
+            auto& vm = world->script().getVm();
+            auto* npc = world->findNpcByInstance(vm.find_symbol_by_name(
+                std::string_view(target)=="boss" ? "RAZOR_ARMORED" : "VLK_3015_DETLOW")->index());
+            if(npc)
+              focus = Focus(*npc);
+            }
+          }
+        }
       if(auto pl = Gothic::inst().player())
         world->script().setNpcFocus(*pl,focus.npc);
 
@@ -1301,6 +1313,7 @@ void MainWindow::render(){
     static bool bossUiProbeHealth=false;
     static bool bossUiProbeFinished=false;
     static bool bossUiProbeCleaned=false;
+    static uint32_t bossUiGeometryFrame=uint32_t(-1);
     static uint64_t aiWaitProbeTicket=0;
     static uint8_t aiWaitProbeStep=0;
     static size_t beachTorchCount=0;
@@ -1310,6 +1323,8 @@ void MainWindow::render(){
       return std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
       };
     const double profileEntry = profileEnabled ? profileNow() : 0;
+    const auto bossMode = std::getenv("OPENGOTHIC_BOSS_UI_PROBE");
+    const bool bossGeometry = bossMode && std::string_view(bossMode)=="event-geometry";
     const bool profileReady = profileEnabled && Gothic::inst().world()!=nullptr &&
                               Gothic::inst().checkLoading()==Gothic::LoadState::Idle;
     const auto aiWaitMode = std::getenv("OPENGOTHIC_AI_WAIT_PROBE");
@@ -1663,7 +1678,7 @@ void MainWindow::render(){
           vm.call_function("START_BOSSUI",pl->handlePtr(),1);
           Log::i("[BOSS_UI] synthetic start active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
                  " hp=",pl->attribute(ATR_HITPOINTS));
-          } else if(std::string_view(mode)=="event" || std::string_view(mode)=="event-seed") {
+          } else if(std::string_view(mode)=="event" || std::string_view(mode)=="event-seed" || bossGeometry) {
           vm.call_function<std::string>("RAZORBOSSCOMMAND",std::string_view{});
           auto* razor = w.findNpcByInstance(vm.find_symbol_by_name("RAZOR_ARMORED")->index());
           if(razor==nullptr)
@@ -1677,6 +1692,16 @@ void MainWindow::render(){
           pl->setPosition(approach->position());
           pl->setDirection(approach->direction());
           pl->updateTransform();
+          if(bossGeometry) {
+            auto* detlow = w.findNpcByInstance(vm.find_symbol_by_name("VLK_3015_DETLOW")->index());
+            if(detlow==nullptr)
+              throw std::runtime_error("SQ416 geometry fixture needs Detlow");
+            detlow->clearAiQueue();
+            detlow->clearState(true);
+            detlow->clearGoTo();
+            detlow->setPosition(pl->position()+Tempest::Vec3(-250,0,250));
+            detlow->updateTransform();
+            }
           if(auto camera=Gothic::inst().camera())
             camera->reset(pl);
           const auto heroPos = pl->position(), razorPos = razor->position();
@@ -1782,6 +1807,27 @@ void MainWindow::render(){
       auto& w = *Gothic::inst().world();
       auto& vm = w.script().getVm();
       auto* pl = w.player();
+      if(bossGeometry && bossUiGeometryFrame!=profileFrames) {
+        bossUiGeometryFrame = profileFrames;
+        const char* target = nullptr;
+        if(profileFrames==0 || profileFrames==55) target = "boss";
+        if(profileFrames==15 || profileFrames==200) target = "other";
+        if(profileFrames==40) target = "none";
+        if(target) {
+          setenv("OPENGOTHIC_BOSS_UI_FOCUS",target,1);
+          Log::i("[BOSS_UI] geometry focus=",target," frame=",profileFrames);
+          }
+        if(profileFrames==70) setFullscreen(true);
+        if(profileFrames==120) {
+          rootMenu.setMenu("MENU_LOG");
+          rootMenu.setPlayer(*pl);
+          Log::i("[BOSS_UI] geometry menu_open=",rootMenu.isActive()," tick=",w.tickCount());
+          }
+        if(profileFrames==150) {
+          Log::i("[BOSS_UI] geometry menu_close tick=",w.tickCount());
+          rootMenu.closeAll();
+          }
+        }
       if(mode=="seed" && profileFrames==30) {
         pl->handle().attribute[ATR_HITPOINTS] /= 2;
         vm.call_function("BOSSUI_FF");
@@ -1793,7 +1839,7 @@ void MainWindow::render(){
         saveGame("save_slot_2.sav","Boss UI synthetic fixture");
         Log::i("[BOSS_UI] synthetic save requested");
         }
-      if((mode=="event" || mode=="event-seed") && profileFrames==30 && !bossUiProbeHealth) {
+      if((mode=="event" || mode=="event-seed" || bossGeometry) && profileFrames==30 && !bossUiProbeHealth) {
         bossUiProbeHealth = true;
         auto* razor = w.findNpcByInstance(vm.find_symbol_by_name("RAZOR_ARMORED")->index());
         razor->changeAttribute(ATR_HITPOINTS,-razor->attribute(ATR_HITPOINTS)/2,false);
@@ -1805,7 +1851,7 @@ void MainWindow::render(){
         saveGame("save_slot_2.sav","Active SQ416 boss fixture");
         Log::i("[BOSS_UI] event save requested");
         }
-      if((mode=="event" || mode=="event-reload") && profileFrames==60 && !bossUiProbeFinished) {
+      if((mode=="event" || mode=="event-reload" || bossGeometry) && profileFrames==(bossGeometry ? 180u : 60u) && !bossUiProbeFinished) {
         bossUiProbeFinished = true;
         auto* razor = w.findNpcByInstance(vm.find_symbol_by_name("RAZOR_ARMORED")->index());
         razor->changeAttribute(ATR_HITPOINTS,-razor->attribute(ATR_HITPOINTS),false);
@@ -1813,7 +1859,7 @@ void MainWindow::render(){
         Log::i("[BOSS_UI] event finish active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
                " state=",vm.find_symbol_by_name("SQ416_STARTBOSSFIGHT")->get_int()," dead=",razor->isDead());
         }
-      if((mode=="event" || mode=="event-reload") && profileFrames==90 && !bossUiProbeCleaned) {
+      if((mode=="event" || mode=="event-reload" || bossGeometry) && profileFrames==(bossGeometry ? 210u : 90u) && !bossUiProbeCleaned) {
         bossUiProbeCleaned = true;
         Log::i("[BOSS_UI] event cleanup active=",vm.find_symbol_by_name("BOSSUI")->get_int());
         }
@@ -2116,17 +2162,30 @@ void MainWindow::render(){
     }
     profileStamp(4);
     sync = device.submit(cmd);
+    const char* bossCapture = nullptr;
+    if(bossGeometry) {
+      switch(profileFrames) {
+        case 5: bossCapture="boss-full"; break;
+        case 20: bossCapture="other"; break;
+        case 45: bossCapture="none"; break;
+        case 60: bossCapture="boss-half"; break;
+        case 110: bossCapture="resized"; break;
+        case 140: bossCapture="menu"; break;
+        case 170: bossCapture="resumed"; break;
+        case 215: bossCapture="cleanup"; break;
+        }
+      }
     if(sampling && std::getenv("OPENGOTHIC_BOSS_UI_CAPTURE")!=nullptr &&
-       (profileFrames==0 || profileFrames==35 || profileFrames==95)) {
+       (bossCapture || (!bossGeometry && (profileFrames==0 || profileFrames==35 || profileFrames==95)))) {
       sync.wait();
       const auto probe = std::getenv("OPENGOTHIC_BOSS_UI_PROBE");
       const auto mode = std::string_view(probe ? probe : "");
-      const char* phase = profileFrames==0 ? (mode=="event-reload" ? "restored" : "full") :
+      const char* phase = bossCapture ? bossCapture : profileFrames==0 ? (mode=="event-reload" ? "restored" : "full") :
                           profileFrames==35 ? "half" : mode=="event-seed" ? "active" : "cleanup";
       auto file = string_frm("boss-ui-",phase,".png");
       auto capture = renderer.capture(cmdId,uiMesh[cmdId],numMesh[cmdId],inventory,video);
       device.readPixels(capture).save(file.c_str());
-      Log::i("[BOSS_UI] capture=",phase);
+      Log::i("[BOSS_UI] capture=",phase," viewport=",w(),",",h()," focus_y=",Gothic::inst().world()->script().focusBarY(h()));
       }
     device.present(swapchain);
     profileStamp(5);
@@ -2558,7 +2617,7 @@ void MainWindow::render(){
           }
         }
       }
-    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
+    if(sampling && ++profileFrames==(bossGeometry ? 240u : std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,

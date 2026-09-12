@@ -2951,7 +2951,15 @@ int DirectMemory::focusBarY(int height) {
   }
 
 void DirectMemory::drawUi(Tempest::Painter& p, int width, int height) {
+  const bool resized = uiWidth!=std::max(width,1) || uiHeight!=std::max(height,1);
   setUiSize(width,height);
+  if(resized) {
+    // Native replacement for the installed screen-resolution callbacks. Refresh
+    // script metrics first; callbacks may delete/recreate views, before iteration.
+    for(auto name : {"PRINT_GETSCREENSIZE", "_BAR_UPDATERESOLUTION", "_BOSSUI_UPDATERESOLUTION"})
+      if(auto sym = vm.find_symbol_by_name(name))
+        vm.call_function(sym);
+    }
   constexpr int virtualSize = 8192;
   const auto toPixel = [](int value, int size) {
     return int((int64_t(value)*size)/virtualSize);
@@ -2990,6 +2998,8 @@ void DirectMemory::drawUi(Tempest::Painter& p, int width, int height) {
       if(!value.empty() && font!=fontNames.end()) {
         const auto color = uint32_t(text->colored!=0 ? text->color : -1);
         auto& gfont = Resources::font(font->second,Resources::FontType::Normal,1);
+        if(std::getenv("OPENGOTHIC_BOSS_UI_PROBE")!=nullptr)
+          Log::i("[BOSS_UI] text=",value," rect=",toPixel(text->posx,uiWidth),",",toPixel(text->posy,uiHeight),",",gfont.textSize(value).w,",",gfont.pixelSize());
         gfont.drawText(p,toPixel(text->posx,uiWidth),toPixel(text->posy,uiHeight)+gfont.pixelSize(),value,
           Color(float((color>>16)&0xFF)/255.f,float((color>>8)&0xFF)/255.f,float(color&0xFF)/255.f,float(color>>24)/255.f));
         }

@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import struct
@@ -13,7 +14,7 @@ import zipfile
 p = argparse.ArgumentParser()
 for name in ("executable", "game", "save", "output"):
     p.add_argument("--" + name, required=True, type=Path)
-p.add_argument("--mode", choices=("seed", "reload", "event", "event-seed", "event-reload", "focus-seed", "focus-reload"), required=True)
+p.add_argument("--mode", choices=("seed", "reload", "event", "event-seed", "event-reload", "event-geometry", "focus-seed", "focus-reload"), required=True)
 p.add_argument("--reject-view", action="store_true", help="Reject a private v4 snapshot with a view pointer into its allocation")
 a = p.parse_args()
 exe, game, save, out = (getattr(a, name).resolve() for name in ("executable", "game", "save", "output"))
@@ -66,6 +67,39 @@ try:
             cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=180)
     assert result.returncode == 0, f"Game exited {result.returncode}"
     trace = (out / "terminal.log").read_text(errors="replace")
+    if a.mode == "event-geometry":
+        assert "[BOSS_UI] event start active=1 state=2 hp=1500" in trace
+        assert "[BOSS_UI] event health active=1 hp=750" in trace
+        assert "[BOSS_UI] event finish active=1 state=3 dead=1" in trace
+        assert "[BOSS_UI] event cleanup active=0" in trace
+        phases = ("boss-full", "other", "none", "boss-half", "resized", "menu", "resumed", "cleanup")
+        assert all((out / f"boss-ui-{phase}.png").is_file() for phase in phases)
+        captures = {name: [int(w), int(h), int(y)] for name, w, h, y in re.findall(
+            r"\[BOSS_UI\] capture=(\S+) viewport=(\d+),(\d+) focus_y=(-?\d+)", trace)}
+        assert all(phase in captures for phase in phases)
+        assert captures["resized"][:2] != captures["boss-full"][:2], "Native resize did not occur"
+        for phase in phases[:-1]:
+            before = trace.split(f"[BOSS_UI] capture={phase} ", 1)[0]
+            frame = before.rsplit("[BOSS_UI] draw texture=BOSSBAR_BG.TGA", 1)[1]
+            title = re.findall(r"\[BOSS_UI\] text=Armored razor rect=(-?\d+),(-?\d+),(\d+),(\d+)", frame)
+            assert len(title) == 1, f"Missing or duplicate boss title before {phase}: {title}"
+            x, y, width, height = map(int, title[0])
+            assert abs(2*x + width - captures[phase][0]) <= 4, f"Boss title not centered at {phase}: {title[-1]}"
+        cleanup = trace.split("[BOSS_UI] event cleanup active=0", 1)[1]
+        assert "[BOSS_UI] draw texture=" not in cleanup and "[BOSS_UI] text=Armored razor" not in cleanup
+        assert captures["boss-full"][2] >= captures["boss-full"][1]
+        assert 0 < captures["other"][2] < captures["other"][1]
+        assert captures["cleanup"][2] * captures["other"][1] < captures["other"][2] * captures["cleanup"][1]
+        opened = re.search(r"geometry menu_open=1 tick=(\d+)", trace)
+        closed = re.search(r"geometry menu_close tick=(\d+)", trace)
+        assert opened and closed and 0 <= int(closed[1]) - int(opened[1]) <= 50
+        assert not (out / "save_slot_2.sav").exists()
+        (out / "manifest.json").write_text(json.dumps({"executable": executable_hash,
+            "input_save": source_hash, "mode": a.mode, "captures": captures,
+            "output_images": {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                              for p in out.glob("boss-ui-*.png")}}, indent=2) + "\n")
+        print(f"PASS geometry event/focus/pause lifecycle (visual layout requires review): {out}")
+        raise SystemExit(0)
     if a.mode.startswith("focus-"):
         marker = ("targets=1 null=1 retained_handle=1 removed=1 reuse=1" if a.mode == "focus-seed"
                   else "restart bindings=1 tombstones=1 removed=1")
