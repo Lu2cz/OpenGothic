@@ -30,16 +30,22 @@ try:
     assert result.returncode == 0, f"Game exited {result.returncode}"
     trace = (out / "terminal.log").read_text(errors="replace")
     assert f"[BOSS_UI] {a.mode if a.mode == 'reload' else 'synthetic start'} active=1" in trace, trace[-3000:]
-    assert "[BOSS_UI] draw texture=BOSSBAR_BG.TGA" in trace
-    assert "[BOSS_UI] draw texture=BOSSBAR.TGA" in trace
+    background = "[BOSS_UI] draw texture=BOSSBAR_BG.TGA rect=240,-29,800,99"
+    full = "[BOSS_UI] draw texture=BOSSBAR.TGA rect=274,12,732,15"
+    half = "[BOSS_UI] draw texture=BOSSBAR.TGA rect=274,12,365,15"
+    assert background in trace
     if a.mode == "seed":
         assert "[BOSS_UI] synthetic health active=1" in trace
+        before, after = trace.split("[BOSS_UI] synthetic health active=1", 1)
+        assert full in before and half in after
         assert "[BOSS_UI] synthetic save requested" in trace and (out / "save_slot_2.sav").is_file()
         with zipfile.ZipFile(out / "save_slot_2.sav") as archive:
             assert archive.testzip() is None and archive.read("game/compatibility")[:4] == b"\x03\0\0\0"
     else:
+        assert half in trace
         assert "[BOSS_UI] synthetic finish active=0" in trace
         assert trace.count("[BOSS_UI] view freed=") >= 2
+        assert "[BOSS_UI] draw texture=" not in trace.split("[BOSS_UI] synthetic finish active=0", 1)[1]
 finally:
     assert hashlib.sha256(save.read_bytes()).digest() == original, "Source save changed"
 output_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
