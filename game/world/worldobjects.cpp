@@ -123,7 +123,7 @@ void WorldObjects::load(Serialize &fin) {
 
 void WorldObjects::save(Serialize &fout) {
   fout.setEntry("worlds/",fout.worldName(),"/version");
-  fout.write(Serialize::Version::Current);
+  fout.write(fout.version());
 
   for(size_t i=0; i<npcArr.size(); ++i)
     npcArr[i]->save(fout,i,"/npc/");

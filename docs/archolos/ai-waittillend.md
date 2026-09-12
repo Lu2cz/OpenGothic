@@ -69,13 +69,25 @@ replay remain synthetic private scene evidence, not campaign-progression proof.
 Candidate `4673359a853f41bb58bdd2eb78803ac0a5ba113fc094f5a69246d98a20a5c624`
 also passed the pending-wait seed/reload pair and the private edge matrix in
 `issue6-aiwait-edgefinal-{seed,reload}` and `issue6-aiwait-edges-final`.
-The legacy active-navigation migration and malformed-ticket rejection still need
-their own runtime checks. Four CRC-valid malformed private saves are prepared in
-`issue6-invalid-queue-fixtures-v2`: empty-zero-next, zero-ticket, invalid-active,
-and duplicate-ticket. Its manifest records source/variant hashes. The local
-coordinator generator is `outputs/issue6-coordination/prepare-invalid-queues.py`;
-it anchors the exact reviewed one-wait v56 fixture rather than guessing offsets.
-These variants have not yet been loaded by the game.
+
+Candidate `445eb44c16f8a0e721dcef3ff4313f63ead9313d3235f86f49e521aab13b1dad`
+generated a private v55 world payload with Jorn's primary queue empty, `go2`
+active, and all timers inactive, then reloaded it as v56. The post-`go2.load`
+migration restored ticket 1; a new `AI_WAITTILLEND` remained pending at frame 30
+and completed by frame 420. `issue6-aiwait-legacy-nav-final-4-{seed,reload}`
+recorded the v55/v56 world-version boundary, valid result ZIPs, and unchanged
+source hashes. The seed is an opt-in mixed-header/world probe fixture, not a
+general v55 save writer or a supported player-save boundary.
+
+All four CRC-valid malformed private saves in
+`issue6-invalid-queue-fixtures-v2` were loaded on candidate
+`95a5d0769a9c620536e39071ce216d38171b97c9411736efa2d41b30aa2089e7` and
+rejected before a probe or replacement save: empty-zero-next and zero-ticket
+reported `Invalid AI action ticket`, invalid-active reported `Invalid active AI
+ticket`, and duplicate-ticket reported `Duplicate AI action ticket`. The source
+variant hashes stayed unchanged. The local generator remains
+`outputs/issue6-coordination/prepare-invalid-queues.py`; the private malformed
+fixtures are rejection evidence, not supported load boundaries.
 
 Visual actor/camera staging remains a separate investigation in
 [#21](https://github.com/Lu2cz/OpenGothic/issues/21). World-render screenshots

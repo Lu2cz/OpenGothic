@@ -1146,6 +1146,8 @@ void MainWindow::saveGame(std::string_view slot, std::string_view name) {
       Tempest::WFile f(temporary);
       {
       Serialize s(f);
+      if(auto mode=std::getenv("OPENGOTHIC_AI_WAIT_PROBE"); mode!=nullptr && std::string_view(mode)=="legacy-nav-seed")
+        s.setVersion(55);
       game->save(s,name,pm);
       }
       if(!f.flush()) throw std::runtime_error("unable to flush savegame file");
@@ -1301,6 +1303,8 @@ void MainWindow::render(){
     const double profileEntry = profileEnabled ? profileNow() : 0;
     const bool profileReady = profileEnabled && Gothic::inst().world()!=nullptr &&
                               Gothic::inst().checkLoading()==Gothic::LoadState::Idle;
+    const auto aiWaitMode = std::getenv("OPENGOTHIC_AI_WAIT_PROBE");
+    const bool legacyNavProbe = aiWaitMode!=nullptr && std::string_view(aiWaitMode).starts_with("legacy-nav");
     if(profileReady && loadedAt==0) {
 
       if(std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_GATE_PROBE"))=="open")
@@ -1316,7 +1320,7 @@ void MainWindow::render(){
       keyUpEvent(escape);
       loadedAt = profileEntry;
       }
-    bool sampling = profileReady && profileEntry-loadedAt>=10000;
+    bool sampling = profileReady && (legacyNavProbe || profileEntry-loadedAt>=10000);
     if(sampling && profileAt==0) {
       if(auto mode=std::getenv("OPENGOTHIC_CITY_PROBE")) {
         auto& w = *Gothic::inst().world();
@@ -1431,6 +1435,25 @@ void MainWindow::render(){
           target->aiPush(AiQueue::aiWait(1));
           aiWaitProbeTicket=target->aiWaitTicket();
           Log::i("[AI_WAIT_PROBE] edges started");
+          }
+        if(std::string_view(mode)=="legacy-nav-seed") {
+          auto* point=w.findPoint("PART_13_NAV_11",false);
+          if(point==nullptr)
+            throw std::runtime_error("AI wait legacy navigation probe needs navigation point");
+          self.clearAiQueue();
+          target->clearAiQueue();
+          target->setPosition(point->position()+Tempest::Vec3(0,0,300));
+          target->setProcessPolicy(NpcProcessPolicy::AiNormal);
+          target->aiPush(AiQueue::aiGoToPoint(*point));
+          aiWaitProbeTicket=target->aiWaitTicket();
+          Log::i("[AI_WAIT_PROBE] legacy navigation seeded ticket=",aiWaitProbeTicket);
+          }
+        if(std::string_view(mode)=="legacy-nav-reload") {
+          self.clearAiQueue();
+          aiWaitProbeTicket=target->aiWaitTicket();
+          if(aiWaitProbeTicket==0)
+            throw std::runtime_error("AI wait legacy navigation ticket was not restored");
+          Log::i("[AI_WAIT_PROBE] legacy navigation restored ticket=",aiWaitProbeTicket);
           }
         }
       if(std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr) {
@@ -2208,6 +2231,30 @@ void MainWindow::render(){
           Log::i("[AI_WAIT_PROBE] complete");
           aiWaitProbeSaved=true;
           saveGame("save_slot_2.sav","AI wait persistence test");
+          }
+        if(std::string_view(mode)=="legacy-nav-seed" && !aiWaitProbeSaved && profileFrames==30) {
+          if(!target->isAiNavigationActive() || !target->isAiActionPending(aiWaitProbeTicket))
+            throw std::runtime_error("AI wait legacy navigation was not active before save");
+          Log::i("[AI_WAIT_PROBE] legacy navigation save pending=1");
+          aiWaitProbeSaved=true;
+          saveGame("save_slot_2.sav","AI wait legacy navigation test");
+          }
+        if(std::string_view(mode)=="legacy-nav-reload" && profileFrames==30) {
+          if(self.isAiQueueEmpty() || !target->isAiNavigationActive() || !target->isAiActionPending(aiWaitProbeTicket))
+            throw std::runtime_error("AI wait legacy navigation did not block after reload");
+          Log::i("[AI_WAIT_PROBE] legacy navigation still pending=1");
+          }
+        if(std::string_view(mode)=="legacy-nav-reload" && profileFrames==0) {
+          if(!target->isAiNavigationActive() || !target->isAiActionPending(aiWaitProbeTicket))
+            throw std::runtime_error("AI wait legacy navigation was not active after reload");
+          self.aiPush(AiQueue::aiWaitTillEnd(*target,aiWaitProbeTicket));
+          }
+        if(std::string_view(mode)=="legacy-nav-reload" && !aiWaitProbeSaved && profileFrames==420) {
+          if(!self.isAiQueueEmpty())
+            throw std::runtime_error("AI wait legacy navigation did not finish after reload");
+          Log::i("[AI_WAIT_PROBE] legacy navigation complete");
+          aiWaitProbeSaved=true;
+          saveGame("save_slot_2.sav","AI wait legacy navigation test");
           }
         if(aiWaitProbeSaved && Gothic::inst().checkLoading()==Gothic::LoadState::Idle) {
           Log::i("[AI_WAIT_PROBE] save finalized");

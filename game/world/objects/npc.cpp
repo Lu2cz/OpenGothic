@@ -4550,6 +4550,11 @@ bool Npc::isAiBusy() const {
          outWaitTime>=owner.tickCount();
   }
 
+bool Npc::isAiNavigationActive() const {
+  return aiQueue.size()==0 && go2.flag!=GT_No && waitTime<owner.tickCount() &&
+         aniWaitTime<owner.tickCount() && outWaitTime<=owner.tickCount();
+  }
+
 uint64_t Npc::aiWaitTicket() const {
   auto ticket=aiQueue.lastTicket();
   return ticket!=0 ? ticket : aiActionTicket;

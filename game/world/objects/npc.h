@@ -374,6 +374,7 @@ class Npc final {
 
     bool      isAiQueueEmpty() const;
     bool      isAiBusy() const;
+    bool      isAiNavigationActive() const;
     uint64_t  aiWaitTicket() const;
     bool      isAiActionPending(uint64_t ticket) const;
     void      clearAiQueue();
