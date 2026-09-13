@@ -120,6 +120,7 @@ try:
         assert f"[NPC_FOCUS] {marker}" in trace, trace[-3000:]
         if a.mode == "focus-seed":
             assert "[VIEW_REUSE] installed_delete=1 unregistered=1 raw_address_reuse=1 constructor_calls=0" in trace
+            assert "[VIEW_REUSE] destructor_unregistered=1 release_keeps_allocation=1 owner_free=1 raw_reuse=1" in trace
             with zipfile.ZipFile(out / "save_slot_2.sav") as archive:
                 assert archive.testzip() is None and archive.read("game/compatibility")[:4] == b"\x04\0\0\0"
         else:
@@ -147,7 +148,7 @@ try:
     elif a.mode == "reload":
         assert half in trace
         assert "[BOSS_UI] synthetic finish active=0" in trace
-        assert trace.count("[BOSS_UI] view freed=") >= 2
+        assert trace.count("[BOSS_UI] view removed=") >= 2
         assert "[BOSS_UI] draw texture=" not in trace.split("[BOSS_UI] synthetic finish active=0", 1)[1]
     else:
         if a.mode == "event-reload":
@@ -166,9 +167,9 @@ try:
             marker = "[BOSS_UI] event finish active=1 state=3 dead=1"
             assert marker in trace
             cleanup = trace.split(marker, 1)[1]
-            assert cleanup.count("[BOSS_UI] view freed=") >= 2
+            assert cleanup.count("[BOSS_UI] view removed=") >= 2
             assert "[BOSS_UI] event cleanup active=0" in cleanup
-            assert "[BOSS_UI] draw texture=" not in cleanup.split("[BOSS_UI] view freed=", 2)[2]
+            assert "[BOSS_UI] draw texture=" not in cleanup.split("[BOSS_UI] view removed=", 2)[2]
         phases = ("restored" if a.mode == "event-reload" else "full", "half",
                   "active" if a.mode == "event-seed" else "cleanup")
         assert all((out / f"boss-ui-{phase}.png").is_file() for phase in phases)

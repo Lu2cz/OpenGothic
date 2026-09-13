@@ -628,6 +628,23 @@ void DirectMemory::probeNpcFocus(Npc& npc, bool restored) {
   if(!absent()) throw std::runtime_error("Non-view reuse retained UI registration");
   mem32.free(viewPtr);
   Log::i("[VIEW_REUSE] installed_delete=1 unregistered=1 raw_address_reuse=1 constructor_calls=0");
+  const int releasedHandle = vm.call_function<int>("VIEW_CREATE",0,0,100,100);
+  const auto releasedPtr = uiViewOrder.back();
+  vm.call_function("VIEW_OPEN",releasedHandle);
+  vm.call_function("VIEW_DELETE",releasedHandle);
+  if(uiViews.contains(releasedPtr) || uiViewOrder!=priorOrder)
+    throw std::runtime_error("View destructor retained UI registration");
+  check(vm.call_function<int>("HLP_ISVALIDHANDLE",releasedHandle)==0);
+  check(mem32.isAllocation(releasedPtr,sizeof(zCView),""));
+  check(mem32.deref<zCView>(releasedPtr)->ISOPEN==0 && mem32.deref<zCView>(releasedPtr)->ISCLOSED!=0);
+  // RELEASE drops a handle, not allocation ownership. The explicit pointer
+  // owner can still destroy/free it; that must not double-free the allocation.
+  vm.call_function("VIEWPTR_DELETE",int32_t(releasedPtr));
+  check(!mem32.isAllocation(releasedPtr,sizeof(zCView),""));
+  check(mem32.alloc(releasedPtr,sizeof(zCView),"released non-view reuse")==releasedPtr);
+  check(!uiViews.contains(releasedPtr) && uiViewOrder==priorOrder);
+  mem32.free(releasedPtr);
+  Log::i("[VIEW_REUSE] destructor_unregistered=1 release_keeps_allocation=1 owner_free=1 raw_reuse=1");
   }
 
 void DirectMemory::probeLockFocus(Npc& npc, Interactive& lock, bool restored) {
@@ -2281,11 +2298,14 @@ int DirectMemory::mem_alloc(int amount, const char* comment) {
   }
 
 void DirectMemory::mem_free(int ptr) {
-  const auto view = Mem32::ptr32_t(ptr);
-  if(uiViews.erase(view)!=0 && std::getenv("OPENGOTHIC_BOSS_UI_PROBE")!=nullptr)
-    Log::i("[BOSS_UI] view freed=",view);
-  std::erase(uiViewOrder,view);
+  removeUiView(Mem32::ptr32_t(ptr));
   mem32.free(Mem32::ptr32_t(ptr));
+  }
+
+void DirectMemory::removeUiView(ptr32_t ptr) {
+  if(uiViews.erase(ptr)!=0 && std::getenv("OPENGOTHIC_BOSS_UI_PROBE")!=nullptr)
+    Log::i("[BOSS_UI] view removed=",ptr);
+  std::erase(uiViewOrder,ptr);
   }
 
 int DirectMemory::mem_realloc(int address, int oldsz, int size) {
@@ -2816,12 +2836,22 @@ void DirectMemory::setupUiFunctions() {
 
   // https://github.com/Lehona/LeGo/blob/dev/View.d
   const int ZCVIEW__ZCVIEW     = 8017664;
+  const int ZCVIEW__DTOR       = 8017856;
   const int ZCVIEW__OPEN       = 8023040;
   const int ZCVIEW__CLOSE      = 8023600;
   const int ZCVIEW_TOP         = 8021904;
   const int ZCVIEW__SETSIZE    = 8026016;
   const int zCVIEW__MOVE       = 8025824;
   const int ZCVIEW__INSERTBACK = 8020272;
+  cpu.register_thiscall(ZCVIEW__DTOR, [this](ptr32_t ptr) {
+    // Destruction removes rendering state, not allocation ownership. LeGo
+    // RELEASE keeps the allocation; CLEAR/VIEWPTR_DELETE free it separately.
+    removeUiView(ptr);
+    if(auto* view = mem32.deref<zCView>(ptr)) {
+      view->ISOPEN = false;
+      view->ISCLOSED = true;
+      }
+    });
   cpu.register_thiscall(ZCVIEW__ZCVIEW, [this](ptr32_t ptr, int x1, int y1, int x2, int y2, int arg) {
     auto view = mem32.deref<zCView>(ptr);
     if(view==nullptr) {

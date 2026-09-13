@@ -216,6 +216,7 @@ class DirectMemory {
     void        setupInitFileFunctions();
     // gothic-ui
     void        setupUiFunctions();
+    void        removeUiView(ptr32_t ptr);
     void        setupFontFunctions();
     void        tickUi(uint64_t dt);
     void        setUiSize(int width, int height);
