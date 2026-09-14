@@ -631,6 +631,24 @@ void DirectMemory::probeNpcFocus(Npc& npc, bool restored) {
   const int releasedHandle = vm.call_function<int>("VIEW_CREATE",0,0,100,100);
   const auto releasedPtr = uiViewOrder.back();
   vm.call_function("VIEW_OPEN",releasedHandle);
+  const auto validHandleId = int32_t(vm.find_symbol_by_name("HLP_ISVALIDHANDLE")->index());
+  const auto dynamicValid = [&] {
+    vm.call_function("MEM_CallByID",validHandleId);
+    return vm.pop_int();
+    };
+  vm.push_int(releasedHandle);
+  check(dynamicValid()==1);
+  vm.push_int(0);
+  check(dynamicValid()==0);
+  auto* argument = vm.find_symbol_by_name("BAR_DELETE.BAR");
+  const auto priorArgument = argument->get_int();
+  argument->set_int(releasedHandle);
+  vm.push_reference(argument);
+  check(dynamicValid()==1);
+  argument->set_int(priorArgument);
+  vm.push_instance(npc.handlePtr());
+  check(dynamicValid()==0);
+  Log::i("[DYNAMIC_CALL] integer=1 zero=1 reference=1 instance_to_int_zero=1");
   vm.call_function("VIEW_DELETE",releasedHandle);
   if(uiViews.contains(releasedPtr) || uiViewOrder!=priorOrder)
     throw std::runtime_error("View destructor retained UI registration");
@@ -2365,8 +2383,20 @@ void DirectMemory::directCall(zenkit::DaedalusVm& vm, zenkit::DaedalusSymbol& fu
     }
 
   std::span<zenkit::DaedalusSymbol> params = vm.find_parameters_for_function(&func);
-  if(params.size()>0)
-    Log::d("");
+  if(params.size()==1 && params[0].type()==zenkit::DaedalusDataType::INT && !vm.top_is_reference()) {
+    // Gothic's MOVI writes zero for a raw instance argument (DoStack 0x791b71).
+    // LeGo FREE can resolve an integer-taking function as a class destructor.
+    // ZenKit otherwise consumes the instance, throws, and retains a stale handle.
+    int value = 0;
+    try {
+      value = vm.pop_int();
+      }
+    catch(const zenkit::DaedalusVmException& error) {
+      if(std::string_view(error.what())!="tried to pop_int but frame does not contain a int.")
+        throw;
+      }
+    vm.push_int(value);
+    }
   //vm.call_function(sym);
   //zenkit::StackGuard guard {&vm, func.rtype()};
   vm.unsafe_call(&func);
