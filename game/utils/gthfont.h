@@ -19,6 +19,7 @@ class GthFont final {
 
     void drawText(Tempest::Painter& p, int x, int y, int w, int h, std::string_view txt, Tempest::AlignFlag align, int firstLine=0) const;
     void drawText(Tempest::Painter& p, int x, int y, std::string_view txt) const;
+    void drawText(Tempest::Painter& p, int x, int y, std::string_view txt, const Tempest::Color& color) const;
 
     auto textSize(const std::string_view txt) const -> Tempest::Size;
     auto textSize(const char*    b, const char* e) const -> Tempest::Size;
@@ -39,4 +40,3 @@ class GthFont final {
     static bool    isSpace(uint8_t ch);
     Tempest::Size  processText(Tempest::Painter* p, int x, int y, int w, int h, std::string_view txt, Tempest::AlignFlag align, int firstLine) const;
   };
-

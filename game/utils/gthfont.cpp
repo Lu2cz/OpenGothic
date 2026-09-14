@@ -101,6 +101,10 @@ Size GthFont::processText(Painter* p, int bx, int by, int bw, int bh,
   }
 
 void GthFont::drawText(Tempest::Painter &p, int bx, int by, std::string_view txtChar) const {
+  drawText(p,bx,by,txtChar,color);
+  }
+
+void GthFont::drawText(Tempest::Painter &p, int bx, int by, std::string_view txtChar, const Color& clr) const {
   if(tex==nullptr || txtChar.empty())
     return;
 
@@ -108,7 +112,7 @@ void GthFont::drawText(Tempest::Painter &p, int bx, int by, std::string_view txt
   const auto&    fnt = *pfnt;
 
   auto b = p.brush();
-  p.setBrush(Brush(*tex,color));
+  p.setBrush(Brush(*tex,clr));
 
   int   h  = pixelSize();
   int   x  = bx, y=by-h;
@@ -147,16 +151,12 @@ Size GthFont::textSize(const uint8_t* b, const uint8_t* e) const {
   int x  = 0, y = h;
   int totalW = 0;
 
-  for(size_t i=0;;) {
+  for(size_t i=0;b+i!=e;) {
     uint8_t id = b[i];
-    if(b+i==e) {
-      totalW = std::max(totalW,x);
-      break;
-      }
-    else if(id=='\n') {
+    if(id=='\n') {
       totalW = std::max(totalW,x);
       ++i;
-      while(b[i]==' ' && b+i!=e)
+      while(b+i!=e && b[i]==' ')
         ++i;
       y+=h;
       x=0;
@@ -171,6 +171,7 @@ Size GthFont::textSize(const uint8_t* b, const uint8_t* e) const {
       ++i;
       }
     }
+  totalW = std::max(totalW,x);
 
   return Size(totalW,y);
   }

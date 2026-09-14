@@ -2,6 +2,8 @@
 
 #include <zenkit/DaedalusScript.hh>
 #include <map>
+#include <unordered_map>
+#include <vector>
 
 #include "game/gamescript.h"
 
@@ -10,6 +12,9 @@
 
 class Interactive;
 class Npc;
+namespace Tempest {
+class Painter;
+}
 
 class DirectMemory {
   public:
@@ -24,11 +29,16 @@ class DirectMemory {
 
     // hooks
     void        tick(uint64_t dt);
+    void        drawUi(Tempest::Painter& p, int width, int height, float barScale);
+    int         focusBarY(int height);
     void        eventPlayAni(std::string_view ani);
     Npc&        dialogSpeaker(Npc& npc);
     bool        setMusicZone(std::string_view zone, uint8_t tags);
     void        setNpcFocus(Npc& npc, Interactive* focus, int pickLockProgress);
+    void        setNpcFocus(Npc& npc, Npc* focus);
     void        clearNpcFocus(Npc& npc);
+    void        invalidateNpcFocus(Npc& npc);
+    void        probeNpcFocus(Npc& npc, bool restored);
     void        resetWorldReferences();
     void        probeLockFocus(Npc& npc, Interactive& lock, bool restored);
     void        beginWorldTransitionProbe(Npc& npc, Interactive& lock);
@@ -95,6 +105,8 @@ class DirectMemory {
     ptr32_t     gameman_Ptr     = 0;
     ptr32_t     zFactory_Ptr    = 0;
     ptr32_t     fontMan_Ptr     = 0;
+    std::map<std::weak_ptr<zenkit::INpc>,ptr32_t,std::owner_less<>> focusNpcAddress;
+    std::unordered_map<ptr32_t,std::weak_ptr<zenkit::INpc>> focusNpc;
     ptr32_t     focusList[6]    = {};
 
     ptr32_t     scriptVariables = 0;
@@ -102,6 +114,8 @@ class DirectMemory {
     std::multimap<std::pair<std::shared_ptr<zenkit::DaedalusInstance>,uint32_t>,ptr32_t> scriptReferences;
     auto        nativeReference(zenkit::DaedalusSymbol* ref, std::shared_ptr<zenkit::DaedalusInstance> context) -> ptr32_t;
     void        bindReference(zenkit::DaedalusSymbol* ref, std::shared_ptr<zenkit::DaedalusInstance> context, Mem32::Type type);
+    bool        isLiveNpc(const std::shared_ptr<zenkit::INpc>& npc) const;
+    void        pruneFocusNpcs();
     auto        focusVob(Interactive& focus) -> ptr32_t;
     void        saveReference(Serialize& out, const std::shared_ptr<zenkit::DaedalusInstance>& instance);
     auto        loadReference(Serialize& in) -> std::shared_ptr<zenkit::DaedalusInstance>;
@@ -202,8 +216,20 @@ class DirectMemory {
     void        setupInitFileFunctions();
     // gothic-ui
     void        setupUiFunctions();
+    void        removeUiView(ptr32_t ptr);
     void        setupFontFunctions();
     void        tickUi(uint64_t dt);
+    void        setUiSize(int width, int height);
+    struct UiView {
+      std::string texture;
+      };
+    std::unordered_map<ptr32_t,UiView> uiViews;
+    std::vector<ptr32_t> uiViewOrder;
+    std::unordered_map<ptr32_t,std::string> fontNames;
+    ptr32_t     nextFontHandle = 0x10000000;
+    int         uiWidth = 800;
+    int         uiHeight = 600;
+    float       uiBarScale = 1;
     //
     void        setupNpcFunctions();
     void        setupWorldFunctions();

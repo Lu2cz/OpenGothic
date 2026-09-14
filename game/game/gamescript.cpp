@@ -98,7 +98,7 @@ GameScript::GameScript(GameSession &owner)
 
   vmLang = Gothic::inst().settingsGetI("GAME", "language");
   vm.register_exception_handler(zenkit::lenient_vm_exception_handler);
-  if(std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr)
+  if(std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_BOSS_UI_PROBE")!=nullptr)
     vm.register_exception_handler([](auto& vm, const auto& error, const auto& instruction) {
       vm.print_stack_trace();
       return zenkit::lenient_vm_exception_handler(vm,error,instruction);
@@ -1543,6 +1543,30 @@ uint64_t GameScript::tickCount() const {
 void GameScript::tick(uint64_t dt) {
   if(dma!=nullptr)
     dma->tick(dt);
+  }
+
+void GameScript::drawUi(Tempest::Painter& p, int width, int height, float barScale) {
+  if(dma!=nullptr)
+    dma->drawUi(p,width,height,barScale);
+  }
+
+void GameScript::setNpcFocus(Npc& npc, Npc* focus) {
+  if(dma!=nullptr)
+    dma->setNpcFocus(npc,focus);
+  }
+
+int GameScript::focusBarY(int height) {
+  return dma==nullptr ? 10 : dma->focusBarY(height);
+  }
+
+void GameScript::invalidateNpcFocus(Npc& npc) {
+  if(dma)
+    dma->invalidateNpcFocus(npc);
+  }
+
+void GameScript::probeNpcFocus(Npc& npc, bool restored) {
+  if(dma)
+    dma->probeNpcFocus(npc,restored);
   }
 
 uint32_t GameScript::rand(uint32_t max) {

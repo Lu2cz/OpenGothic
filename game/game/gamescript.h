@@ -90,6 +90,11 @@ class GameScript final {
     World&       world();
     uint64_t     tickCount() const;
     void         tick(uint64_t dt);
+    void         drawUi(Tempest::Painter& p, int width, int height, float barScale);
+    void         setNpcFocus(Npc& npc, Npc* focus);
+    void         invalidateNpcFocus(Npc& npc);
+    void         probeNpcFocus(Npc& npc, bool restored);
+    int          focusBarY(int height);
     bool         setMusicZone(std::string_view zone, uint8_t tags);
 
     uint32_t     rand(uint32_t max);

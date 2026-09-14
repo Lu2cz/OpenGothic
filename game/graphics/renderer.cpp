@@ -510,7 +510,12 @@ void Renderer::prepareSky(Tempest::Encoder<Tempest::CommandBuffer>& cmd, WorldVi
 void Renderer::draw(Encoder<CommandBuffer>& cmd, uint8_t cmdId, size_t imgId,
                     VectorImage::Mesh& uiLayer, VectorImage::Mesh& numOverlay,
                     InventoryMenu& inventory, VideoWidget& video) {
-  auto& result = swapchain[imgId];
+  draw(cmd,cmdId,swapchain[imgId],uiLayer,numOverlay,inventory,video);
+  }
+
+void Renderer::draw(Encoder<CommandBuffer>& cmd, uint8_t cmdId, Attachment& result,
+                    VectorImage::Mesh& uiLayer, VectorImage::Mesh& numOverlay,
+                    InventoryMenu& inventory, VideoWidget& video) {
 
   if(!video.isActive()) {
     draw(result, cmd, cmdId);
@@ -531,6 +536,20 @@ void Renderer::draw(Encoder<CommandBuffer>& cmd, uint8_t cmdId, size_t imgId,
     cmd.setDebugMarker("Inventory-counters");
     numOverlay.draw(cmd);
     }
+  }
+
+Tempest::Attachment Renderer::capture(uint8_t frameId, VectorImage::Mesh& uiLayer, VectorImage::Mesh& numOverlay,
+                                      InventoryMenu& inventory, VideoWidget& video) {
+  auto& device = Resources::device();
+  auto image = device.attachment(TextureFormat::RGBA8,uint32_t(swapchain.w()),uint32_t(swapchain.h()));
+  CommandBuffer cmd;
+  {
+  auto enc = cmd.startEncoding(device);
+  draw(enc,frameId,image,uiLayer,numOverlay,inventory,video);
+  }
+  auto sync = device.submit(cmd);
+  sync.wait();
+  return image;
   }
 
 void Renderer::dbgDraw(Tempest::Painter& p) {
@@ -2163,4 +2182,3 @@ Size Renderer::internalResolution() const {
     return Size(int(3*swapchain.w()/4), int(3*swapchain.h()/4));
   return Size(int(swapchain.w()/2), int(swapchain.h()/2));
   }
-
