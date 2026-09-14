@@ -1,6 +1,7 @@
 # Boss UI verification boundaries
 
-PR #22 / issue #7 remain unmerged; the installed playable app is unchanged.
+PR #22 merged as c1b35645cd05463a24de2db185399eb841e09279. The reviewed
+candidate is installed in Fast only; deployment details follow below.
 
 Current-created SQ416 Razor UI has private visual/runtime coverage for health,
 focus changes, pause/resume, resize roundtrip, v4 save/restart and final cleanup.
@@ -95,8 +96,7 @@ Adjacent checks are deliberately not full UI parity:
   still unimplemented. This is not evidence of a working crafting preview.
 - Recipe-document learning/rereading and XP notice checks remain separate.
 
-No new issue, UI subsystem, dependency update, or installed-app change accompanies
-these diagnostic consumer checks.
+These diagnostic consumer checks add no new issue, UI subsystem or dependency.
 
 ## Final private verification — 14 September 2026
 
@@ -114,3 +114,33 @@ Their executable hashes differ only because later opt-in geometry diagnostics
 were added; default 1280x720 scaling is unchanged by the final zoom ceiling.
 Private manifests and captures are indexed in issue #7; no campaign advancement
 or full LeGo/Render parity is claimed.
+
+## Installed deployment — 14 September 2026
+
+Runtime source d5e85407b424f2e72f57cb62540d202f844ab75b is tree-identical to
+the merge above. Its candidate hash is recorded above; after bundle ad-hoc signing,
+Fast SHA256 is 45f98622183d06deb28ae91431671630b448ec9194c8c6ca24bd7ad4f9bfadec.
+Deep/strict signature verification passes. Later documentation commits do not
+change the installed runtime. The issue branch is retained.
+
+Private installed checks (paths relative to the environment-guide workspace):
+
+- `work/issue7-installed-modal-save-20260914`: run_archolos_modal.py --mode save,
+  runner/game exit 0. Real Escape pause menu, Save Game, visibly typed ModalTest,
+  accepted slot 2, ZIP CRC, unchanged quest state and HERO inventory all pass.
+- `work/issue7-installed-menu-probe-20260914`: run_archolos_music.py --menu
+  using that new save. Initial main-menu background/logo/music, load, normal
+  walking, resave, return to menu and process exit 0 pass. The full runner exits 1
+  on its later Chapter 2 preset assertion because this input is Chapter 1
+  (`chapter=1 entered=0`). This is bounded deployment evidence, not a full music
+  suite pass. Both menu stages and finalized save are logged; save CRCs pass.
+  The probe initiates load/session exit programmatically, not by manual menu input.
+- `work/issue7-installed-normal-menu-20260914`: profiling-off startup logged no
+  runtime failure, but computer-control attachment timed out. That private process
+  was intentionally terminated (-15); it is not counted as a UI/clean-exit pass.
+
+All six protected non-Fast files match the verified pre-install copies: three
+player saves, Gothic.ini, launcher and Profile executable. The rollback directory
+`work/issue7-install-rollback-20260914.FI5mKf` also retains the prior Fast binary.
+All three rollback save CRCs pass. Assets and dependencies were not changed.
+Exact private provenance is in `outputs/issue7-installation-20260914.json`.

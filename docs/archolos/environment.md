@@ -89,8 +89,9 @@ Old saves without `game/compatibility` use legacy recovery; the next save stores
 current state but cannot recreate state already lost. Mapping changes must review
 snapshot ABI/version and identical-script requirements.
 
-Lockpicking now writes compatibility v2 and reads baseline v1 snapshots. Older
-binaries reject v2 saves; keep pre-upgrade saves with rollback binaries. See
+Lockpicking introduced compatibility v2; boss UI now writes v4 and reads older
+supported snapshots. Older binaries reject newer saves; keep pre-upgrade saves
+with rollback binaries. See
 [lockpick regression coverage](lockpick-regression.md) for ownership, migration
 and exact verification boundaries.
 
@@ -104,6 +105,20 @@ ad-hoc signature. Record candidate source/dependency revisions, executable hashe
 commands/results and rollback path in the issue. Bundle signing changes executable
 bytes: compare code before its signature or use appropriate build provenance.
 Do not install merely because compilation succeeded.
+
+Current Fast installation (14 September 2026, issue #7 / PR #22):
+- Runtime source: `d5e85407b424f2e72f57cb62540d202f844ab75b`.
+- Merge: `c1b35645cd05463a24de2db185399eb841e09279`; main checkout fast-forwarded.
+- Pre-sign executable: `5ba4a86ae645dffa63a1c5560cc03f7090a7c3ab4963445ec2793abe35594d7d`.
+- Installed Fast: `45f98622183d06deb28ae91431671630b448ec9194c8c6ca24bd7ad4f9bfadec`.
+- Ad-hoc deep/strict signature verification passes. Profile is unchanged.
+- Paired prior Fast/Profile executables, three saves, Gothic.ini and launcher:
+  `work/issue7-install-rollback-20260914.FI5mKf`. Save CRCs pass; slot 1 is v2,
+  slots 2/3 lack the compatibility entry. Do not pair rollback binaries with v4 saves.
+- Private actual pause-menu save and bounded menu/load/resave/exit checks pass;
+  see [boss UI verification boundaries](boss-ui-regression.md) for runner qualifications.
+- Local provenance: `outputs/issue7-installation-20260914.json`. Player saves/config,
+  launcher, Profile, assets and dependency pins were preserved.
 
 Baseline installed hashes (11 September 2026; later installations belong in issues):
 - Fast: `a65b95d1ed0221d53632f94da1d97c55ba4e008d2947a5304f0efe48d0932ad5`
