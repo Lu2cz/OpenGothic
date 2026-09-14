@@ -16,12 +16,38 @@ for name in ("executable", "game", "save", "output"):
     p.add_argument("--" + name, required=True, type=Path)
 p.add_argument("--mode", choices=("seed", "reload", "event", "event-seed", "event-reload", "event-geometry", "focus-seed", "focus-reload", "legacy-reload", "legacy-seed"), required=True)
 p.add_argument("--reject-view", action="store_true", help="Reject a private v4 snapshot with a view pointer into its allocation")
+p.add_argument("--size-1024", action="store_true", help="Resize the native macOS content surface to 1024x768")
+p.add_argument("--interface-scale", type=float, help="Use a private SystemPack interface multiplier")
+p.add_argument("--consumers", action="store_true", help="Inspect status/crafting scale consumers after boss cleanup")
 a = p.parse_args()
 exe, game, save, out = (getattr(a, name).resolve() for name in ("executable", "game", "save", "output"))
 original = hashlib.sha256(save.read_bytes()).digest()
 source_hash = original.hex()
 executable_hash = hashlib.sha256(exe.read_bytes()).hexdigest()
 out.mkdir(parents=True, exist_ok=False)
+if a.interface_scale is not None:
+    assert 0 < a.interface_scale <= 3
+    private_game = out / "game"
+    private_game.mkdir()
+    for path in game.iterdir():
+        if path.name.lower() != "system":
+            (private_game / path.name).symlink_to(path, target_is_directory=path.is_dir())
+        else:
+            target = private_game / path.name
+            target.mkdir()
+            for item in path.iterdir():
+                if item.name.lower() == "systempack.ini":
+                    import configparser
+                    config = configparser.ConfigParser(strict=False)
+                    config.read(item)
+                    if not config.has_section("INTERFACE"):
+                        config.add_section("INTERFACE")
+                    config.set("INTERFACE", "Scale", str(a.interface_scale))
+                    with (target / item.name).open("w") as ini:
+                        config.write(ini)
+                else:
+                    (target / item.name).symlink_to(item, target_is_directory=item.is_dir())
+    game = private_game
 shutil.copy2(save, out / "save_slot_1.sav")
 if a.reject_view:
     with zipfile.ZipFile(save) as archive:
@@ -39,7 +65,11 @@ if a.reject_view:
 (out / "Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")
 env = {key: value for key, value in os.environ.items() if not key.startswith("OPENGOTHIC_")}
 env.update(OPENGOTHIC_PROFILE="1", OPENGOTHIC_BOSS_UI_PROBE=a.mode)
-if a.mode.startswith(("event", "legacy-")):
+if a.size_1024:
+    env["OPENGOTHIC_BOSS_UI_1024"] = "1"
+if a.consumers:
+    env["OPENGOTHIC_BOSS_UI_CONSUMERS"] = "1"
+if a.mode.startswith(("event", "legacy-")) or a.mode == "reload":
     env["OPENGOTHIC_BOSS_UI_CAPTURE"] = "1"
 try:
     with (out / "terminal.log").open("w") as log:
@@ -79,6 +109,8 @@ try:
         assert "[BOSS_UI] text=Marvin rect=592,76,95,32" in initial
         if a.mode == "legacy-seed":
             assert "[LEGACY_UI] cleanup active=0" in trace
+            assert "[LEGACY_UI] fresh bar_valid=1 destructor_arg=0" in trace
+            assert "Internal Exception" not in trace
             fresh = trace.split("[LEGACY_UI] fresh active=1", 1)[1]
             assert "[BOSS_UI] draw texture=BOSSBAR_BG.TGA rect=160,-36,960,119" in fresh
             assert "[BOSS_UI] draw texture=BOSSBAR.TGA rect=200,14,439,19" in fresh
@@ -110,6 +142,8 @@ try:
         captures = {name: [int(w), int(h), int(y)] for name, w, h, y in re.findall(
             r"\[BOSS_UI\] capture=(\S+) viewport=(\d+),(\d+) focus_y=(-?\d+)", trace)}
         assert all(phase in captures for phase in phases)
+        if a.size_1024:
+            assert captures["boss-full"][:2] == [1024, 768]
         assert captures["resized"][:2] != captures["boss-full"][:2], "Native resize did not occur"
         assert captures["window-restored"][:2] == captures["boss-full"][:2], "Window size not restored"
         backgrounds = {}
@@ -129,12 +163,28 @@ try:
                 assert fy+fh <= y or y+height <= fy, f"Focus bar overlaps boss title at {phase}"
                 fill = re.search(r"draw texture=BOSSBAR.TGA rect=(-?\d+),(-?\d+),(\d+),(\d+)", frame)
                 _, bar_y, _, bar_h = map(int, fill.groups())
-                assert fy+fh <= bar_y or bar_y+bar_h <= fy, f"Focus bar overlaps boss fill at {phase}"
+                _, fill_y, _, fill_h = map(int, re.findall(r"native fill=focus rect=(-?\d+),(-?\d+),(\d+),(\d+)", before)[-1])
+                assert fill_y+fill_h <= bar_y or bar_y+bar_h <= fill_y, f"Focus fill overlaps boss fill at {phase}"
         assert all(abs(a-b) <= 4 for a, b in zip(backgrounds["boss-full"], backgrounds["window-restored"])), "Boss bar bounds not restored"
         cleanup = trace.split("[BOSS_UI] event cleanup active=0", 1)[1]
-        assert "[BOSS_UI] draw texture=" not in cleanup and "[BOSS_UI] text=Armored razor" not in cleanup
+        assert "[BOSS_UI] draw texture=BOSSBAR" not in cleanup and "[BOSS_UI] text=Armored razor" not in cleanup
         assert captures["boss-full"][2] >= captures["boss-full"][1]
         assert 0 < captures["other"][2] < captures["other"][1]
+        if a.consumers:
+            assert "[UI_CONSUMER] native_status bar=0" in trace, "Recheck status activation boundary"
+            assert "[UI_CONSUMER] explicit_status bar=" in trace and "[UI_CONSUMER] crafting open=1" in trace
+            assert all((out / f"boss-ui-{phase}.png").is_file() for phase in
+                       ("status-native", "status-explicit", "crafting", "consumers-cleanup"))
+            exp = re.search(r"draw texture=BAR_EXPSTATUS_BACK.TGA rect=(-?\d+),(-?\d+),(\d+),(\d+)", trace)
+            assert exp
+            x, y, width, height = map(int, exp.groups())
+            viewport = captures["window-restored"][:2]
+            assert 0 <= x and x+width <= viewport[0] and 0 <= y and y+height <= viewport[1]
+            crafting = re.search(r"view texture=DLG_CHOICE.TGA virtual_rect=(-?\d+),(-?\d+),(\d+),(\d+)", trace)
+            assert crafting
+            x, y, width, height = map(int, crafting.groups())
+            assert 0 <= x and x+width <= 8192 and 0 <= y and y+height <= 8192
+            assert "draw texture=DLG_CHOICE.TGA" not in trace, "Recheck unimplemented Render-list boundary"
         assert captures["cleanup"][2] * captures["other"][1] < captures["other"][2] * captures["cleanup"][1]
         opened = re.search(r"geometry menu_open=1 tick=(\d+)", trace)
         closed = re.search(r"geometry menu_close tick=(\d+)", trace)
@@ -142,6 +192,8 @@ try:
         assert not (out / "save_slot_2.sav").exists()
         (out / "manifest.json").write_text(json.dumps({"executable": executable_hash,
             "input_save": source_hash, "mode": a.mode, "captures": captures,
+            "interface_multiplier": a.interface_scale or 1, "native_1024": a.size_1024,
+            "consumers": a.consumers,
             "output_images": {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
                               for p in out.glob("boss-ui-*.png")}}, indent=2) + "\n")
         print(f"PASS geometry event/focus/pause lifecycle (visual layout requires review): {out}")
@@ -153,6 +205,7 @@ try:
         if a.mode == "focus-seed":
             assert "[VIEW_REUSE] installed_delete=1 unregistered=1 raw_address_reuse=1 constructor_calls=0" in trace
             assert "[VIEW_REUSE] destructor_unregistered=1 release_keeps_allocation=1 owner_free=1 raw_reuse=1" in trace
+            assert "[DYNAMIC_CALL] integer=1 zero=1 reference=1 instance_to_int_zero=1" in trace
             with zipfile.ZipFile(out / "save_slot_2.sav") as archive:
                 assert archive.testzip() is None and archive.read("game/compatibility")[:4] == b"\x04\0\0\0"
         else:

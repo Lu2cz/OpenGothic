@@ -2966,7 +2966,8 @@ void DirectMemory::setupUiFunctions() {
     }
     uiViews[ptr].texture = std::move(img);
     if(std::getenv("OPENGOTHIC_BOSS_UI_PROBE")!=nullptr)
-      Log::i("[BOSS_UI] view texture=",uiViews[ptr].texture);
+      Log::i("[BOSS_UI] view texture=",uiViews[ptr].texture,
+             " virtual_rect=",view->VPOSX,",",view->VPOSY,",",view->VSIZEX,",",view->VSIZEY);
     });
 
   // ## Textures

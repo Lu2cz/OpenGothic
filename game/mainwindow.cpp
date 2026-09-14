@@ -8,6 +8,9 @@
 #include <fstream>
 #include <filesystem>
 #include <iomanip>
+#if defined(__OSX__)
+#include <objc/message.h>
+#endif
 
 #include <Tempest/Except>
 #include <Tempest/Painter>
@@ -704,7 +707,10 @@ void MainWindow::paintFocus(Painter& p, Rect rect) {
 float MainWindow::statusBarScale() const {
   // Status bars share an 800x600 layout in framebuffer pixels. Scaling it to
   // the viewport keeps script virtual positions and pixel-sized bars coherent.
-  return std::min(float(std::max(w(),1))/800.f,float(std::max(h(),1))/600.f)*Gothic::options().interfaceScale;
+  // The canvas also reserves vertical room for the script's fixed focus offset.
+  // Status-bar zoom saturates at fit; smaller user multipliers still shrink it.
+  const float fit = std::min(float(std::max(w(),1))/800.f,float(std::max(h(),1))/600.f);
+  return fit*std::min(Gothic::options().interfaceScale,1.f);
   }
 
 void MainWindow::drawBar(Painter &p, const Tempest::Texture2d* bar, int x, int y, float v, AlignFlag flg) {
@@ -732,6 +738,9 @@ void MainWindow::drawBar(Painter &p, const Tempest::Texture2d* bar, int x, int y
 
   int   dy = int(0.5f*(destH-destHin));
   float pd = 9.f*k;
+  if(std::getenv("OPENGOTHIC_PROFILE") && std::getenv("OPENGOTHIC_BOSS_UI_PROBE"))
+    Log::i("[BOSS_UI] native fill=",(flg & AlignTop) ? "focus" : "player",
+           " rect=",x+int(pd),",",y+dy,",",int(float(destW-pd*2)*v),",",int(destHin));
   p.setBrush(*bar);
   p.drawRect(x+int(pd),y+dy,int(float(destW-pd*2)*v),int(destHin),
              0,0,bar->w(),bar->h());
@@ -1337,6 +1346,17 @@ void MainWindow::render(){
     const auto aiWaitMode = std::getenv("OPENGOTHIC_AI_WAIT_PROBE");
     const bool legacyNavProbe = aiWaitMode!=nullptr && std::string_view(aiWaitMode).starts_with("legacy-nav");
     if(profileReady && loadedAt==0) {
+      if(bossGeometry)
+        setFullscreen(false); // Native window restoration can reopen the previous fullscreen state.
+#if defined(__OSX__)
+      if(bossMode && std::getenv("OPENGOTHIC_BOSS_UI_1024")) {
+        // Resize the real Cocoa content surface, in backing pixels, not the widget alone.
+        struct CocoaSize { double width, height; }; // 64-bit NSSize ABI.
+        auto window = reinterpret_cast<::id>(hwnd());
+        const auto dpi = reinterpret_cast<double(*)(::id,SEL)>(objc_msgSend)(window,sel_registerName("backingScaleFactor"));
+        reinterpret_cast<void(*)(::id,SEL,CocoaSize)>(objc_msgSend)(window,sel_registerName("setContentSize:"),CocoaSize{1024./dpi,768./dpi});
+        }
+#endif
 
       if(std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr && std::string_view(std::getenv("OPENGOTHIC_GATE_PROBE"))=="open")
         Gothic::inst().world()->execTriggerEvent(TriggerEvent("SHIP_TRAPDOOR", "", TriggerEvent::T_Trigger));
@@ -1840,6 +1860,29 @@ void MainWindow::render(){
           vm.call_function("B_GIVEPLAYERXP",50);
           Log::i("[BOSS_UI] XP delta=",pl->handle().exp-before);
           }
+        if(std::getenv("OPENGOTHIC_BOSS_UI_CONSUMERS")) {
+          if(profileFrames==280) {
+            rootMenu.setMenu("MENU_STATUS");
+            rootMenu.setPlayer(*pl);
+            Log::i("[UI_CONSUMER] native_status bar=",vm.find_symbol_by_name("STATUSSCREEN_EXPBAR")->get_int());
+            }
+          if(profileFrames==290) {
+            vm.find_symbol_by_name("STATUSSCREEN_EXPBAR_EXP")->set_int(50);
+            vm.find_symbol_by_name("STATUSSCREEN_EXPBAR_NEXT")->set_int(100);
+            vm.call_function("STATUSSCREEN_CREATEEXPBAR");
+            Log::i("[UI_CONSUMER] explicit_status bar=",vm.find_symbol_by_name("STATUSSCREEN_EXPBAR")->get_int());
+            }
+          if(profileFrames==300) {
+            vm.call_function("STATUSSCREENCLOSE_HOOK");
+            rootMenu.closeAll();
+            }
+          if(profileFrames==310) {
+            vm.call_function("CRAFTINGVIEW_SHOW",int32_t(vm.find_symbol_by_name("ITFO_BREAD")->index()),2,1);
+            Log::i("[UI_CONSUMER] crafting open=",vm.find_symbol_by_name("CRAFTINGVIEW_ISOPEN")->get_int());
+            }
+          if(profileFrames==320)
+            vm.call_function("CRAFTINGVIEW_HIDE");
+          }
         }
       if(mode=="seed" && profileFrames==30) {
         pl->handle().attribute[ATR_HITPOINTS] /= 2;
@@ -1885,10 +1928,16 @@ void MainWindow::render(){
                " bar_valid=",vm.call_function<int>("HLP_ISVALIDHANDLE",vm.find_symbol_by_name("BOSS_BAR")->get_int()),
                " title_valid=",vm.call_function<int>("HLP_ISVALIDHANDLE",vm.find_symbol_by_name("BOSSNAMEPRINT")->get_int()));
       if(mode=="legacy-seed" && profileFrames==60) {
+        Log::i("[LEGACY_UI] fixture timer_paused=",vm.find_symbol_by_name("_TIMER_PAUSED")->get_int());
+        // Historical integration fixtures may intentionally retain paused timers.
+        // Only the new private lifecycle needs a running timer; plain reload is untouched.
+        vm.call_function("TIMER_SETPAUSE",0);
         vm.call_function("FINISH_BOSSUI");
         Log::i("[LEGACY_UI] cleanup active=",vm.find_symbol_by_name("BOSSUI")->get_int());
         vm.call_function("START_BOSSUI",pl->handlePtr(),0);
         Log::i("[LEGACY_UI] fresh active=",vm.find_symbol_by_name("BOSSUI")->get_int());
+        Log::i("[LEGACY_UI] fresh bar_valid=",vm.call_function<int>("HLP_ISVALIDHANDLE",vm.find_symbol_by_name("BOSS_BAR")->get_int()),
+               " destructor_arg=",vm.find_symbol_by_name("BAR_DELETE.BAR")->get_int());
         }
       if(mode=="legacy-seed" && profileFrames==90) {
         pl->handle().attribute[ATR_HITPOINTS] = pl->attribute(ATR_HITPOINTSMAX)/2;
@@ -1897,6 +1946,8 @@ void MainWindow::render(){
                " boss=",vm.find_symbol_by_name("C_NPC.ATTRIBUTE")->get_int(ATR_HITPOINTS,boss.get()),
                " max=",vm.find_symbol_by_name("C_NPC.ATTRIBUTE")->get_int(ATR_HITPOINTSMAX,boss.get()),
                " same=",boss==pl->handlePtr());
+        Log::i("[LEGACY_UI] timer paused=",vm.find_symbol_by_name("_TIMER_PAUSED")->get_int(),
+               " callback_active=",vm.call_function<int>("FF_ACTIVE",int32_t(vm.find_symbol_by_name("BOSSUI_FF")->index())));
         }
       if(mode=="legacy-seed" && profileFrames==120 && !bossUiProbeSaved) {
         bossUiProbeSaved = true;
@@ -2213,6 +2264,10 @@ void MainWindow::render(){
         case 210: bossCapture="window-restored"; break;
         case 255: bossCapture="cleanup"; break;
         case 270: bossCapture="xp"; break;
+        case 285: bossCapture="status-native"; break;
+        case 295: bossCapture="status-explicit"; break;
+        case 315: bossCapture="crafting"; break;
+        case 325: bossCapture="consumers-cleanup"; break;
         }
       }
     if(sampling && std::getenv("OPENGOTHIC_BOSS_UI_CAPTURE")!=nullptr &&
@@ -2657,7 +2712,7 @@ void MainWindow::render(){
           }
         }
       }
-    if(sampling && ++profileFrames==(bossGeometry ? 280u : std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
+    if(sampling && ++profileFrames==(bossGeometry ? (std::getenv("OPENGOTHIC_BOSS_UI_CONSUMERS") ? 330u : 280u) : std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,
