@@ -98,7 +98,7 @@ GameScript::GameScript(GameSession &owner)
 
   vmLang = Gothic::inst().settingsGetI("GAME", "language");
   vm.register_exception_handler(zenkit::lenient_vm_exception_handler);
-  if(std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr)
+  if(std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_BOSS_UI_PROBE")!=nullptr)
     vm.register_exception_handler([](auto& vm, const auto& error, const auto& instruction) {
       vm.print_stack_trace();
       return zenkit::lenient_vm_exception_handler(vm,error,instruction);

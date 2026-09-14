@@ -1880,6 +1880,29 @@ void MainWindow::render(){
         vm.call_function("FINISH_BOSSUI");
         Log::i("[BOSS_UI] synthetic finish active=",vm.find_symbol_by_name("BOSSUI")->get_int());
         }
+      if(mode.starts_with("legacy-") && profileFrames==60)
+        Log::i("[LEGACY_UI] retained active=",vm.find_symbol_by_name("BOSSUI")->get_int(),
+               " bar_valid=",vm.call_function<int>("HLP_ISVALIDHANDLE",vm.find_symbol_by_name("BOSS_BAR")->get_int()),
+               " title_valid=",vm.call_function<int>("HLP_ISVALIDHANDLE",vm.find_symbol_by_name("BOSSNAMEPRINT")->get_int()));
+      if(mode=="legacy-seed" && profileFrames==60) {
+        vm.call_function("FINISH_BOSSUI");
+        Log::i("[LEGACY_UI] cleanup active=",vm.find_symbol_by_name("BOSSUI")->get_int());
+        vm.call_function("START_BOSSUI",pl->handlePtr(),0);
+        Log::i("[LEGACY_UI] fresh active=",vm.find_symbol_by_name("BOSSUI")->get_int());
+        }
+      if(mode=="legacy-seed" && profileFrames==90) {
+        pl->handle().attribute[ATR_HITPOINTS] = pl->attribute(ATR_HITPOINTSMAX)/2;
+        auto boss = vm.find_symbol_by_name("CURRENTBOSS")->get_instance();
+        Log::i("[LEGACY_UI] health hero=",pl->attribute(ATR_HITPOINTS),
+               " boss=",vm.find_symbol_by_name("C_NPC.ATTRIBUTE")->get_int(ATR_HITPOINTS,boss.get()),
+               " max=",vm.find_symbol_by_name("C_NPC.ATTRIBUTE")->get_int(ATR_HITPOINTSMAX,boss.get()),
+               " same=",boss==pl->handlePtr());
+        }
+      if(mode=="legacy-seed" && profileFrames==120 && !bossUiProbeSaved) {
+        bossUiProbeSaved = true;
+        saveGame("save_slot_2.sav","Fresh UI after historical load");
+        Log::i("[LEGACY_UI] fresh save requested");
+        }
       }
     if(sampling && std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) {
       const auto mode = std::string_view(std::getenv("OPENGOTHIC_WORLD_PROBE"));

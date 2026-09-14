@@ -14,7 +14,7 @@ import zipfile
 p = argparse.ArgumentParser()
 for name in ("executable", "game", "save", "output"):
     p.add_argument("--" + name, required=True, type=Path)
-p.add_argument("--mode", choices=("seed", "reload", "event", "event-seed", "event-reload", "event-geometry", "focus-seed", "focus-reload"), required=True)
+p.add_argument("--mode", choices=("seed", "reload", "event", "event-seed", "event-reload", "event-geometry", "focus-seed", "focus-reload", "legacy-reload", "legacy-seed"), required=True)
 p.add_argument("--reject-view", action="store_true", help="Reject a private v4 snapshot with a view pointer into its allocation")
 a = p.parse_args()
 exe, game, save, out = (getattr(a, name).resolve() for name in ("executable", "game", "save", "output"))
@@ -39,7 +39,7 @@ if a.reject_view:
 (out / "Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")
 env = {key: value for key, value in os.environ.items() if not key.startswith("OPENGOTHIC_")}
 env.update(OPENGOTHIC_PROFILE="1", OPENGOTHIC_BOSS_UI_PROBE=a.mode)
-if a.mode.startswith("event"):
+if a.mode.startswith(("event", "legacy-")):
     env["OPENGOTHIC_BOSS_UI_CAPTURE"] = "1"
 try:
     with (out / "terminal.log").open("w") as log:
@@ -67,6 +67,38 @@ try:
             cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=180)
     assert result.returncode == 0, f"Game exited {result.returncode}"
     trace = (out / "terminal.log").read_text(errors="replace")
+    if a.mode.startswith("legacy-"):
+        with zipfile.ZipFile(save) as archive:
+            version = struct.unpack("<I", archive.read("game/compatibility")[:4])[0]
+            assert version in (1, 2) and archive.testzip() is None
+        assert f"[LEGACY_UI] version={version} views=0 fonts=0" in trace
+        assert "[BOSS_UI] reload active=1" in trace
+        assert "[LEGACY_UI] retained active=1 bar_valid=1 title_valid=1" in trace
+        initial = trace.split("[LEGACY_UI] retained", 1)[0]
+        assert "[BOSS_UI] draw texture=BOSSBAR" not in initial
+        assert "[BOSS_UI] text=Marvin rect=592,76,95,32" in initial
+        if a.mode == "legacy-seed":
+            assert "[LEGACY_UI] cleanup active=0" in trace
+            fresh = trace.split("[LEGACY_UI] fresh active=1", 1)[1]
+            assert "[BOSS_UI] draw texture=BOSSBAR_BG.TGA rect=160,-36,960,119" in fresh
+            assert "[BOSS_UI] draw texture=BOSSBAR.TGA rect=200,14,439,19" in fresh
+            assert "[BOSS_UI] text=Marvin rect=592,76,95,32" in fresh
+            assert "[LEGACY_UI] fresh save requested" in fresh
+            with zipfile.ZipFile(out / "save_slot_2.sav") as archive:
+                assert archive.testzip() is None and archive.read("game/compatibility")[:4] == b"\x04\0\0\0"
+        else:
+            assert "[BOSS_UI] draw texture=BOSSBAR" not in trace
+            assert not (out / "save_slot_2.sav").exists()
+        assert all((out / f"boss-ui-{phase}.png").is_file() for phase in ("full", "half", "cleanup"))
+        (out / "manifest.json").write_text(json.dumps({"executable": executable_hash,
+            "input_save": source_hash, "mode": a.mode, "version": version,
+            "boundary": "Retained script handles, missing historical native view/font metadata; not recovered UI",
+            "output_saves": {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                             for p in out.glob("save_slot_*.sav")},
+            "output_images": {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                              for p in out.glob("boss-ui-*.png")}}, indent=2) + "\n")
+        print(f"PASS legacy state boundary (not visual recovery): {out}")
+        raise SystemExit(0)
     if a.mode == "event-geometry":
         assert "[BOSS_UI] event start active=1 state=2 hp=1500" in trace
         assert "[BOSS_UI] event health active=1 hp=750" in trace

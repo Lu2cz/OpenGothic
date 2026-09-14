@@ -982,6 +982,10 @@ void DirectMemory::load(Serialize& in) {
   auto* barY = vm.find_symbol_by_name("_BAR_SCREEN_Y");
   auto* barScale = vm.find_symbol_by_name("_BAR_SCALING");
   auto* hpBar = mem32.deref<oCViewStatusBar>(memGame.HPBAR);
+  if(auto* mode = std::getenv("OPENGOTHIC_BOSS_UI_PROBE"); mode && std::string_view(mode).starts_with("legacy-"))
+    Log::i("[LEGACY_UI] version=",version," views=",uiViews.size()," fonts=",fontNames.size(),
+           " screen=",screen ? screen->get_int(0) : 0,",",screen ? screen->get_int(1) : 0,
+           " bar_screen=",barX ? barX->get_int() : 0,",",barY ? barY->get_int() : 0);
   if(!uiViews.empty() && screen && screen->count()>=2 && barX && barY && barScale && hpBar &&
      barX->get_int()==0 && screen->get_int(0)>0 && screen->get_int(1)>0 && hpBar->VSIZEX>0) {
     barX->set_int(screen->get_int(0));
