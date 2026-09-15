@@ -1386,10 +1386,9 @@ void MainWindow::render(){
         Gothic::inst().world()->execTriggerEvent(TriggerEvent("SHIP_TRAPDOOR", "", TriggerEvent::T_Trigger));
       loadedAt = profileEntry;
       }
-    if(profileReady && (std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ||
-                        std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ||
-                        std::getenv("OPENGOTHIC_BUFF_PROBE")!=nullptr) &&
-       (video.isActive() || chapter.isActive() || dialogs.isActive())) {
+    if(profileReady && ((buffMode!=nullptr && (video.isActive() || chapter.isActive() || dialogs.isActive())) ||
+                        ((std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr || std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr) &&
+                         (video.isActive() || chapter.isActive())))) {
       Log::i("[RECIPE_PROBE] dismiss opening video=",video.isActive()," chapter=",chapter.isActive());
       KeyEvent escape(Event::K_ESCAPE);
       keyDownEvent(escape);
