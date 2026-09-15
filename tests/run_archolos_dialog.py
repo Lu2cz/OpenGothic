@@ -3,7 +3,7 @@ import argparse
 import hashlib
 import os
 from pathlib import Path
-import shutil
+from archolos_test_data import copy_save
 import subprocess
 
 parser = argparse.ArgumentParser()
@@ -17,7 +17,7 @@ exe, game, save, output = (p.resolve() for p in (args.executable, args.game, arg
 assert exe.is_file() and game.is_dir() and save.is_file()
 original = hashlib.sha256(save.read_bytes()).digest()
 output.mkdir(parents=True, exist_ok=False)
-shutil.copy2(save, output / "save_slot_1.sav")
+copy_save(save, output / "save_slot_1.sav")
 (output / "Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")
 command = [str(exe), "-g", str(game), "-game:TheChroniclesOfMyrtana.ini",
            "-window", "-rt", "0", "-gi", "0", "-aa", "0", "-bl", "0", "-save", "1"]

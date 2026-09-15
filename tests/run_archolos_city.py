@@ -4,7 +4,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
-import shutil
+from archolos_test_data import copy_save
 import subprocess
 import time
 import zipfile
@@ -24,9 +24,9 @@ exe, game, out = (getattr(a, name).resolve() for name in ("executable", "game", 
 save = (a.save or a.seed).resolve()
 original = hashlib.sha256(save.read_bytes()).hexdigest()
 out.mkdir(parents=True, exist_ok=False)
-shutil.copy2(save, out / "save_slot_1.sav")
+copy_save(save, out / "save_slot_1.sav")
 if a.save_failure:
-    shutil.copy2(save, out / "save_slot_2.sav")
+    copy_save(save, out / "save_slot_2.sav")
 if a.reject:
     with zipfile.ZipFile(save) as z:
         entries = {n: z.read(n) for n in z.namelist()}

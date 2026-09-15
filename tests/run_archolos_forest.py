@@ -3,7 +3,7 @@ import argparse
 import hashlib
 import os
 from pathlib import Path
-import shutil
+from archolos_test_data import copy_save
 import subprocess
 import zipfile
 
@@ -16,7 +16,7 @@ a = p.parse_args()
 exe, game, save, out = (getattr(a, n).resolve() for n in ("executable", "game", "save", "output"))
 original = hashlib.sha256(save.read_bytes()).hexdigest()
 out.mkdir(parents=True, exist_ok=False)
-shutil.copy2(save, out / "save_slot_1.sav")
+copy_save(save, out / "save_slot_1.sav")
 (out / "source.sha256").write_text(original)
 (out / "executable.sha256").write_text(hashlib.sha256(exe.read_bytes()).hexdigest())
 (out / "Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")

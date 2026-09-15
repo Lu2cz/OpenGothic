@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
+from archolos_test_data import copy_save
 import subprocess
 import zipfile
 
@@ -22,7 +22,7 @@ if a.mode == "reload":
 source_hash = hashlib.sha256(save.read_bytes()).hexdigest() if save else None
 out.mkdir(parents=True, exist_ok=False)
 if save:
-    shutil.copy2(save, out / "save_slot_1.sav")
+    copy_save(save, out / "save_slot_1.sav")
 (out / "Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")
 env = {key: value for key, value in os.environ.items() if not key.startswith("OPENGOTHIC_")}
 env.update(OPENGOTHIC_PROFILE="1", OPENGOTHIC_BUFF_PROBE=a.mode)

@@ -4,7 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
+from archolos_test_data import copy_save
 import subprocess
 import struct
 import sys
@@ -23,7 +23,7 @@ a = p.parse_args()
 exe, game, save, out = (x.resolve() for x in [a.executable,a.game,a.save,a.output])
 original = hashlib.sha256(save.read_bytes()).digest()
 out.mkdir(parents=True,exist_ok=False)
-shutil.copy2(save,out/"save_slot_1.sav")
+copy_save(save,out/"save_slot_1.sav")
 if a.reject or a.world_state_only:
     with zipfile.ZipFile(save) as z:
         entries = {n:z.read(n) for n in z.namelist()}

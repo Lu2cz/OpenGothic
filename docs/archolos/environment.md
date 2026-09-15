@@ -75,6 +75,10 @@ Tests live in `tests/run_archolos_*.py`; run the relevant runner's `--help` firs
 They take explicit executable, game, output and (where needed) source-save paths.
 Use a new output directory and private settings every run. Profile probes are opt-in;
 never leave OPENGOTHIC_* test variables in a normal player launch.
+Runners clone input saves with copy-on-write on APFS, retaining independent writes.
+For checkpoint retention, retired worktrees and archived evidence recovery, follow
+[the storage policy](storage-retention.md). Check its archive index when an old
+evidence path is no longer present; do not assume the checkpoint was lost.
 
 The historical save reset removed the old ship/captain/forest checkpoints. Do not
 blindly paste old log commands. Regenerate needed checkpoints under issue #5.

@@ -4,7 +4,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
-import shutil
+from archolos_test_data import copy_save
 import subprocess
 import struct
 import zipfile
@@ -17,7 +17,7 @@ a = p.parse_args()
 exe, game, save, out = (x.resolve() for x in [a.executable, a.game, a.save, a.output])
 original = hashlib.sha256(save.read_bytes()).digest()
 out.mkdir(parents=True, exist_ok=False)
-shutil.copy2(save, out / "save_slot_1.sav")
+copy_save(save, out / "save_slot_1.sav")
 (out / "Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")
 events = []
 def key(t, code, ch, repeats=0):
