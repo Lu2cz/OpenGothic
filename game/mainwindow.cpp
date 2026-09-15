@@ -1329,6 +1329,25 @@ void MainWindow::render(){
     static bool bossUiProbeHealth=false;
     static bool bossUiProbeFinished=false;
     static bool bossUiProbeCleaned=false;
+    static bool buffProbeStarted=false;
+    static bool buffProbeUseRequested=false;
+    static bool buffProbeActivationPending=false;
+    static bool buffProbeObserved=false;
+    static bool buffProbeRepeated=false;
+    static bool buffProbeSaved=false;
+    static bool buffProbeActiveCapture=false;
+    static bool buffProbeFadeCapture=false;
+    static bool buffProbeMissingCapture=false;
+    static bool buffProbeMissingCaptured=false;
+    static bool buffProbeActiveCaptured=false;
+    static bool buffProbeFadeCaptured=false;
+    static bool buffProbeExpired=false;
+    static uint32_t buffProbeExpiryFrame=uint32_t(-1);
+    static int buffProbeHandle=0;
+    static size_t buffProbeItemsBefore=0;
+    static double buffProbeAt=0;
+    static double buffProbeActivatedAt=0;
+    static uint64_t buffProbePlayableTick=0;
     static uint32_t bossUiGeometryFrame=uint32_t(-1);
     static uint64_t aiWaitProbeTicket=0;
     static uint8_t aiWaitProbeStep=0;
@@ -1341,6 +1360,7 @@ void MainWindow::render(){
     const double profileEntry = profileEnabled ? profileNow() : 0;
     const auto bossMode = std::getenv("OPENGOTHIC_BOSS_UI_PROBE");
     const bool bossGeometry = bossMode && std::string_view(bossMode)=="event-geometry";
+    const auto buffMode = std::getenv("OPENGOTHIC_BUFF_PROBE");
     const bool profileReady = profileEnabled && Gothic::inst().world()!=nullptr &&
                               Gothic::inst().checkLoading()==Gothic::LoadState::Idle;
     const auto aiWaitMode = std::getenv("OPENGOTHIC_AI_WAIT_PROBE");
@@ -1363,8 +1383,9 @@ void MainWindow::render(){
       loadedAt = profileEntry;
       }
     if(profileReady && (std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ||
-                        std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr) &&
-       (video.isActive() || chapter.isActive())) {
+                        std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ||
+                        std::getenv("OPENGOTHIC_BUFF_PROBE")!=nullptr) &&
+       (video.isActive() || chapter.isActive() || dialogs.isActive())) {
       Log::i("[RECIPE_PROBE] dismiss opening video=",video.isActive()," chapter=",chapter.isActive());
       KeyEvent escape(Event::K_ESCAPE);
       keyDownEvent(escape);
@@ -1955,6 +1976,122 @@ void MainWindow::render(){
         Log::i("[LEGACY_UI] fresh save requested");
         }
       }
+    if(sampling && buffMode!=nullptr) {
+      auto& w = *Gothic::inst().world();
+      auto& vm = w.script().getVm();
+      auto* pl = w.player();
+      const auto speed = vm.find_symbol_by_name("ITPO_SPEED")->index();
+      const auto speedBuff = vm.find_symbol_by_name("BUFF_SPEED")->index();
+      const auto active = [&] { return vm.call_function<int>("BUFF_HAS",pl->handlePtr(),int32_t(speedBuff)); };
+      if(!buffProbeStarted) {
+        buffProbeStarted = true;
+        buffProbeAt = profileEntry;
+        if(auto* list = vm.find_symbol_by_name("BUFFLIST_HERO")) {
+          const auto handle = list->get_int();
+          const auto symbol = [&vm](const char* name) {
+            if(auto* value = vm.find_symbol_by_name(name))
+              return value->get_int();
+            return 0;
+            };
+          Log::i("[BUFF_UI] list handle=",handle,
+                 " valid=",vm.call_function<int>("HLP_ISVALIDHANDLE",handle),
+                 " ptr=",vm.call_function<int>("GETPTR",handle),
+                 " instance=",vm.call_function<int>("GETINST",handle),
+                 " tables=",symbol("HANDLESPOINTER"),",",symbol("HANDLESINSTANCE"),",",symbol("HANDLESWRAPPED"),
+                 " next=",symbol("NEXTHANDLE")," lego=",symbol("_LEGO_LOADED"),",",symbol("_LEGO_FLAGS"),
+                 " flags=",symbol("LEGO_PERMMEM"),",",symbol("LEGO_TIMER"),",",symbol("LEGO_BUFFS"));
+          }
+        if(std::string_view(buffMode)=="reload") {
+          buffProbeHandle = active();
+          buffProbeActivatedAt = buffProbeAt;
+          Log::i("[BUFF_UI] reload handle=",buffProbeHandle," sprint=",pl->hasOverlay("HUMANS_SPRINT.MDS"));
+          } else {
+          pl->addItem(speed,2);
+          buffProbeItemsBefore = pl->itemCount(speed);
+          }
+        }
+      const auto elapsed = profileEntry-buffProbeAt;
+      const auto handle = active();
+      const bool sprint = pl->hasOverlay("HUMANS_SPRINT.MDS");
+      const bool playable = !video.isActive() && !chapter.isActive() && !dialogs.isActive() &&
+                            w.currentCs()==nullptr && !Gothic::inst().isPause();
+      if(playable && buffProbePlayableTick==0) {
+        buffProbePlayableTick = w.tickCount();
+        Log::i("[BUFF_UI] playable tick=",buffProbePlayableTick);
+        }
+      if(handle!=0 && !sprint && !buffProbeMissingCaptured) {
+        const auto hero = vm.find_symbol_by_name("HERO")->index();
+        Log::i("[BUFF_UI] buff npc_ptr=",vm.call_function<int>("BUFF_GETNPC",handle),
+               " hero_symbol=",hero," player_symbol=",pl->handle().symbol_index(),
+               " hero_ptr=",vm.call_function<int>("MEM_InstToPtr",int32_t(hero)));
+        }
+      if(handle!=0 && !sprint && !buffProbeMissingCaptured) {
+        buffProbeMissingCapture = true;
+        buffProbeMissingCaptured = true;
+        Log::i("[BUFF_UI] missing overlay state=",int(pl->bodyStateMasked())," hp=",pl->attribute(ATR_HITPOINTS),
+               " pos=",pl->position().x,",",pl->position().y,",",pl->position().z,
+               " cutscene=",w.currentCs()!=nullptr," dialog=",dialogs.isActive()," pause=",Gothic::inst().isPause());
+        }
+      if(std::string_view(buffMode)!="reload" && !buffProbeUseRequested) {
+        if(playable && w.tickCount()>buffProbePlayableTick && pl->isStanding()) {
+          buffProbeUseRequested = true;
+          buffProbeActivationPending = true;
+          pl->useItem(speed); // Same entry point as InventoryMenu::onItemAction.
+          Log::i("[BUFF_UI] use request standing=1 items=",buffProbeItemsBefore);
+          } else if(elapsed>=10000) {
+          throw std::runtime_error("Timed-buff player never reached an item-use state");
+          }
+        }
+      if(buffProbeActivationPending) {
+        if(handle!=0 && sprint) {
+          if(pl->itemCount(speed)>=buffProbeItemsBefore)
+            throw std::runtime_error("Timed-buff activation did not consume its inventory item");
+          buffProbeActivationPending = false;
+          buffProbeHandle = handle;
+          buffProbeActivatedAt = profileEntry;
+          Log::i("[BUFF_UI] activate inventory=1 handle=",handle," items_before=",buffProbeItemsBefore,
+                 " items_after=",pl->itemCount(speed)," sprint=1");
+          } else if(elapsed>=10000) {
+          throw std::runtime_error("Timed-buff activation timed out");
+          }
+        }
+      if(handle!=0 && sprint)
+        buffProbeObserved = true;
+      if(std::string_view(buffMode)=="repeat" && !buffProbeActivationPending && !buffProbeRepeated &&
+         profileEntry-buffProbeActivatedAt>=1000) {
+        buffProbeRepeated = true;
+        pl->useItem(speed);
+        const auto repeated = active();
+        if(repeated!=buffProbeHandle || repeated==0 || !pl->hasOverlay("HUMANS_SPRINT.MDS"))
+          throw std::runtime_error("Timed-buff repeat duplicated or lost its gameplay effect");
+        Log::i("[BUFF_UI] repeat handle=",repeated," same=1 sprint=1");
+        }
+      if((std::string_view(buffMode)=="natural" || std::string_view(buffMode)=="reload") && handle!=0 && sprint &&
+         profileEntry-buffProbeActivatedAt>=1000 && !buffProbeActiveCaptured)
+        buffProbeActiveCapture = true;
+      if((std::string_view(buffMode)=="natural" || std::string_view(buffMode)=="reload") &&
+         profileEntry-buffProbeActivatedAt>=220000 && !buffProbeFadeCaptured)
+        buffProbeFadeCapture = true;
+      if(std::string_view(buffMode)=="seed" && !buffProbeActivationPending &&
+         profileEntry-buffProbeActivatedAt>=10000 && !buffProbeSaved) {
+        buffProbeSaved = true;
+        saveGame("save_slot_2.sav","Active speed potion");
+        Log::i("[BUFF_UI] save active=",handle!=0," sprint=",sprint);
+        }
+      if(buffProbeObserved && handle==0 && !buffProbeExpired) {
+        if(sprint)
+          throw std::runtime_error("Timed-buff expiry retained sprint overlay");
+        buffProbeExpired = true;
+        buffProbeExpiryFrame = profileFrames;
+        Log::i("[BUFF_UI] expired elapsed_ms=",elapsed," sprint=0");
+        }
+      if((std::string_view(buffMode)=="repeat" && buffProbeRepeated && elapsed>=2000) ||
+         (std::string_view(buffMode)=="seed" && buffProbeSaved) ||
+         (buffProbeExpired && profileFrames>buffProbeExpiryFrame+10))
+        Tempest::SystemApi::exit();
+      if(elapsed>=300000)
+        throw std::runtime_error("Timed-buff natural expiry timeout");
+      }
     if(sampling && std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) {
       const auto mode = std::string_view(std::getenv("OPENGOTHIC_WORLD_PROBE"));
       auto& w = *Gothic::inst().world();
@@ -2250,6 +2387,7 @@ void MainWindow::render(){
     profileStamp(4);
     sync = device.submit(cmd);
     const char* bossCapture = nullptr;
+    const char* buffCapture = nullptr;
     if(bossGeometry) {
       switch(profileFrames) {
         case 5: bossCapture="boss-full"; break;
@@ -2270,17 +2408,33 @@ void MainWindow::render(){
         case 325: bossCapture="consumers-cleanup"; break;
         }
       }
-    if(sampling && std::getenv("OPENGOTHIC_BOSS_UI_CAPTURE")!=nullptr &&
-       (bossCapture || (!bossGeometry && (profileFrames==0 || profileFrames==35 || profileFrames==95)))) {
+    if(buffMode!=nullptr) {
+        if(buffProbeMissingCapture) {
+          buffCapture = "missing-overlay";
+          buffProbeMissingCapture = false;
+        } else if(buffProbeActiveCapture) {
+          buffCapture = "active";
+          buffProbeActiveCapture = false;
+          buffProbeActiveCaptured = true;
+        } else if(buffProbeFadeCapture) {
+          buffCapture = "fade";
+          buffProbeFadeCapture = false;
+          buffProbeFadeCaptured = true;
+        } else if(buffProbeExpired && profileFrames==buffProbeExpiryFrame) {
+        buffCapture = "expired";
+        }
+      }
+    if(sampling && ((std::getenv("OPENGOTHIC_BOSS_UI_CAPTURE")!=nullptr &&
+       (bossCapture || (!bossGeometry && (profileFrames==0 || profileFrames==35 || profileFrames==95)))) || buffCapture!=nullptr)) {
       sync.wait();
       const auto probe = std::getenv("OPENGOTHIC_BOSS_UI_PROBE");
       const auto mode = std::string_view(probe ? probe : "");
-      const char* phase = bossCapture ? bossCapture : profileFrames==0 ? (mode=="event-reload" ? "restored" : "full") :
+      const char* phase = buffCapture ? buffCapture : bossCapture ? bossCapture : profileFrames==0 ? (mode=="event-reload" ? "restored" : "full") :
                           profileFrames==35 ? "half" : mode=="event-seed" ? "active" : "cleanup";
-      auto file = string_frm("boss-ui-",phase,".png");
+      auto file = string_frm(buffCapture ? "buff-ui-" : "boss-ui-",phase,".png");
       auto capture = renderer.capture(cmdId,uiMesh[cmdId],numMesh[cmdId],inventory,video);
       device.readPixels(capture).save(file.c_str());
-      Log::i("[BOSS_UI] capture=",phase," viewport=",w(),",",h()," focus_y=",Gothic::inst().world()->script().focusBarY(h()));
+      Log::i(buffCapture ? "[BUFF_UI] capture=" : "[BOSS_UI] capture=",phase," viewport=",w(),",",h()," focus_y=",Gothic::inst().world()->script().focusBarY(h()));
       }
     device.present(swapchain);
     profileStamp(5);
@@ -2712,7 +2866,7 @@ void MainWindow::render(){
           }
         }
       }
-    if(sampling && ++profileFrames==(bossGeometry ? (std::getenv("OPENGOTHIC_BOSS_UI_CONSUMERS") ? 330u : 280u) : std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
+    if(sampling && ++profileFrames==(buffMode!=nullptr ? 20000u : bossGeometry ? (std::getenv("OPENGOTHIC_BOSS_UI_CONSUMERS") ? 330u : 280u) : std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,

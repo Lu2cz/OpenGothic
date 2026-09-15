@@ -2381,6 +2381,9 @@ void DirectMemory::directCall(zenkit::DaedalusVm& vm, zenkit::DaedalusSymbol& fu
     Log::e("Bad unsafe function call");
     return;
     }
+  if(std::getenv("OPENGOTHIC_BUFF_PROBE")!=nullptr &&
+     (func.name()=="BUFF_SPEED_APPLY" || func.name()=="BUFF_SPEED_REMOVE"))
+    Log::i("[BUFF_UI] callback=",func.name());
 
   std::span<zenkit::DaedalusSymbol> params = vm.find_parameters_for_function(&func);
   if(params.size()==1 && params[0].type()==zenkit::DaedalusDataType::INT && !vm.top_is_reference()) {
@@ -3082,6 +3085,9 @@ void DirectMemory::drawUi(Tempest::Painter& p, int width, int height, float barS
       if(texture!=nullptr && w>0 && h>0) {
         p.setBrush(*texture);
         p.drawRect(x,y,w,h,0,0,texture->w(),texture->h());
+        if(std::getenv("OPENGOTHIC_BUFF_PROBE")!=nullptr && state->second.texture=="ItPo_Speed2.TGA")
+          Log::i("[BUFF_UI] draw texture=",state->second.texture," alpha=",view->ALPHA,
+                 " rect=",x,",",y,",",w,",",h);
         if(std::getenv("OPENGOTHIC_BOSS_UI_PROBE")!=nullptr)
           Log::i("[BOSS_UI] draw texture=",state->second.texture," rect=",x,",",y,",",w,",",h);
         }

@@ -1012,16 +1012,23 @@ void Npc::setAnimRotate(int rot) {
   }
 
 bool Npc::setAnimItem(std::string_view scheme, int state) {
+  const bool buffProbe = std::getenv("OPENGOTHIC_BUFF_PROBE")!=nullptr && isPlayer();
   if(scheme.empty())
     return true;
   if(bodyStateMasked()!=BS_STAND) {
+    if(buffProbe)
+      Log::i("[BUFF_UI] item animation rejected state=",int(bodyStateMasked())," scheme=",scheme);
     setAnim(Anim::Idle);
     return false;
     }
   if(auto sq = visual.startAnimItem(*this,scheme,state)) {
+    if(buffProbe)
+      Log::i("[BUFF_UI] item animation accepted scheme=",scheme);
     implAniWait(uint64_t(sq->totalTime()));
     return true;
     }
+  if(buffProbe)
+    Log::i("[BUFF_UI] item animation missing scheme=",scheme);
   return false;
   }
 

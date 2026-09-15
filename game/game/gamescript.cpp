@@ -1182,7 +1182,15 @@ void GameScript::invokeItem(Npc *npc, Item& item, ScriptFn fn) {
 
   ScopeVar self(*vm.global_self(), npc->handlePtr());
   ScopeVar currentItem(*vm.global_item(), item.handlePtr());
+  const bool buffProbe = std::getenv("OPENGOTHIC_BUFF_PROBE")!=nullptr && functionSymbol->name()=="USEITPO_SPEED";
+  if(buffProbe)
+    Log::i("[BUFF_UI] item script enter count=",item.count());
   vm.call_function<void>(functionSymbol);
+  if(buffProbe) {
+    auto* buff = vm.find_symbol_by_name("BUFF_SPEED");
+    Log::i("[BUFF_UI] item script exit handle=",buff ? vm.call_function<int>("BUFF_HAS",npc->handlePtr(),int32_t(buff->index())) : 0,
+           " count=",item.count());
+    }
   }
 
 int GameScript::invokeMana(Npc &npc, Npc* target, int mana) {
@@ -2010,9 +2018,15 @@ void GameScript::mdl_setmodelfatness(std::shared_ptr<zenkit::INpc> npcRef, float
 
 void GameScript::mdl_applyoverlaymds(std::shared_ptr<zenkit::INpc> npcRef, std::string_view overlayname) {
   auto npc = findNpc(npcRef);
+  if(std::getenv("OPENGOTHIC_BUFF_PROBE")!=nullptr && overlayname=="HUMANS_SPRINT.MDS")
+    Log::i("[BUFF_UI] overlay target=",npc!=nullptr);
   if(npc!=nullptr) {
     auto skelet = Resources::loadSkeleton(overlayname);
+    if(std::getenv("OPENGOTHIC_BUFF_PROBE")!=nullptr && overlayname=="HUMANS_SPRINT.MDS")
+      Log::i("[BUFF_UI] overlay apply skeleton=",skelet!=nullptr," before=",npc->hasOverlay(skelet));
     npc->addOverlay(skelet,0);
+    if(std::getenv("OPENGOTHIC_BUFF_PROBE")!=nullptr && overlayname=="HUMANS_SPRINT.MDS")
+      Log::i("[BUFF_UI] overlay applied=",npc->hasOverlay(skelet));
     }
   }
 
