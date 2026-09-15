@@ -120,6 +120,19 @@ Current Fast installation (14 September 2026, issue #7 / PR #22):
 - Local provenance: `outputs/issue7-installation-20260914.json`. Player saves/config,
   launcher, Profile, assets and dependency pins were preserved.
 
+Current Fast installation (15 September 2026, issue #8 / PR #24):
+- Runtime merge: `33fd4acde6b582e71162e323c686c9f840348125`.
+- Pre-sign executable: `758684ea8493c0ea9d6450647b56605eb19b1bb119661a466fde9a153bedb742`.
+- Installed Fast: `4a7193bcec3e96ed85de4d0b5a5e21c93a97713a1743d5467ae9a9a5d5b31a76`.
+- Ad-hoc deep/strict signature verification passes. Profile, launcher, assets,
+  Gothic.ini and all persistent saves are unchanged.
+- Paired rollback executable, Profile, launcher, config and saves:
+  `work/issue8-install-rollback-20260915.UNKrjB`.
+- Signed-stage seed/reload verifies exact active-buff snapshot restoration, opaque
+  and fading UI, and expiry cleanup; the installed private repeat smoke passes.
+  See [timed buff regression](timed-buff-regression.md) and
+  `outputs/issue8-installation-20260915.json`.
+
 Baseline installed hashes (11 September 2026; later installations belong in issues):
 - Fast: `a65b95d1ed0221d53632f94da1d97c55ba4e008d2947a5304f0efe48d0932ad5`
 - Profile: `6ab21c0e1e13a0c84c567db5ba14bc16ae854fc846bea2af0172cb479752ce13`
