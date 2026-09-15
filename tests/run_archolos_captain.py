@@ -4,7 +4,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
-import shutil
+from archolos_test_data import copy_save
 import subprocess
 import zipfile
 
@@ -21,7 +21,7 @@ assert (save is None) == a.prepare
 original = hashlib.sha256(save.read_bytes()).hexdigest() if save else None
 out.mkdir(parents=True, exist_ok=False)
 if save:
-    shutil.copy2(save, out / "save_slot_1.sav")
+    copy_save(save, out / "save_slot_1.sav")
     (out / "source.sha256").write_text(original)
 (out / "Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")
 env = {k: v for k, v in os.environ.items() if not k.startswith("OPENGOTHIC_")}

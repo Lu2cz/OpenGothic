@@ -5,7 +5,7 @@ import json
 import os
 import re
 from pathlib import Path
-import shutil
+from archolos_test_data import copy_save
 import struct
 import subprocess
 import time
@@ -48,7 +48,7 @@ if a.interface_scale is not None:
                 else:
                     (target / item.name).symlink_to(item, target_is_directory=item.is_dir())
     game = private_game
-shutil.copy2(save, out / "save_slot_1.sav")
+copy_save(save, out / "save_slot_1.sav")
 if a.reject_view:
     with zipfile.ZipFile(save) as archive:
         entries = {name: archive.read(name) for name in archive.namelist()}

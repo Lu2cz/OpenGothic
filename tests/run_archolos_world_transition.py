@@ -4,7 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
+from archolos_test_data import copy_save
 import subprocess
 import sys
 import zipfile
@@ -28,7 +28,7 @@ def write_records():
 def run(name, save, mode, evidence):
     stage = out / name
     stage.mkdir()
-    shutil.copy2(save, stage / "save_slot_1.sav")
+    copy_save(save, stage / "save_slot_1.sav")
     (stage / "Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")
     env = {k: v for k, v in os.environ.items() if not k.startswith("OPENGOTHIC_")}
     env.update(OPENGOTHIC_PROFILE="1", OPENGOTHIC_WORLD_PROBE=mode)

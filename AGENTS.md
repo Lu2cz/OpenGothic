@@ -11,6 +11,7 @@ Full Windows DLL or general LeGo/Ikarus parity is not required.
 - Evidence, scope, acceptance and progress: the assigned GitHub issue.
 - Implementation: commits and pull requests in Lu2cz's forks.
 - Build/test/launch environment: docs/archolos/environment.md.
+- Evidence retention and archive recovery: docs/archolos/storage-retention.md.
 - Initial compatibility audit: docs/archolos/lego-ikarus-audit.md (dated evidence).
 - ARCHOLOS_DEVELOPMENT.md is historical; read only relevant sections.
 Do not duplicate the backlog or completed-work history here.
@@ -73,6 +74,8 @@ Do not duplicate the backlog or completed-work history here.
   targeting our working branch; do not replace the playable app before validation.
 - Leave a concise issue handoff if unfinished. Keep raw evidence local and link
   reproducible instructions plus a public-safe summary.
+- Apply storage-retention.md at closure: keep final/baseline evidence and required
+  checkpoints; verify archives before retiring intermediates and clean worktrees.
 
 ## Maintaining this file
 Update only durable goals, constraints, workflow or authoritative reference links.

@@ -4,7 +4,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
-import shutil
+from archolos_test_data import copy_save
 import subprocess
 import zipfile
 
@@ -22,7 +22,7 @@ exe, game, out = (getattr(a, name).resolve() for name in ("executable", "game", 
 save = a.save.resolve()
 original = hashlib.sha256(save.read_bytes()).hexdigest()
 out.mkdir(parents=True, exist_ok=False)
-shutil.copy2(save, out / "save_slot_1.sav")
+copy_save(save, out / "save_slot_1.sav")
 (out / "Gothic.ini").write_text(a.settings.read_text() if a.settings else "[INTERNAL]\nvidResIndex=0\n")
 env = {k: v for k, v in os.environ.items() if not k.startswith("OPENGOTHIC_")}
 env.update(OPENGOTHIC_PROFILE="1", OPENGOTHIC_CITY_PROBE="reload",
