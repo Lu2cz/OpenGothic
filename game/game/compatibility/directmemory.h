@@ -115,6 +115,8 @@ class DirectMemory {
     auto        nativeReference(zenkit::DaedalusSymbol* ref, std::shared_ptr<zenkit::DaedalusInstance> context) -> ptr32_t;
     void        bindReference(zenkit::DaedalusSymbol* ref, std::shared_ptr<zenkit::DaedalusInstance> context, Mem32::Type type);
     bool        isLiveNpc(const std::shared_ptr<zenkit::INpc>& npc) const;
+    auto        npcVob(Npc& npc) -> ptr32_t;
+    void        logBuffProbeState(const char* phase);
     void        pruneFocusNpcs();
     auto        focusVob(Interactive& focus) -> ptr32_t;
     void        saveReference(Serialize& out, const std::shared_ptr<zenkit::DaedalusInstance>& instance);

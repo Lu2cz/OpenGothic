@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import zipfile
@@ -38,15 +39,20 @@ if a.mode == "seed":
     with zipfile.ZipFile(out / "save_slot_2.sav") as archive:
         assert archive.testzip() is None
 elif a.mode == "repeat":
-    assert "[BUFF_UI] activate inventory=1" in trace and "[BUFF_UI] repeat handle=" in trace and "same=1 sprint=1" in trace
+    assert "[BUFF_UI] activate inventory=1" in trace and "[BUFF_UI] repeat handle=" in trace and "same=1 sprint=1 duration_doubled=1" in trace
 else:
     assert "[BUFF_UI] activate inventory=1" in trace if a.mode == "natural" else "[BUFF_UI] reload handle=" in trace
-    assert "[BUFF_UI] expired elapsed_ms=" in trace
+    if a.mode == "reload":
+        source_trace = a.save.with_name("terminal.log").read_text(errors="replace")
+        saved = re.search(r"\[BUFF_UI\] save snapshot handle=\d+ timer=\d+ remaining=(\d+)", source_trace)
+        restored = re.search(r"\[BUFF_UI\] load snapshot handle=\d+ timer=\d+ remaining=(\d+)", trace)
+        assert saved and restored and abs(int(saved[1]) - int(restored[1])) <= 1000, (saved, restored)
+    assert "[BUFF_UI] expired timer=" in trace
     active, fade, expired = (out / f"buff-ui-{phase}.png" for phase in ("active", "fade", "expired"))
     assert active.is_file() and fade.is_file() and expired.is_file()
-    before, after = trace.split("[BUFF_UI] expired elapsed_ms=", 1)
-    assert "[BUFF_UI] draw texture=ItPo_Speed2.TGA" in before
-    assert "[BUFF_UI] draw texture=ItPo_Speed2.TGA" not in after
+    before, after = trace.split("[BUFF_UI] expired timer=", 1)
+    alpha = [int(value) for value in re.findall(r"\[BUFF_UI\] draw texture=ITPO_SPEED2\.TGA alpha=(\d+)", before)]
+    assert 255 in alpha and any(value < 128 for value in alpha), alpha
 if save:
     assert hashlib.sha256(save.read_bytes()).hexdigest() == source_hash, "Source save changed"
 manifest = {"mode": a.mode, "executable": hashlib.sha256(exe.read_bytes()).hexdigest(), "input_save": source_hash,

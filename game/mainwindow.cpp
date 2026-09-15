@@ -1333,20 +1333,24 @@ void MainWindow::render(){
     static bool buffProbeUseRequested=false;
     static bool buffProbeActivationPending=false;
     static bool buffProbeObserved=false;
+    static bool buffProbeRepeatRequested=false;
     static bool buffProbeRepeated=false;
+    static bool buffProbeReloadChecked=false;
     static bool buffProbeSaved=false;
     static bool buffProbeActiveCapture=false;
     static bool buffProbeFadeCapture=false;
-    static bool buffProbeMissingCapture=false;
-    static bool buffProbeMissingCaptured=false;
     static bool buffProbeActiveCaptured=false;
     static bool buffProbeFadeCaptured=false;
     static bool buffProbeExpired=false;
     static uint32_t buffProbeExpiryFrame=uint32_t(-1);
+    static uint32_t buffProbeSaveFrame=uint32_t(-1);
     static int buffProbeHandle=0;
+    static int buffProbeDuration=0;
+    static int buffProbeEnd=0;
+    static int buffProbeTimerAt=0;
     static size_t buffProbeItemsBefore=0;
+    static size_t buffProbeRepeatItemsBefore=0;
     static double buffProbeAt=0;
-    static double buffProbeActivatedAt=0;
     static uint64_t buffProbePlayableTick=0;
     static uint32_t bossUiGeometryFrame=uint32_t(-1);
     static uint64_t aiWaitProbeTicket=0;
@@ -1983,6 +1987,11 @@ void MainWindow::render(){
       const auto speed = vm.find_symbol_by_name("ITPO_SPEED")->index();
       const auto speedBuff = vm.find_symbol_by_name("BUFF_SPEED")->index();
       const auto active = [&] { return vm.call_function<int>("BUFF_HAS",pl->handlePtr(),int32_t(speedBuff)); };
+      const auto buffValue = [&vm](int handle, const char* member) {
+        auto* field = vm.find_symbol_by_name(member);
+        auto buff = vm.call_function<std::shared_ptr<zenkit::DaedalusTransientInstance>>("GET",handle);
+        return field && buff ? field->get_int(0,buff.get()) : 0;
+        };
       if(!buffProbeStarted) {
         buffProbeStarted = true;
         buffProbeAt = profileEntry;
@@ -2003,8 +2012,6 @@ void MainWindow::render(){
           }
         if(std::string_view(buffMode)=="reload") {
           buffProbeHandle = active();
-          buffProbeActivatedAt = buffProbeAt;
-          Log::i("[BUFF_UI] reload handle=",buffProbeHandle," sprint=",pl->hasOverlay("HUMANS_SPRINT.MDS"));
           } else {
           pl->addItem(speed,2);
           buffProbeItemsBefore = pl->itemCount(speed);
@@ -2013,24 +2020,23 @@ void MainWindow::render(){
       const auto elapsed = profileEntry-buffProbeAt;
       const auto handle = active();
       const bool sprint = pl->hasOverlay("HUMANS_SPRINT.MDS");
+      const auto timerNow = vm.call_function<int>("TIMERGT");
+      const auto remaining = handle ? buffValue(handle,"LCBUFF._ENDTIME")-timerNow : 0;
+      if(std::string_view(buffMode)=="reload" && !buffProbeReloadChecked) {
+        buffProbeReloadChecked = true;
+        buffProbeDuration = buffValue(handle,"LCBUFF.DURATIONMS");
+        buffProbeEnd = buffValue(handle,"LCBUFF._ENDTIME");
+        if(handle==0 || !sprint || remaining<=0 || remaining>=buffProbeDuration)
+          throw std::runtime_error("Timed-buff reload lost its remaining duration");
+        buffProbeTimerAt = timerNow;
+        Log::i("[BUFF_UI] reload handle=",handle," sprint=1 duration=",buffProbeDuration,
+               " remaining=",remaining);
+        }
       const bool playable = !video.isActive() && !chapter.isActive() && !dialogs.isActive() &&
                             w.currentCs()==nullptr && !Gothic::inst().isPause();
       if(playable && buffProbePlayableTick==0) {
         buffProbePlayableTick = w.tickCount();
         Log::i("[BUFF_UI] playable tick=",buffProbePlayableTick);
-        }
-      if(handle!=0 && !sprint && !buffProbeMissingCaptured) {
-        const auto hero = vm.find_symbol_by_name("HERO")->index();
-        Log::i("[BUFF_UI] buff npc_ptr=",vm.call_function<int>("BUFF_GETNPC",handle),
-               " hero_symbol=",hero," player_symbol=",pl->handle().symbol_index(),
-               " hero_ptr=",vm.call_function<int>("MEM_InstToPtr",int32_t(hero)));
-        }
-      if(handle!=0 && !sprint && !buffProbeMissingCaptured) {
-        buffProbeMissingCapture = true;
-        buffProbeMissingCaptured = true;
-        Log::i("[BUFF_UI] missing overlay state=",int(pl->bodyStateMasked())," hp=",pl->attribute(ATR_HITPOINTS),
-               " pos=",pl->position().x,",",pl->position().y,",",pl->position().z,
-               " cutscene=",w.currentCs()!=nullptr," dialog=",dialogs.isActive()," pause=",Gothic::inst().isPause());
         }
       if(std::string_view(buffMode)!="reload" && !buffProbeUseRequested) {
         if(playable && w.tickCount()>buffProbePlayableTick && pl->isStanding()) {
@@ -2043,53 +2049,68 @@ void MainWindow::render(){
           }
         }
       if(buffProbeActivationPending) {
-        if(handle!=0 && sprint) {
-          if(pl->itemCount(speed)>=buffProbeItemsBefore)
-            throw std::runtime_error("Timed-buff activation did not consume its inventory item");
+        if(handle!=0 && sprint && pl->itemCount(speed)<buffProbeItemsBefore) {
           buffProbeActivationPending = false;
           buffProbeHandle = handle;
-          buffProbeActivatedAt = profileEntry;
+          buffProbeDuration = buffValue(handle,"LCBUFF.DURATIONMS");
+          buffProbeEnd = buffValue(handle,"LCBUFF._ENDTIME");
+          if(buffProbeDuration!=240000 || remaining<=0 || remaining>buffProbeDuration)
+            throw std::runtime_error("Timed-buff activation has the wrong duration");
+          buffProbeTimerAt = timerNow;
           Log::i("[BUFF_UI] activate inventory=1 handle=",handle," items_before=",buffProbeItemsBefore,
-                 " items_after=",pl->itemCount(speed)," sprint=1");
+                 " items_after=",pl->itemCount(speed)," sprint=1 duration=",buffProbeDuration,
+                 " end=",buffProbeEnd," ptr=",vm.call_function<int>("GETPTR",handle)," target=",buffValue(handle,"LCBUFF.TARGETID"),
+                 " apply=",buffValue(handle,"LCBUFF.ONAPPLY")," remove=",buffValue(handle,"LCBUFF.ONREMOVED"));
           } else if(elapsed>=10000) {
           throw std::runtime_error("Timed-buff activation timed out");
           }
         }
       if(handle!=0 && sprint)
         buffProbeObserved = true;
-      if(std::string_view(buffMode)=="repeat" && !buffProbeActivationPending && !buffProbeRepeated &&
-         profileEntry-buffProbeActivatedAt>=1000) {
-        buffProbeRepeated = true;
+      if(std::string_view(buffMode)=="repeat" && buffProbeHandle!=0 && !buffProbeActivationPending && !buffProbeRepeatRequested &&
+         timerNow-buffProbeTimerAt>=1000) {
+        buffProbeRepeatRequested = true;
+        buffProbeRepeatItemsBefore = pl->itemCount(speed);
         pl->useItem(speed);
-        const auto repeated = active();
-        if(repeated!=buffProbeHandle || repeated==0 || !pl->hasOverlay("HUMANS_SPRINT.MDS"))
-          throw std::runtime_error("Timed-buff repeat duplicated or lost its gameplay effect");
-        Log::i("[BUFF_UI] repeat handle=",repeated," same=1 sprint=1");
+        Log::i("[BUFF_UI] repeat request items=",buffProbeRepeatItemsBefore);
         }
-      if((std::string_view(buffMode)=="natural" || std::string_view(buffMode)=="reload") && handle!=0 && sprint &&
-         profileEntry-buffProbeActivatedAt>=1000 && !buffProbeActiveCaptured)
+      if(buffProbeRepeatRequested && !buffProbeRepeated && active()==buffProbeHandle &&
+         pl->hasOverlay("HUMANS_SPRINT.MDS") && pl->itemCount(speed)<buffProbeRepeatItemsBefore) {
+        const auto duration = buffValue(buffProbeHandle,"LCBUFF.DURATIONMS");
+        const auto end = buffValue(buffProbeHandle,"LCBUFF._ENDTIME");
+        if(duration!=buffProbeDuration*2 || end!=buffProbeEnd+buffProbeDuration)
+          throw std::runtime_error("Timed-buff repeat did not double its duration");
+        buffProbeRepeated = true;
+        Log::i("[BUFF_UI] repeat handle=",buffProbeHandle," same=1 sprint=1 duration_doubled=1");
+        }
+      if((std::string_view(buffMode)=="natural" || std::string_view(buffMode)=="reload") && buffProbeHandle!=0 && !buffProbeActivationPending && handle!=0 && sprint &&
+         remaining>20000 && !buffProbeActiveCaptured)
         buffProbeActiveCapture = true;
-      if((std::string_view(buffMode)=="natural" || std::string_view(buffMode)=="reload") &&
-         profileEntry-buffProbeActivatedAt>=220000 && !buffProbeFadeCaptured)
+      if((std::string_view(buffMode)=="natural" || std::string_view(buffMode)=="reload") && buffProbeHandle!=0 && !buffProbeActivationPending &&
+         remaining>0 && remaining<=20000 && !buffProbeFadeCaptured)
         buffProbeFadeCapture = true;
-      if(std::string_view(buffMode)=="seed" && !buffProbeActivationPending &&
-         profileEntry-buffProbeActivatedAt>=10000 && !buffProbeSaved) {
+      if(std::string_view(buffMode)=="seed" && buffProbeHandle!=0 && !buffProbeActivationPending &&
+         timerNow-buffProbeTimerAt>=10000 && !buffProbeSaved) {
         buffProbeSaved = true;
+        buffProbeSaveFrame = profileFrames;
         saveGame("save_slot_2.sav","Active speed potion");
         Log::i("[BUFF_UI] save active=",handle!=0," sprint=",sprint);
         }
       if(buffProbeObserved && handle==0 && !buffProbeExpired) {
         if(sprint)
           throw std::runtime_error("Timed-buff expiry retained sprint overlay");
+        if(timerNow<buffProbeEnd || timerNow>buffProbeEnd+1000)
+          throw std::runtime_error("Timed-buff expired outside its script-time window");
         buffProbeExpired = true;
         buffProbeExpiryFrame = profileFrames;
-        Log::i("[BUFF_UI] expired elapsed_ms=",elapsed," sprint=0");
+        Log::i("[BUFF_UI] expired timer=",timerNow," sprint=0");
         }
-      if((std::string_view(buffMode)=="repeat" && buffProbeRepeated && elapsed>=2000) ||
-         (std::string_view(buffMode)=="seed" && buffProbeSaved) ||
+      if((std::string_view(buffMode)=="repeat" && buffProbeRepeated && timerNow-buffProbeTimerAt>=2000) ||
+         (std::string_view(buffMode)=="seed" && buffProbeSaved &&
+          Gothic::inst().checkLoading()==Gothic::LoadState::Idle && profileFrames>buffProbeSaveFrame+10) ||
          (buffProbeExpired && profileFrames>buffProbeExpiryFrame+10))
         Tempest::SystemApi::exit();
-      if(elapsed>=300000)
+      if(buffProbeHandle!=0 && !buffProbeExpired && timerNow>buffProbeEnd+1000)
         throw std::runtime_error("Timed-buff natural expiry timeout");
       }
     if(sampling && std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) {
@@ -2409,10 +2430,7 @@ void MainWindow::render(){
         }
       }
     if(buffMode!=nullptr) {
-        if(buffProbeMissingCapture) {
-          buffCapture = "missing-overlay";
-          buffProbeMissingCapture = false;
-        } else if(buffProbeActiveCapture) {
+        if(buffProbeActiveCapture) {
           buffCapture = "active";
           buffProbeActiveCapture = false;
           buffProbeActiveCaptured = true;
