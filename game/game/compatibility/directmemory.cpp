@@ -4,6 +4,7 @@
 #include <Tempest/Log>
 
 #include <cassert>
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cmath>
@@ -282,25 +283,30 @@ void DirectMemory::setNpcFocus(Npc& npc, Npc* focus) {
     clearNpcFocus(npc);
     return;
     }
-  auto* vtable = vm.find_symbol_by_name("OCNPC_VTBL");
-  if(vtable==nullptr) {
+  const auto address = npcVob(*focus);
+  if(address==0) {
     clearNpcFocus(npc);
     return;
     }
-  auto instance = focus->handlePtr();
+  npc.handle().focus_vob = int32_t(address);
+  }
+
+DirectMemory::ptr32_t DirectMemory::npcVob(Npc& npc) {
+  auto* vtable = vm.find_symbol_by_name("OCNPC_VTBL");
+  if(vtable==nullptr)
+    return 0;
+  auto instance = npc.handlePtr();
   // Existing bindings are invalidated by native world removal. Only a newly
   // encountered target needs the linear world-membership check.
-  if(focusNpcAddress.find(instance)==focusNpcAddress.end() && !isLiveNpc(instance)) {
-    clearNpcFocus(npc);
-    return;
-    }
+  if(focusNpcAddress.find(instance)==focusNpcAddress.end() && !isLiveNpc(instance))
+    return 0;
   auto [it,inserted] = focusNpcAddress.emplace(instance,0);
   if(inserted) {
     it->second = mem32.alloc(4,"focused OCNPC");
     focusNpc.emplace(it->second,instance);
     }
   mem32.writeInt(it->second,vtable->get_int());
-  npc.handle().focus_vob = int32_t(it->second);
+  return it->second;
   }
 
 void DirectMemory::clearNpcFocus(Npc& npc) {
@@ -770,9 +776,23 @@ auto DirectMemory::loadReference(Serialize& in) -> std::shared_ptr<zenkit::Daeda
   throw std::runtime_error("Invalid persistent native reference");
   }
 
+void DirectMemory::logBuffProbeState(const char* phase) {
+  if(std::getenv("OPENGOTHIC_BUFF_PROBE")!=nullptr) {
+    auto* buff = vm.find_symbol_by_name("BUFF_SPEED");
+    auto* end  = vm.find_symbol_by_name("LCBUFF._ENDTIME");
+    auto* hero = gameScript.world().player();
+    const int handle = buff && hero ? vm.call_function<int>("BUFF_HAS",hero->handlePtr(),int32_t(buff->index())) : 0;
+    auto value = handle ? vm.call_function<std::shared_ptr<zenkit::DaedalusTransientInstance>>("GET",handle) : nullptr;
+    const int timer = vm.call_function<int>("TIMERGT");
+    Log::i("[BUFF_UI] ",phase," snapshot handle=",handle," timer=",timer,
+           " remaining=",end && value ? end->get_int(0,value.get())-timer : 0);
+    }
+  }
+
 void DirectMemory::save(Serialize& out) {
   if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_PERSISTENCE_SAVE_FAILURE")!=nullptr)
     throw std::runtime_error("Injected compatibility save failure");
+  logBuffProbeState("save");
   pruneFocusNpcs();
   out.setEntry("game/compatibility");
   // ponytail: a complete virtual-memory snapshot requires identical scripts and
@@ -1022,6 +1042,7 @@ void DirectMemory::load(Serialize& in) {
       worldProbeRecurringLastElapsed = 0;
       }
     }
+  logBuffProbeState("load");
   Log::i("[COMPATIBILITY] Restored virtual heap and script bindings");
   }
 
@@ -2097,6 +2118,16 @@ void DirectMemory::setupMemoryFunctions() {
   vm.override_function("MEM_PtrToInst",        [this](int address)           { return mem_ptrtoinst(ptr32_t(address)); });
   vm.override_function("_^",                   [this](int address)           { return mem_ptrtoinst(ptr32_t(address)); });
   vm.override_function("MEM_InstToPtr",        [this](int index)             { return mem_insttoptr(index); });
+  if(vm.find_symbol_by_name("NPC_FINDBYID"))
+    vm.override_function("NPC_FINDBYID",       [this](int id) {
+      if(id<=0)
+        return int32_t(0);
+      auto& world = gameScript.world();
+      for(uint32_t n=0; auto* npc=world.npcById(n); ++n)
+        if(npc->handle().aivar[89]==id)
+          return int32_t(npcVob(*npc));
+      return int32_t(0);
+      });
   vm.override_function("MEM_GetIntAddress",    [this](zenkit::DaedalusVm& vm){ return _takeref(vm);         });
   vm.override_function("_@",                   [this](zenkit::DaedalusVm& vm){ return _takeref(vm);         });
   vm.override_function("MEM_GetStringAddress", [this](zenkit::DaedalusVm& vm){ return _takeref(vm);         });
@@ -2381,6 +2412,9 @@ void DirectMemory::directCall(zenkit::DaedalusVm& vm, zenkit::DaedalusSymbol& fu
     Log::e("Bad unsafe function call");
     return;
     }
+  if(std::getenv("OPENGOTHIC_BUFF_PROBE")!=nullptr &&
+     (func.name()=="BUFF_SPEED_APPLY" || func.name()=="BUFF_SPEED_REMOVE"))
+    Log::i("[BUFF_UI] callback=",func.name());
 
   std::span<zenkit::DaedalusSymbol> params = vm.find_parameters_for_function(&func);
   if(params.size()==1 && params[0].type()==zenkit::DaedalusDataType::INT && !vm.top_is_reference()) {
@@ -2506,6 +2540,8 @@ void DirectMemory::setupMathFunctions() {
   vm.override_function("SUBF",   [](int a, int b) { return subf(a,b); });
   vm.override_function("MULF",   [](int a, int b) { return mulf(a,b); });
   vm.override_function("DIVF",   [](int a, int b) { return divf(a,b); });
+  if(vm.find_symbol_by_name("SIN"))
+    vm.override_function("SIN",  [](int a) { return floatBitsToInt(std::sin(intBitsToFloat(a))); });
   }
 
 int DirectMemory::mkf(int v) {
@@ -3080,8 +3116,16 @@ void DirectMemory::drawUi(Tempest::Painter& p, int width, int height, float barS
       const int x = toPixel(view->VPOSX,uiWidth), y = toPixel(view->VPOSY,uiHeight);
       const int w = toPixel(view->VSIZEX,uiWidth), h = toPixel(view->VSIZEY,uiHeight);
       if(texture!=nullptr && w>0 && h>0) {
-        p.setBrush(*texture);
+        p.setBrush(Tempest::Brush(*texture,Tempest::Color(1,1,1,std::clamp(float(view->ALPHA)/255.f,0.f,1.f)),Tempest::Painter::Alpha));
         p.drawRect(x,y,w,h,0,0,texture->w(),texture->h());
+        if(std::getenv("OPENGOTHIC_BUFF_PROBE")!=nullptr && state->second.texture=="ITPO_SPEED2.TGA") {
+          static uint8_t loggedAlpha = 0;
+          if((view->ALPHA==255 && !(loggedAlpha&1)) || (view->ALPHA<128 && !(loggedAlpha&2))) {
+            loggedAlpha |= view->ALPHA==255 ? 1 : 2;
+            Log::i("[BUFF_UI] draw texture=",state->second.texture," alpha=",view->ALPHA,
+                   " rect=",x,",",y,",",w,",",h);
+            }
+          }
         if(std::getenv("OPENGOTHIC_BOSS_UI_PROBE")!=nullptr)
           Log::i("[BOSS_UI] draw texture=",state->second.texture," rect=",x,",",y,",",w,",",h);
         }
