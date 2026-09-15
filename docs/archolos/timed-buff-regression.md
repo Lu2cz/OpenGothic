@@ -24,3 +24,6 @@ is applied by the native UI brush.
 The test harness exits the private process after a completed save only after the
 loader is idle for ten frames. It does not prove a generic shutdown-during-save
 lifecycle fix; no such unrelated engine change was made.
+
+The signed staged binary used for these captures and the installed Fast binary
+have the same SHA-256: `4a7193bcec3e96ed85de4d0b5a5e21c93a97713a1743d5467ae9a9a5d5b31a76`.

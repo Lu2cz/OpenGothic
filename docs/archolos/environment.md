@@ -122,8 +122,13 @@ Current Fast installation (14 September 2026, issue #7 / PR #22):
 
 Current Fast installation (15 September 2026, issue #8 / PR #24):
 - Runtime merge: `33fd4acde6b582e71162e323c686c9f840348125`.
-- Pre-sign executable: `758684ea8493c0ea9d6450647b56605eb19b1bb119661a466fde9a153bedb742`.
-- Installed Fast: `4a7193bcec3e96ed85de4d0b5a5e21c93a97713a1743d5467ae9a9a5d5b31a76`.
+- The issue-worktree development build was
+  `d8150f240a1426e22a9653c11d08d83193ddea4c3600d0d167bdc369fd838ee5`;
+  the fresh Release deployment build was
+  `758684ea8493c0ea9d6450647b56605eb19b1bb119661a466fde9a153bedb742`.
+- Ad-hoc signing changed the executable to
+  `4a7193bcec3e96ed85de4d0b5a5e21c93a97713a1743d5467ae9a9a5d5b31a76`.
+  The signed staged and installed Fast binaries are byte-identical.
 - Ad-hoc deep/strict signature verification passes. Profile, launcher, assets,
   Gothic.ini and all persistent saves are unchanged.
 - Paired rollback executable, Profile, launcher, config and saves:
