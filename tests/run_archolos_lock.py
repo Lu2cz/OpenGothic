@@ -17,6 +17,8 @@ for name in ["executable", "game", "save", "output"]:
 p.add_argument("--mode", choices=["cast","partial","spell-partial","ordinary","ordinary-reload","reload"], default="cast")
 p.add_argument("--expect-hybrid", action="store_true", help="Require the hybrid achievement branch from an existing partial lock")
 p.add_argument("--setup-chest", action="store_true", help="Privately position at Q101 chest and supply the Open Lock scroll/mana")
+p.add_argument("--snapshot-version", type=int, choices=(2, 3, 4), default=4,
+               help="Expected resave version (default: current v4; use 2 for historical lock builds)")
 p.add_argument("--reject", choices=["address", "truncated", "fingerprint"], help="Verify rejection of damaged private compatibility data")
 p.add_argument("--world-state-only", action="store_true", help="Test native world progress independently of the compatibility heap, in the private copy")
 a = p.parse_args()
@@ -124,7 +126,7 @@ try:
         assert "reload cracked=1 chest_ui=2" in measured, "Reload lost unlock or chest access"
         with zipfile.ZipFile(out/"save_slot_2.sav") as z:
             assert z.testzip() is None
-            assert struct.unpack_from("<I",z.read("game/compatibility"))[0]==2, "Save did not upgrade to v2"
+            assert struct.unpack_from("<I",z.read("game/compatibility"))[0]==a.snapshot_version, "Unexpected compatibility resave version"
     assert "Internal Exception" not in measured, "Script exception during tested flow"
     assert "translation failure" not in measured, "Unmapped memory during tested flow"
     if a.expect_hybrid:
