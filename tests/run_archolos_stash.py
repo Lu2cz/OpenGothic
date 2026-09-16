@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 from archolos_test_data import copy_save
 import subprocess
+import struct
 import zipfile
 
 p=argparse.ArgumentParser()
@@ -14,16 +15,39 @@ for name in ["executable","game","output"]:
 p.add_argument("--save",type=Path)
 p.add_argument("--repair-file",type=Path)
 p.add_argument("--mode",choices=["fresh","stash","return","repair"],required=True)
+p.add_argument("--prepare",action="store_true",help="Instrument a pre-captain copy after Jorn's greeting: set only Q101_VRAZKACHEST from 0 to 1; skips accepting Vrazka's quest")
 a=p.parse_args()
 exe,game,out=(x.resolve() for x in [a.executable,a.game,a.output])
 save=a.save.resolve() if a.save else None
 assert (save is None)==(a.mode=="fresh")
+assert not a.prepare or a.mode in ("stash", "return")
 original=hashlib.sha256(save.read_bytes()).digest() if save else None
 out.mkdir(parents=True,exist_ok=False)
 args=["-nomenu"]
 if save:
     copy_save(save,out/"save_slot_1.sav")
     args=["-save","1"]
+    if a.prepare:
+        # Narrow synthetic prerequisite, never campaign progression or save recovery.
+        with zipfile.ZipFile(save) as z:
+            entries = [(info, z.read(info.filename)) for info in z.infolist()]
+        data = dict((info.filename, data) for info, data in entries)["game/daedalus"]
+        for prerequisite, value in ((b"MIS_Q101", 1), (b"Q101_CAPTAIN_CUTSCENEENABLE", 0)):
+            required = struct.pack("<II", 2, len(prerequisite)) + prerequisite + struct.pack("<Ii", 1, value)
+            assert data.count(required) == 1, "Preparation requires Below the Deck running before departure (use the captain --prepare fixture)"
+        name = b"Q101_VRAZKACHEST"
+        marker = struct.pack("<II", 2, len(name)) + name + struct.pack("<I", 1)
+        assert data.count(marker) == 1, "Expected one scalar integer stash flag"
+        offset = data.index(marker) + len(marker)
+        assert struct.unpack_from("<i", data, offset)[0] == 0, "Preparation requires an unstarted stash quest"
+        prepared = data[:offset] + struct.pack("<i", 1) + data[offset+4:]
+        with zipfile.ZipFile(out/"save_slot_1.sav", "w") as z:
+            for info, contents in entries:
+                z.writestr(info, prepared if info.filename == "game/daedalus" else contents)
+        with zipfile.ZipFile(out/"save_slot_1.sav") as z:
+            assert z.testzip() is None
+            for info, contents in entries:
+                assert z.read(info.filename) == (prepared if info.filename == "game/daedalus" else contents)
 (out/"Gothic.ini").write_text("[INTERNAL]\nvidResIndex=0\n")
 env={k:v for k,v in os.environ.items() if not k.startswith("OPENGOTHIC_")}
 env.update(OPENGOTHIC_PROFILE="1",OPENGOTHIC_STASH_PROBE="1")

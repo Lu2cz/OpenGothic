@@ -45,7 +45,8 @@ demonstration of deleting a world chest. There is no native pointer index to go
 stale. Ordinary restart checks also compare the restored address with the installed
 hook's `LASTMOB` and verify its inactive bytes are zero.
 
-`game/compatibility` now writes version 2. The v1 prefix is unchanged; v2 appends
+`game/compatibility` introduced lock ownership in version 2; current builds write
+version 4 (see [environment.md](environment.md)). The v1 prefix is unchanged; v2 appends
 a count and `(mobsiId, virtualAddress, progress)` records. Load validates object
 IDs, duplicate IDs/addresses, progress bounds, and exact heap allocation
 address/size/type/name before binding an object. Current-world IDs use the existing
@@ -71,15 +72,16 @@ that travel was exercised.
 ## Private fixture and commands
 
 Use [environment.md](environment.md) for paths and build prerequisites. These
-commands run in the issue worktree. Set `TASK_WORK` to its documented `work`
-directory, and use new output names on every invocation.
+commands run from your current checkout, with `TASK_WORK` set to the environment
+guide's `work` directory. Use new output names on every invocation. The retained
+locked input below is private synthetic Chapter 2 evidence; its bytes and provenance
+are indexed in [opening-checkpoints.md](opening-checkpoints.md).
 
 ```sh
-rtk cmake --build build --target Gothic2Notr --parallel 4
 rtk proxy python3 tests/run_archolos_lock.py --help
-rtk proxy python3 tests/run_archolos_lock.py --executable build/opengothic/Gothic2Notr --game "$TASK_WORK/archolos-game" --save "$TASK_WORK/playable/save_slot_3.sav" --output "$TASK_WORK/lock-ordinary" --mode ordinary
-rtk proxy python3 tests/run_archolos_lock.py --executable build/opengothic/Gothic2Notr --game "$TASK_WORK/archolos-game" --save "$TASK_WORK/lock-ordinary/save_slot_2.sav" --output "$TASK_WORK/lock-reload" --mode ordinary-reload
-rtk proxy python3 tests/run_archolos_lock.py --executable build/opengothic/Gothic2Notr --game "$TASK_WORK/archolos-game" --save "$TASK_WORK/playable/save_slot_3.sav" --output "$TASK_WORK/lock-cast" --mode cast --setup-chest
+rtk proxy python3 tests/run_archolos_lock.py --executable "$TASK_WORK/ArcholosFast.app/Contents/MacOS/Gothic2Notr" --game "$TASK_WORK/archolos-game" --save "$TASK_WORK/issue3-candidate-ordinary/save_slot_1.sav" --output "$TASK_WORK/lock-ordinary" --mode ordinary
+rtk proxy python3 tests/run_archolos_lock.py --executable "$TASK_WORK/ArcholosFast.app/Contents/MacOS/Gothic2Notr" --game "$TASK_WORK/archolos-game" --save "$TASK_WORK/lock-ordinary/save_slot_2.sav" --output "$TASK_WORK/lock-reload" --mode ordinary-reload
+rtk proxy python3 tests/run_archolos_lock.py --executable "$TASK_WORK/ArcholosFast.app/Contents/MacOS/Gothic2Notr" --game "$TASK_WORK/archolos-game" --save "$TASK_WORK/issue3-candidate-ordinary/save_slot_1.sav" --output "$TASK_WORK/lock-cast" --mode cast --setup-chest
 ```
 
 Every mode copies the source save, writes private settings, checks the source hash,
@@ -103,8 +105,8 @@ Additional runs use the same command prefix and a fresh output directory:
 | Mode / flags | Source | Required result |
 |---|---|---|
 | `ordinary-reload` twice in sequence | Previous ordinary/reload output | Stable binding, chest access, finalized new save |
-| `reload` | Full cast output | Chest access and v2 resave |
-| `reload --setup-chest` | Genuine v1 unlocked-chest checkpoint | v1 load, native access, upgrade to v2; repeat on its output |
+| `reload` | Full cast output | Chest access and current v4 resave |
+| `reload --setup-chest` | Genuine v1 unlocked-chest checkpoint | v1 load, native access, upgrade to current v4; repeat on its output |
 | `partial` | Locked chest source | One real ordinary turn, still locked, saved partial progress |
 | `cast --setup-chest --expect-hybrid` | `partial` output | Spell completes the existing partial lock and invokes achievement hook |
 | `spell-partial --setup-chest` | Locked chest source | Interrupt real cast after one turn; no scroll consumed |
@@ -114,11 +116,17 @@ Additional runs use the same command prefix and a fresh output directory:
 | `reload --reject truncated` | Ordinary v2 output | Truncated metadata rejected before gameplay |
 | `reload --reject fingerprint` | Ordinary v2 output | Different script fingerprint rejected before gameplay |
 
+The `reload` check expects current v4 output. Use `--snapshot-version 2` only
+with a paired historical lock binary that writes v2. Corruption checks remain
+explicitly **v2-only**: their address offset is the end of the v2 lock table,
+not the end of a v4 snapshot. Use retained issue-3 v2 inputs for those checks;
+do not pass current v4 outputs or remove the guard.
+
 General NPC/item focus and the additional static focus readers are explicitly
 tracked in #18. The lock-only API accepts an Interactive, and the NPC field is zero
 outside the supported callback. No general focus implementation is claimed.
 
-## Verification manifest — 11 September 2026
+## Historical verification manifest — 11 September 2026
 
 Runtime source: `6b4890fe86656ddb96741cf70cd35a83b3be91ce`.
 ZenKit: `6fa71bfbd8f3c349be59bbc485f3e7bac7fa3961`.
