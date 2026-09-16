@@ -80,8 +80,9 @@ For checkpoint retention, retired worktrees and archived evidence recovery, foll
 [the storage policy](storage-retention.md). Check its archive index when an old
 evidence path is no longer present; do not assume the checkpoint was lost.
 
-The historical save reset removed the old ship/captain/forest checkpoints. Do not
-blindly paste old log commands. Regenerate needed checkpoints under issue #5.
+Use the private input inventory and procedures in
+[opening-checkpoints.md](opening-checkpoints.md) for gate, lock, stash, captain,
+beach and forest regressions. Historical reset-era commands are not current inputs.
 The city presets are synthetic exploration states, not campaign-validation evidence.
 The user confirmed inventory/quest reload, cooking, recipe/XP display and menu saves;
 these reports supplement, not replace, reproducible checks.
@@ -110,7 +111,7 @@ commands/results and rollback path in the issue. Bundle signing changes executab
 bytes: compare code before its signature or use appropriate build provenance.
 Do not install merely because compilation succeeded.
 
-Current Fast installation (14 September 2026, issue #7 / PR #22):
+Historical Fast installation (14 September 2026, superseded by issue #8 below):
 - Runtime source: `d5e85407b424f2e72f57cb62540d202f844ab75b`.
 - Merge: `c1b35645cd05463a24de2db185399eb841e09279`; main checkout fast-forwarded.
 - Pre-sign executable: `5ba4a86ae645dffa63a1c5560cc03f7090a7c3ab4963445ec2793abe35594d7d`.

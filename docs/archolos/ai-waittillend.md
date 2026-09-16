@@ -19,14 +19,20 @@ supported replay boundary.
 
 ## Reproduction
 
-Build the isolated Release Metal target, then use private output directories:
+Run from your current checkout. Set `TASK_WORK` to the environment guide's
+`work` directory and choose unused output names. The installed binary supports
+these checks; no retired issue worktree or rebuild is required.
 
 ```sh
-rtk proxy cmake --build /Users/lu2/projects/OpenGothic-issue-6/build-issue-6 --target Gothic2Notr --parallel 4
-rtk proxy python3 /Users/lu2/projects/OpenGothic-issue-6/tests/run_archolos_ai_wait.py --executable /Users/lu2/projects/OpenGothic-issue-6/build-issue-6/opengothic/Gothic2Notr --game /Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues/work/archolos-game --save SOURCE --output SEED --mode seed
-rtk proxy python3 /Users/lu2/projects/OpenGothic-issue-6/tests/run_archolos_ai_wait.py --executable /Users/lu2/projects/OpenGothic-issue-6/build-issue-6/opengothic/Gothic2Notr --game /Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues/work/archolos-game --save SEED/save_slot_2.sav --output RELOAD --mode reload
-rtk proxy python3 /Users/lu2/projects/OpenGothic-issue-6/tests/run_archolos_ai_wait.py --executable /Users/lu2/projects/OpenGothic-issue-6/build-issue-6/opengothic/Gothic2Notr --game /Users/lu2/Documents/Codex/2026-09-09/https-github-com-try-opengothic-issues/work/archolos-game --save SOURCE --output EDGES --mode edges
+rtk proxy python3 tests/run_archolos_ai_wait.py --help
+rtk proxy python3 tests/run_archolos_ai_wait.py --executable "$TASK_WORK/ArcholosFast.app/Contents/MacOS/Gothic2Notr" --game "$TASK_WORK/archolos-game" --save "$TASK_WORK/issue6-captain-fixture-3/save_slot_2.sav" --output "$TASK_WORK/ai-wait-seed" --mode seed
+rtk proxy python3 tests/run_archolos_ai_wait.py --executable "$TASK_WORK/ArcholosFast.app/Contents/MacOS/Gothic2Notr" --game "$TASK_WORK/archolos-game" --save "$TASK_WORK/ai-wait-seed/save_slot_2.sav" --output "$TASK_WORK/ai-wait-reload" --mode reload
+rtk proxy python3 tests/run_archolos_ai_wait.py --executable "$TASK_WORK/ArcholosFast.app/Contents/MacOS/Gothic2Notr" --game "$TASK_WORK/archolos-game" --save "$TASK_WORK/issue6-captain-fixture-3/save_slot_2.sav" --output "$TASK_WORK/ai-wait-edges" --mode edges
 ```
+
+For opening-story inputs and current-binary replay evidence, see
+[opening-checkpoints.md](opening-checkpoints.md). The candidate results below
+are historical; restore archived evidence using [storage-retention.md](storage-retention.md).
 
 The reload probe requires `restored pending=1`, `still pending=1`, then
 `complete`; it does not treat removal of the fallback warning as scene proof.
@@ -34,10 +40,10 @@ The edge probe requires `empty`, `completed`, `self`, `snapshot`, `reciprocal`,
 and `removed` markers before it saves.
 The normal-duration forest and captain runners remain separate scene evidence.
 
-## Private verification
+## Historical private verification — issue #6
 
 Candidate `9b4c7b795bd037672ded991aef9d0a05cda2a1683e85ff6dd79e71af3461f809`
-was built from this worktree and exercised without modifying source saves:
+was built from the issue-6 worktree (since retired) and exercised without modifying source saves:
 
 - `issue6-aiwait-final2-seed` then `issue6-aiwait-final2-reload` passed the
   persisted pending wait (`restored pending=1`, `still pending=1`, `complete`).
