@@ -316,11 +316,15 @@ void Npc::load(Serialize &fin, size_t id, std::string_view directory) {
   fin.setEntry("worlds/",fin.worldName(),directory,id,"/visual");
   visual.load(fin,*this);
   physic.setPosition(phyPos);
-
   setVisualBody(vHead,vTeeth,vColor,bdColor,body,head);
 
   if(fin.setEntry("worlds/",fin.worldName(),directory,id,"/inventory"))
     invent.load(fin,*this);
+
+  // Navigation precedes the next queued item action; do not let a restored
+  // interruptible item pose prevent persisted navigation from resuming.
+  if(go2.flag!=GT_No && bodyStateMasked()==BS_ITEMINTERACT)
+    visual.interrupt();
 
   // post-alignment
   updateTransform();

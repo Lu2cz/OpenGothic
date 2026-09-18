@@ -1397,6 +1397,21 @@ void MainWindow::render(){
       }
     bool sampling = profileReady && (legacyNavProbe || profileEntry-loadedAt>=10000);
     if(sampling && profileAt==0) {
+      if(std::getenv("OPENGOTHIC_SILBACH_PROBE")!=nullptr) {
+        auto& w = *Gothic::inst().world();
+        auto& vm = w.script().getVm();
+        auto* pl = w.player();
+        auto* marthaSymbol=vm.find_symbol_by_name("BAU_703_MARTHA");
+        auto* martha=marthaSymbol ? w.findNpcByInstance(marthaSymbol->index()) : nullptr;
+        if(pl==nullptr || martha==nullptr)
+          throw std::runtime_error("Silbach probe requires player and Martha");
+        auto choices=w.script().dialogChoices(pl->handlePtr(),martha->handlePtr(),{},true);
+        const bool expected=std::any_of(choices.begin(),choices.end(),[&](const auto& choice) {
+          auto* fn=vm.find_symbol_by_index(choice.scriptFn);
+          return fn!=nullptr && fn->name()=="DIA_MARTHA_Q103_TRIALOG_FABIOWAY_INFO";
+          });
+        Log::i("[SILBACH_PROBE] fabio_trialog_available=",expected);
+        }
       if(auto mode=std::getenv("OPENGOTHIC_CITY_PROBE")) {
         auto& w = *Gothic::inst().world();
         auto& vm = w.script().getVm();
