@@ -2902,7 +2902,7 @@ void MainWindow::render(){
       static unsigned stage=0, stageFrame=0;
       static Vec3 controlStart, routeSample;
       static unsigned routeRetries=0;
-      static std::vector<size_t> hiddenBefore;
+      static std::vector<uint32_t> hiddenBefore;
       auto& w=*Gothic::inst().world();
       auto& pl=*w.player();
       auto& vm=w.script().getVm();
@@ -3111,7 +3111,12 @@ void MainWindow::render(){
             const auto* target=npc ? npc->currentTaPoint() : nullptr;
             if(!target || target->name=="TOT" || npc->isDead()) continue;
             ++activated;
-            if((npc->position()-target->position()).length()>600) ++misplaced;
+            const auto delta=npc->position()-target->position();
+            // fixNpcPosition searches 800 horizontally and up to 1000 below the waypoint.
+            if(delta.x*delta.x+delta.z*delta.z>800*800 || std::abs(delta.y)>1000) ++misplaced;
+            if(delta.length()>600)
+              Log::i("[SILBACH_SLEEP] resident_offset npc=",vm.find_symbol_by_index(id)->name()," target=",target->name,
+                     " distance=",delta.length()," y=",delta.y," interactive=",npc->interactive() ? npc->interactive()->schemeName() : "none");
             }
           placed=placed && activated==52 && misplaced==0;
           Log::i("[SILBACH_SLEEP] activated=",activated," misplaced=",misplaced);

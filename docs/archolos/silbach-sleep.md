@@ -62,3 +62,10 @@ the initial combined replay completed the full audio sequence.
 
 Pending acceptance: escort-save recovery, all-resident final replay, arrival
 regression and signed installation. Installed playable app unchanged until validation.
+
+The initial all-resident check used a 600-unit sphere and rejected Elsa at ~665
+units from her routine point, already at the correct village elevation. The
+activation check now respects the existing `fixNpcPosition` collision-search
+bounds (800 horizontal, up to 1000 vertical); the original sampled refugee and
+resident checks retain their 600-unit bound. The baseline 38,000+ unit failures
+remain well outside either bound.
