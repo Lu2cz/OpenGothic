@@ -189,6 +189,8 @@ class GameScript final {
 
     void      eventPlayAni(Npc& npc, std::string_view ani);
 
+    bool doesNpcKnowInfo(const zenkit::INpc& npc, size_t infoInstance) const;
+
   private:
     template<typename T>
     struct DetermineSignature {
@@ -464,7 +466,6 @@ class GameScript final {
 
     void sort(std::vector<DlgChoice>& dlg);
     void setNpcInfoKnown(const zenkit::INpc& npc, const zenkit::IInfo& info);
-    bool doesNpcKnowInfo(const zenkit::INpc& npc, size_t infoInstance) const;
 
     void saveSym(Serialize& fout, zenkit::DaedalusSymbol& s);
 
