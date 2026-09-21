@@ -39,7 +39,7 @@ Each run clones the source save independently and checks its hash afterwards.
   queued actions; living hidden actors reactivate; a dead-state actor is excluded.
   The player is also excluded. The synthetic setups are never saved and are not
   campaign evidence.
-- `--story sleep-again`: experimental ordinary second-sleep replay on private
+- `--story sleep-again`: ordinary second-sleep replay on private
   post-sleep copies. Existing saves already contain misplaced actors; the fix does
   not retrospectively replay the first-sleep quest callback on load.
 
@@ -60,8 +60,23 @@ navigation stalls on the route back to the inn; this changes only the private te
 input. Later replays use the existing dialogue-skip input to shorten spoken lines;
 the initial combined replay completed the full audio sequence.
 
-Pending acceptance: escort-save recovery, all-resident final replay, arrival
-regression and signed installation. Installed playable app unchanged until validation.
+The escort-active save titled 3 also passes second-sleep recovery
+(`work/issue29-sleep-existing-3-route-c`). For both player inputs, the inventory
+bytes and parsed journal entries/statuses remain identical; all SQ103/main-stage
+globals compared unchanged. The known-dialogue set gains the ordinary noon-sleep
+choice. Normal sleep advances time and resets NPC routine positions, including
+Rupert's guide destination; it is not a repair that freezes the rest of the world.
+Original saves remain untouched. A complete rescue-quest playthrough is still
+pending campaign verification.
+
+Final signed first-sleep replay passes all 52 activated residents, survivor
+placement, actual Viktor choices and save CRC (`work/issue29-sleep-signed-final`).
+Signed nearby/distant/hidden/dead/player/queue checks pass
+(`work/issue29-sleep-signed-routines`). The signed arrival regression also passes Martha/Viktor, the room key, Jorn,
+control return and saving (`work/issue29-sleep-signed-arrival-b`). Its first attempt
+stalled before the probe in `InstanceStorage::join`; the sampled intermittent
+renderer stall is tracked separately in #31, with no renderer edit in this fix.
+Installation and installed smoke results are recorded in #29 and local provenance.
 
 The initial all-resident check used a 600-unit sphere and rejected Elsa at ~665
 units from her routine point, already at the correct village elevation. The
