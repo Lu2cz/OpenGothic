@@ -143,7 +143,7 @@ Historical Fast installation (15 September 2026, issue #8 / PR #24; superseded b
   See [timed buff regression](timed-buff-regression.md) and
   `outputs/issue8-installation-20260915.json`.
 
-Current Fast installation (21 September 2026, issue #27 / PR #28):
+Historical Fast installation (21 September 2026, issue #27 / PR #28; superseded by #29):
 - Runtime source: `ea81887fad935f2c02aa858beb5398760e02a302`.
 - Merge: `760067166a20750a21975ecb0bf1ca5ea6ad2d0b`.
 - Release/Metal executable before signing:
@@ -161,6 +161,29 @@ Current Fast installation (21 September 2026, issue #27 / PR #28):
   `work/issue27-deployment-20260921-ocx5n_8b/rollback`.
 - Exact evidence/protected-file hashes and installation provenance:
   `outputs/issue27-installation-20260921.json`.
+
+Current Fast installation (21 September 2026, issue #29 / PR #30):
+- Runtime source: `6c11aa80849e9fe259090fb0e2c8c86de98115aa`.
+- Merge: `2839f4bf8209b911b02f8e87726aabe97b7c9ffa`.
+- Release/Metal executable before signing:
+  `a89704c194f85bdecac73bf31070886b9a9c8f30c3d66545c07a2f256589d660`.
+- Signed candidate and installed Fast are byte-identical:
+  `ff69682749652624b7582df290da4ca014c61dc28b9e29c3413d0fbbc40ca585`.
+- Deep/strict signature verification passes; dependency pins unchanged.
+- Signed first-sleep replay verifies all 52 activated residents, living refugees,
+  Viktor dialogue and save; signed routine-boundary and arrival checks pass.
+  Installed private reload/resave passes. One intermittent pre-probe renderer
+  stall is tracked separately in #31; the identical arrival retry passed.
+- Existing player saves titled 2/3 recover through ordinary second sleep on private
+  copies, preserving inventory/journal and compared rescue flags. Sleep advances
+  time and resets routine positions normally; no automatic on-load repair is added.
+  Complete rescue/campaign verification remains open in #29.
+- Player saves/config, launcher, Profile and assets preserved. Paired prior app,
+  Profile executable, saves/config and launcher:
+  `work/issue29-deployment-20260921-fehfnm2d/rollback`.
+- Exact provenance/protected-file/evidence hashes:
+  `outputs/issue29-installation-20260921.json`.
+  See [sleep placement coverage](silbach-sleep.md).
 
 Baseline installed hashes (11 September 2026; later installations belong in issues):
 - Fast: `a65b95d1ed0221d53632f94da1d97c55ba4e008d2947a5304f0efe48d0932ad5`

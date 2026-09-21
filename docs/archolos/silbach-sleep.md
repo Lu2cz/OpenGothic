@@ -84,3 +84,9 @@ activation check now respects the existing `fixNpcPosition` collision-search
 bounds (800 horizontal, up to 1000 vertical); the original sampled refugee and
 resident checks retain their 600-unit bound. The baseline 38,000+ unit failures
 remain well outside either bound.
+
+PR #30 is merged and the signed Fast app is installed. Installed private reload
+and resave passed (`work/issue29-sleep-installed-restart`). Original player saves,
+config, launcher and Profile hashes were rechecked unchanged. Installation
+provenance is `outputs/issue29-installation-20260921.json` in the coordination
+workspace; #29 remains Needs verification for the rest of the rescue quest.
