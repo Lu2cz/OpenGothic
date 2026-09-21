@@ -879,8 +879,21 @@ const Animation::Sequence* Pose::setAnimItem(const AnimationSolver &solver, Npc 
   }
 
 bool Pose::stopItemStateAnim(const AnimationSolver& solver, uint64_t tickCount) {
-  if(itemUseSt<0)
+  if(itemUseSt<0) {
+    size_t ret=0;
+    for(size_t i=0;i<lay.size();++i) {
+      // Keep an active exit transition; only an untransitioned item layer is stale.
+      if(lay[i].bs==BS_ITEMINTERACT && lay[i].seq->animCls!=Animation::Transition) {
+        onRemoveLayer(lay[i]);
+        continue;
+        }
+      if(ret!=i)
+        lay[ret] = lay[i];
+      ret++;
+      }
+    lay.resize(ret);
     return true;
+    }
   itemUseDestSt = -1;
   for(auto& i:lay)
     if(i.bs==BS_ITEMINTERACT) {
