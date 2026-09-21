@@ -2900,7 +2900,9 @@ void MainWindow::render(){
       }
     if(sampling && std::getenv("OPENGOTHIC_SILBACH_STORY")!=nullptr) {
       static unsigned stage=0, stageFrame=0;
-      static Vec3 controlStart;
+      static Vec3 controlStart, routeSample;
+      static unsigned routeRetries=0;
+      static std::vector<size_t> hiddenBefore;
       auto& w=*Gothic::inst().world();
       auto& pl=*w.player();
       auto& vm=w.script().getVm();
@@ -2988,7 +2990,9 @@ void MainWindow::render(){
         osvald.startState(uint32_t(symbol("ZS_DEAD")->index()),"TOT");
         if(!osvald.isDead()) throw std::runtime_error("Dead routine probe setup failed");
         exchange(osvald,"RTN_START_713",false);
-        Log::i("[ROUTINE_EXCHANGE] complete nearby=1 distant=1 hidden=1 dead=1");
+        exchange(pl,"RTN_TOT_713",false);
+        exchange(pl,"RTN_START_713",false);
+        Log::i("[ROUTINE_EXCHANGE] complete nearby=1 distant=1 hidden=1 dead=1 player=1");
         advance(99);
         Tempest::SystemApi::exit();
         }
@@ -3044,7 +3048,30 @@ void MainWindow::render(){
         Tempest::SystemApi::exit();
         }
       if(stage==8 && free) {
+        if(sleepStory) {
+          for(uint32_t i=0;i<w.npcCount();++i) {
+            auto* npc=w.npcById(i);
+            if(npc && !npc->isDead() && npc->currentTaPoint() && npc->currentTaPoint()->name=="TOT")
+              hiddenBefore.push_back(npc->handle().symbol_index());
+            }
+          }
         placement("before");
+        walk("VILLAGE_PUB_ROOM02_BED01");
+        advance(9);
+        }
+      if(stage==9 && profileFrames%600==0) {
+        shot("silbach-route.png");
+        if(sleepAgain && profileFrames>0 && (pl.position()-routeSample).length()<5) {
+          if(++routeRetries>3) throw std::runtime_error("Sleep replay navigation stalled");
+          pl.clearAiQueue();
+          player.onKeyPressed(KeyCodec::Forward,Event::K_W,KeyCodec::Mapping(0));
+          Log::i("[SILBACH_SLEEP] manual approach retry=",routeRetries);
+          advance(13);
+          }
+        routeSample=pl.position();
+        }
+      if(stage==13 && profileFrames-stageFrame>=60) {
+        player.clearInput();
         walk("VILLAGE_PUB_ROOM02_BED01");
         advance(9);
         }
@@ -3076,7 +3103,19 @@ void MainWindow::render(){
         advance(9);
         }
       if(stage==10 && sleep==2 && free && pl.interactive()==nullptr && profileFrames-stageFrame>=600) {
-        const bool placed=placement("after");
+        bool placed=placement("after");
+        if(sleepStory) {
+          size_t activated=0, misplaced=0;
+          for(auto id:hiddenBefore) {
+            auto* npc=w.findNpcByInstance(id);
+            const auto* target=npc ? npc->currentTaPoint() : nullptr;
+            if(!target || target->name=="TOT" || npc->isDead()) continue;
+            ++activated;
+            if((npc->position()-target->position()).length()>600) ++misplaced;
+            }
+          placed=placed && activated==52 && misplaced==0;
+          Log::i("[SILBACH_SLEEP] activated=",activated," misplaced=",misplaced);
+          }
         Log::i("[SILBACH_SLEEP] complete placed=",placed);
         Log::i("[SILBACH_SLEEP] rescue ready=",symbol("SQ103_RUPERTREADY")->get_int()," escort=",symbol("SQ103_GOWITHRUPERT")->get_int());
         saveGame("save_slot_2.sav","Silbach sleep verification");

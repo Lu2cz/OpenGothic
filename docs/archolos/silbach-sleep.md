@@ -30,14 +30,15 @@ Each run clones the source save independently and checks its hash afterwards.
   31,600–32,600 units away and sampled residents 38,000–42,000 units away.
 - `--story sleep --placement placed`: candidate replay additionally completes
   Viktor's actual presented morning dialogue choices and checks living survivor
-  placement before saving. This uses normal navigation/collision and game script
+  placement plus all 52 activated residents before saving. This uses normal navigation/collision and game script
   entry points; it does not invoke wake-up INFO functions or set story flags.
 - `--story sleep-reload --placement placed`: load the resulting save in a separate
   process and recheck placement/progression before resaving.
 - `--story routines`: isolated synthetic boundary check using actual installed
   routine functions. Nearby and distant ordinary changes preserve position and
   queued actions; living hidden actors reactivate; a dead-state actor is excluded.
-  The synthetic dead-state setup is never saved and is not campaign evidence.
+  The player is also excluded. The synthetic setups are never saved and are not
+  campaign evidence.
 - `--story sleep-again`: experimental ordinary second-sleep replay on private
   post-sleep copies. Existing saves already contain misplaced actors; the fix does
   not retrospectively replay the first-sleep quest callback on load.
@@ -49,5 +50,15 @@ experiment confirmed refugee placement while residents remained hidden; its save
 assertion failed because restored Viktor dialogue was still active. The combined
 replay waits for control return and completes save validation.
 
-Pending acceptance: existing-save recovery, restart, arrival regression and signed
-installation. The installed playable app remains unchanged until validation.
+Separate-process restart passes (`work/issue29-sleep-restart-a`). An ordinary second
+sleep also restores the sampled NPCs in a private copy of player save titled 2
+(`work/issue29-sleep-existing-2-second-sleep`); all SQ103/main-stage globals compared
+unchanged. This advances game time normally and is not an on-load migration.
+
+The driver can use a bounded forward-key movement fallback when native hero AI
+navigation stalls on the route back to the inn; this changes only the private test
+input. Later replays use the existing dialogue-skip input to shorten spoken lines;
+the initial combined replay completed the full audio sequence.
+
+Pending acceptance: escort-save recovery, all-resident final replay, arrival
+regression and signed installation. Installed playable app unchanged until validation.

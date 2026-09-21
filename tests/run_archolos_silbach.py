@@ -25,7 +25,7 @@ env = {k: v for k, v in os.environ.items() if not k.startswith("OPENGOTHIC_")}
 env.update(OPENGOTHIC_PROFILE="1", OPENGOTHIC_SILBACH_PROBE="1")
 if a.story:
     env.pop("OPENGOTHIC_SILBACH_PROBE")
-    env.update(OPENGOTHIC_SILBACH_STORY=a.story, OPENGOTHIC_TRIALOG_TRACE="1")
+    env.update(OPENGOTHIC_SILBACH_STORY=a.story, OPENGOTHIC_TRIALOG_TRACE="1", OPENGOTHIC_CAPTAIN_SKIP="1")
 (out / "provenance.json").write_text(json.dumps({"source_sha256": source_hash, "executable_sha256": hashlib.sha256(exe.read_bytes()).hexdigest(), "mode": a.story or a.expect}, indent=2))
 try:
     with (out / "terminal.log").open("w") as log:
@@ -36,7 +36,7 @@ try:
                       for name in ("terminal.log", "log.txt") if (out / name).exists())
     assert result.returncode == 0, f"Game exited {result.returncode}"
     if a.story == "routines":
-        assert "[ROUTINE_EXCHANGE] complete nearby=1 distant=1 hidden=1 dead=1" in trace
+        assert "[ROUTINE_EXCHANGE] complete nearby=1 distant=1 hidden=1 dead=1 player=1" in trace
         assert not (out / "save_slot_2.sav").exists()
     elif a.story:
         if a.story.startswith("sleep"):
@@ -52,6 +52,7 @@ try:
             assert f"[SILBACH_STORY] complete reload={int(a.story == 'reload')}" in trace, "Story did not complete; inspect stage log"
             assert "[SILBACH_STORY] control moved=" in trace
         if a.story == "sleep" and a.placement == "placed":
+            assert "[SILBACH_SLEEP] activated=52 misplaced=0" in trace
             for choice in ("DIA_VIKTOR_WAKEUP_WHERE", "DIA_VIKTOR_WAKEUP_KURT"):
                 assert f"[SILBACH_STORY] select={choice}" in trace, choice
         if a.story == "sleep-again":
