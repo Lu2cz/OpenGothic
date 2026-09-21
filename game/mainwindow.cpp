@@ -2898,7 +2898,105 @@ void MainWindow::render(){
           }
         }
       }
-    if(sampling && ++profileFrames==(buffMode!=nullptr ? 20000u : bossGeometry ? (std::getenv("OPENGOTHIC_BOSS_UI_CONSUMERS") ? 330u : 280u) : std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
+    if(sampling && std::getenv("OPENGOTHIC_SILBACH_STORY")!=nullptr) {
+      static unsigned stage=0, stageFrame=0;
+      static Vec3 controlStart;
+      auto& w=*Gothic::inst().world();
+      auto& pl=*w.player();
+      auto& vm=w.script().getVm();
+      const bool reload=std::string_view(std::getenv("OPENGOTHIC_SILBACH_STORY"))=="reload";
+      const auto symbol=[&](const char* name) {
+        auto* s=vm.find_symbol_by_name(name);
+        if(s==nullptr) throw std::runtime_error(string_frm("Missing Silbach symbol: ",name).c_str());
+        return s;
+        };
+      const auto knows=[&](const char* name) {
+        return w.script().doesNpcKnowInfo(pl.handle(),symbol(name)->index());
+        };
+      auto* martha=w.findNpcByInstance(symbol("BAU_703_MARTHA")->index());
+      auto* jorn=w.findNpcByInstance(symbol("NONE_1_JORN")->index());
+      if(martha==nullptr || jorn==nullptr) throw std::runtime_error("Silbach story actors missing");
+      const bool marthaKnown=knows("DIA_MARTHA_Q103_TRIALOG_FABIOWAY");
+      const bool jornKnown=knows("DIA_JORN_Q103_ALLRIGHT");
+      const int sleep=symbol("SILBACHSLEEP")->get_int();
+      const auto keys=pl.inventory().itemCount(symbol("ITKE_Q103_VILLAGEROOM")->index());
+      const auto advance=[&](unsigned next) {
+        stage=next; stageFrame=profileFrames;
+        Log::i("[SILBACH_STORY] stage=",stage," frame=",profileFrames);
+        };
+      const auto walk=[&](const char* name) {
+        auto* wp=w.findPoint(name,false);
+        if(wp==nullptr) throw std::runtime_error("Silbach waypoint missing");
+        pl.aiPush(AiQueue::aiGoToPoint(*wp));
+        Log::i("[SILBACH_STORY] walk=",name);
+        };
+      const auto shot=[&](const char* name) {
+        auto tex=renderer.screenshoot(cmdId);
+        device.readPixels(textureCast<const Texture2d&>(tex)).save(name);
+        };
+      const bool free=!dialogs.isActive() && w.currentCs()==nullptr && !Gothic::inst().camera()->isCutscene() &&
+                      symbol("TRIA_RUNNING")->get_int()==0 && pl.isAiQueueEmpty();
+      if(profileFrames%300==0) {
+        const auto pos=pl.position();
+        Log::i("[SILBACH_STORY] frame=",profileFrames," stage=",stage," pos=",pos.x,",",pos.y,",",pos.z,
+               " martha_dist=",(pos-martha->position()).length()," jorn_dist=",(pos-jorn->position()).length(),
+               " dialogue=",dialogs.isActive()," nav=",pl.isAiNavigationActive(),
+               " martha_known=",marthaKnown," jorn_known=",jornKnown," sleep=",sleep," keys=",keys);
+        }
+      if(stage==0) {
+        if(reload) {
+          if(!marthaKnown || !jornKnown || sleep!=1 || keys!=1) throw std::runtime_error("Silbach restart lost progression");
+          advance(4);
+          } else {
+          if(marthaKnown || jornKnown || sleep!=0) throw std::runtime_error("Silbach source already progressed");
+          shot("silbach-start.png");
+          walk("VILLAGE_PUB_04");
+          advance(1);
+          }
+        }
+      if(stage==1 && free && (pl.position()-martha->position()).length()<300) {
+        if(player.interact(*martha)) advance(2);
+        }
+      if(stage<=2 && marthaKnown && free) {
+        if(keys!=1) throw std::runtime_error("Silbach dialogue did not award room key");
+        shot("silbach-martha-complete.png");
+        walk("VILLAGE_PUB_37");
+        advance(3);
+        }
+      if(stage==3 && free && !jornKnown && (pl.position()-jorn->position()).length()<300)
+        player.interact(*jorn);
+      if(stage==3 && jornKnown && sleep==1 && free) {
+        shot("silbach-jorn-complete.png");
+        advance(4);
+        }
+      if(stage==4 && free) {
+        controlStart=pl.position();
+        player.onKeyPressed(KeyCodec::Back,Event::K_S,KeyCodec::Mapping(0));
+        advance(5);
+        }
+      if(stage==5 && profileFrames-stageFrame>=30) {
+        player.clearInput();
+        const float moved=(pl.position()-controlStart).length();
+        if(moved<10) throw std::runtime_error("Silbach player control did not move");
+        Log::i("[SILBACH_STORY] control moved=",moved," reload=",reload);
+        shot("silbach-control.png");
+        advance(6);
+        }
+      if(stage==6 && free) {
+        saveGame("save_slot_2.sav","Silbach story verification");
+        advance(7);
+        }
+      if(stage==7 && profileFrames-stageFrame>=30) {
+        Log::i("[SILBACH_STORY] complete reload=",reload);
+        Tempest::SystemApi::exit();
+        }
+      if(profileFrames-stageFrame>18000) {
+        shot("silbach-failure.png");
+        Log::e("[SILBACH_STORY] timeout stage=",stage);
+        Tempest::SystemApi::exit();
+        }
+      }
+    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_SILBACH_STORY")!=nullptr ? 60000u : buffMode!=nullptr ? 20000u : bossGeometry ? (std::getenv("OPENGOTHIC_BOSS_UI_CONSUMERS") ? 330u : 280u) : std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,

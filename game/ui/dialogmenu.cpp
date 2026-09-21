@@ -171,6 +171,21 @@ void DialogMenu::tick(uint64_t dt) {
         }
       }
     }
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_SILBACH_STORY")!=nullptr &&
+     isChoiceMenuActive()) {
+    auto& vm=Gothic::inst().world()->script().getVm();
+    for(size_t i=0;i<choice.size();++i) {
+      const auto& name=vm.find_symbol_by_index(choice[i].scriptFn)->name();
+      if(name=="DIA_MARTHA_Q103_TRIALOG_FABIOWAY_SPLITUP" ||
+         name=="DIA_JORN_Q103_ALLRIGHT_SPLITUP" || name=="DIA_JORN_Q103_ALLRIGHT_KURT" ||
+         name=="DIA_MARTHA_EXIT_INFO" || name=="DIA_JORN_EXIT_INFO") {
+        Log::i("[SILBACH_STORY] select=",name);
+        dlgSel=i;
+        onSelect();
+        break;
+        }
+      }
+    }
   if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_CAPTAIN_SKIP")!=nullptr &&
      current.time>0 && current.time+500<current.msgTime)
     skipPhrase();

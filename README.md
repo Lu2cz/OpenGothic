@@ -14,10 +14,15 @@ The current target is an Apple M2 Mac, using Metal and Archolos 1.2.11 game data
 
 ## Campaign progress
 
-**Furthest story sequence reached and tested: early Chapter 1, the forest
-conversation with Jorn and Fabio about going to the village or staying in the cave.**
-The opening ship quest, captain/departure sequence and arrival on the beach have
-also been exercised. Story progression into Silbach and beyond is not yet verified.
+**Furthest player-reported progress: early Chapter 1, arrival in Silbach with
+Rupert (17 September 2026).** Entering the tavern then failed to start the expected
+arrival/Jorn sequence. The recovery now passes a private automated replay from that
+save through Martha/Viktor, the room-key reward and Jorn's upstairs conversation,
+including control return and save/restart (21 September 2026,
+[#27](https://github.com/Lu2cz/OpenGothic/issues/27)). Native walking and dialogue-choice
+automation are used; this is not a new player-confirmed campaign milestone.
+The opening ship quest, captain/departure sequence, beach and forest conversation
+have also been exercised.
 
 Separately, a **synthetic Chapter 2 checkpoint** has been used to explore Archolos
 city and its surroundings, including walking outside the city, NPC interactions,
@@ -26,7 +31,7 @@ establish that Chapter 1 can be completed or that Chapter 2 quests work.
 
 These are results from individual playtests and targeted scenarios across development
 builds. **A continuous clean playthrough and campaign completion remain unverified.**
-Progress as of 11 September 2026; new chapter evidence belongs in
+Progress updated 21 September 2026; new chapter evidence belongs in
 [the campaign tracker](https://github.com/Lu2cz/OpenGothic/issues/14).
 
 ## What works in tested scenarios
