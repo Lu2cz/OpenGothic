@@ -4373,9 +4373,23 @@ void Npc::addRoutine(gtime s, gtime e, uint32_t callback, std::string_view point
   }
 
 void Npc::excRoutine(size_t callback) {
+  const bool wasRemoved = currentRoutine().wayPointName()=="TOT";
   routines.clear();
   owner.script().invokeState(this,currentOther,currentVictim,callback);
-  // aiState.eTime = gtime();
+  // Script callers can read WP immediately after Npc_ExchangeRoutine.
+  const auto& r=currentRoutine();
+  if(!r.wayPointName().empty())
+    hnpc->wp = r.wayPointName();
+
+  // Living actors parked at TOT cannot walk back from the removal area.
+  if(wasRemoved && r.point!=nullptr && r.wayPointName()!="TOT" && !isPlayer() && !isDead()) {
+    clearGoTo();
+    wayPath.clear();
+    attachToPoint(nullptr);
+    setPosition(r.point->position());
+    setDirection(r.point->direction());
+    owner.script().fixNpcPosition(*this,0,0);
+    }
   }
 
 void Npc::multSpeed(float s) {

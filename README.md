@@ -18,8 +18,10 @@ The current target is an Apple M2 Mac, using Metal and Archolos 1.2.11 game data
 night in Silbach, accompanying Rupert to rescue the remaining villagers
 (21 September 2026).** The player confirmed the repaired tavern/Jorn sequence and
 sleep completed. Refugees then arrived late and expected village residents were
-missing; this placement problem is tracked in
-[#29](https://github.com/Lu2cz/OpenGothic/issues/29).
+missing. The shared routine fix now passes native first-sleep placement (including
+all 52 activated residents), Viktor's morning conversation and save/restart checks.
+Private copies of existing saves recover through another normal sleep; campaign
+confirmation remains in [#29](https://github.com/Lu2cz/OpenGothic/issues/29).
 
 The earlier arrival recovery also passed a private automated replay through
 Martha/Viktor, the room-key reward and Jorn's upstairs conversation, including
