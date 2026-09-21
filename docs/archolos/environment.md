@@ -125,7 +125,7 @@ Historical Fast installation (14 September 2026, superseded by issue #8 below):
 - Local provenance: `outputs/issue7-installation-20260914.json`. Player saves/config,
   launcher, Profile, assets and dependency pins were preserved.
 
-Current Fast installation (15 September 2026, issue #8 / PR #24):
+Historical Fast installation (15 September 2026, issue #8 / PR #24; superseded by #27):
 - Runtime merge: `33fd4acde6b582e71162e323c686c9f840348125`.
 - The issue-worktree development build was
   `d8150f240a1426e22a9653c11d08d83193ddea4c3600d0d167bdc369fd838ee5`;
@@ -142,6 +142,25 @@ Current Fast installation (15 September 2026, issue #8 / PR #24):
   and fading UI, and expiry cleanup; the installed private repeat smoke passes.
   See [timed buff regression](timed-buff-regression.md) and
   `outputs/issue8-installation-20260915.json`.
+
+Current Fast installation (21 September 2026, issue #27 / PR #28):
+- Runtime source: `ea81887fad935f2c02aa858beb5398760e02a302`.
+- Merge: `760067166a20750a21975ecb0bf1ca5ea6ad2d0b`.
+- Release/Metal executable before signing:
+  `3ce98c7106d8cf3635a68a29c86da0df2571ee3b7816e7dd3295da43d3ca195a`.
+- Signed candidate and installed Fast are byte-identical:
+  `b374c6ed15a18c3bcaef53ebe3b62c0a891b9655ce743abb86a87b6a0c260c65`.
+- Deep/strict ad-hoc signature verification passes. Dependency pins unchanged.
+- Signed candidate passes native Silbach arrival/Jorn dialogue, key award,
+  control return, save and process restart; installed private reload/movement/resave
+  passes. Recipe close/reopen and forest dialogue regressions also pass.
+  See [test setup and boundaries](silbach-arrival.md).
+- Player saves/config, launcher, Profile and assets preserved. Existing source save
+  recovers without a new game; tests never overwrite the player's progress.
+- Paired rollback app, Profile executable, saves/config and launcher:
+  `work/issue27-deployment-20260921-ocx5n_8b/rollback`.
+- Exact evidence/protected-file hashes and installation provenance:
+  `outputs/issue27-installation-20260921.json`.
 
 Baseline installed hashes (11 September 2026; later installations belong in issues):
 - Fast: `a65b95d1ed0221d53632f94da1d97c55ba4e008d2947a5304f0efe48d0932ad5`

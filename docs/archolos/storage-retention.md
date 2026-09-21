@@ -75,3 +75,14 @@ Maintenance audit: `outputs/storage-maintenance-20260916/` contains the original
 inventory, reviewed archive plan, hashes, retired worktree revisions and final
 space/protection checks. Keep it with the archives. An old evidence path missing
 from disk should be checked against this index before treating it as lost.
+
+Issue #27 closure (21 September 2026): the published clean issue worktree and its
+reproducible build/cache were retired after installation verification. The unsigned
+executable, CMake configuration and retirement audit are retained in
+`outputs/issue27-retirement-20260921/`; recreate source at
+`ea81887fad935f2c02aa858beb5398760e02a302`. Baseline, final and intermediate private
+runs remain at their original paths, including story checkpoints. Current paired
+rollback is `work/issue27-deployment-20260921-ocx5n_8b/rollback`; installation and
+evidence hashes are in `outputs/issue27-installation-20260921.json`. A redundant
+superseded-app copy was removed only after matching every file to that rollback.
+No player data or regression checkpoint was deleted.
