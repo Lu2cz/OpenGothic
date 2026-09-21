@@ -14,13 +14,18 @@ The current target is an Apple M2 Mac, using Metal and Archolos 1.2.11 game data
 
 ## Campaign progress
 
-**Furthest player-reported progress: early Chapter 1, arrival in Silbach with
-Rupert (17 September 2026).** Entering the tavern then failed to start the expected
-arrival/Jorn sequence. The recovery now passes a private automated replay from that
-save through Martha/Viktor, the room-key reward and Jorn's upstairs conversation,
-including control return and save/restart (21 September 2026,
-[#27](https://github.com/Lu2cz/OpenGothic/issues/27)). Native walking and dialogue-choice
-automation are used; this is not a new player-confirmed campaign milestone.
+**Furthest player-reported progress: early Chapter 1, the morning after the first
+night in Silbach, accompanying Rupert to rescue the remaining villagers
+(21 September 2026).** The player confirmed the repaired tavern/Jorn sequence and
+sleep completed. Refugees then arrived late and expected village residents were
+missing; this placement problem is tracked in
+[#29](https://github.com/Lu2cz/OpenGothic/issues/29).
+
+The earlier arrival recovery also passed a private automated replay through
+Martha/Viktor, the room-key reward and Jorn's upstairs conversation, including
+control return and save/restart
+([#27](https://github.com/Lu2cz/OpenGothic/issues/27)). That test uses native walking
+and dialogue-choice automation; the subsequent sleep/rescue report is from the player.
 The opening ship quest, captain/departure sequence, beach and forest conversation
 have also been exercised.
 
