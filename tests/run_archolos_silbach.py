@@ -13,7 +13,8 @@ p = argparse.ArgumentParser()
 for name in ("executable", "game", "save", "output"):
     p.add_argument("--" + name, required=True, type=Path)
 p.add_argument("--expect", choices=("available", "unavailable"), default="available")
-p.add_argument("--story", choices=("seed", "reload"))
+p.add_argument("--story", choices=("seed", "reload", "sleep", "sleep-reload", "sleep-again", "routines"))
+p.add_argument("--placement", choices=("broken", "placed"))
 a = p.parse_args()
 exe, game, save, out = (getattr(a, name).resolve() for name in ("executable", "game", "save", "output"))
 source_hash = hashlib.sha256(save.read_bytes()).hexdigest()
@@ -34,9 +35,27 @@ try:
     trace = "\n".join((out / name).read_text(errors="replace")
                       for name in ("terminal.log", "log.txt") if (out / name).exists())
     assert result.returncode == 0, f"Game exited {result.returncode}"
-    if a.story:
-        assert f"[SILBACH_STORY] complete reload={int(a.story == 'reload')}" in trace, "Story did not complete; inspect stage log"
-        assert "[SILBACH_STORY] control moved=" in trace
+    if a.story == "routines":
+        assert "[ROUTINE_EXCHANGE] complete nearby=1 distant=1 hidden=1 dead=1" in trace
+        assert not (out / "save_slot_2.sav").exists()
+    elif a.story:
+        if a.story.startswith("sleep"):
+            observed = [line.rsplit("=", 1)[1] for line in trace.splitlines()
+                        if "[SILBACH_SLEEP] complete placed=" in line]
+            actual = observed[-1].strip().lower() if observed else ""
+            if a.story != "sleep-reload":
+                assert "[SILBACH_SLEEP] bed=" in trace, "Sleep bed was not used"
+            assert actual in {"0", "1", "false", "true"}, observed
+            if a.placement:
+                assert (actual in {"1", "true"}) == (a.placement == "placed"), observed
+        else:
+            assert f"[SILBACH_STORY] complete reload={int(a.story == 'reload')}" in trace, "Story did not complete; inspect stage log"
+            assert "[SILBACH_STORY] control moved=" in trace
+        if a.story == "sleep" and a.placement == "placed":
+            for choice in ("DIA_VIKTOR_WAKEUP_WHERE", "DIA_VIKTOR_WAKEUP_KURT"):
+                assert f"[SILBACH_STORY] select={choice}" in trace, choice
+        if a.story == "sleep-again":
+            assert "[SILBACH_STORY] select=PC_SLEEPTIME_NOON_INFO" in trace
         if a.story == "seed":
             for choice in ("DIA_MARTHA_Q103_TRIALOG_FABIOWAY_SPLITUP", "DIA_JORN_Q103_ALLRIGHT_SPLITUP", "DIA_JORN_Q103_ALLRIGHT_KURT"):
                 assert f"[SILBACH_STORY] select={choice}" in trace, choice
@@ -47,7 +66,7 @@ try:
             assert "Go bother someone else." not in trace
         with zipfile.ZipFile(out / "save_slot_2.sav") as z:
             assert z.testzip() is None
-            assert b"Silbach story verification" in z.read("header")
+            assert (b"Silbach sleep verification" if a.story.startswith("sleep") else b"Silbach story verification") in z.read("header")
     else:
         observed = [line.rsplit("=", 1)[1] for line in trace.splitlines()
                     if "[SILBACH_PROBE] fabio_trialog_available=" in line]

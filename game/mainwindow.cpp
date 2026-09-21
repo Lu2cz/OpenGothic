@@ -2904,7 +2904,11 @@ void MainWindow::render(){
       auto& w=*Gothic::inst().world();
       auto& pl=*w.player();
       auto& vm=w.script().getVm();
-      const bool reload=std::string_view(std::getenv("OPENGOTHIC_SILBACH_STORY"))=="reload";
+      const auto mode=std::string_view(std::getenv("OPENGOTHIC_SILBACH_STORY"));
+      const bool reload=mode=="reload";
+      const bool sleepStory=mode=="sleep";
+      const bool sleepReload=mode=="sleep-reload";
+      const bool sleepAgain=mode=="sleep-again";
       const auto symbol=[&](const char* name) {
         auto* s=vm.find_symbol_by_name(name);
         if(s==nullptr) throw std::runtime_error(string_frm("Missing Silbach symbol: ",name).c_str());
@@ -2934,6 +2938,26 @@ void MainWindow::render(){
         auto tex=renderer.screenshoot(cmdId);
         device.readPixels(textureCast<const Texture2d&>(tex)).save(name);
         };
+      const auto placement=[&](const char* phase) {
+        bool placed=true;
+        for(auto name : {"NONE_6_TIMO", "NONE_3_EZEKIEL", "NONE_5_FABIO", "NONE_100007_RUPERT", "NONE_100008_ANA", "NONE_100009_LEA", "NONE_100012_KAZEEM",
+                         "BAU_713_OSVALD", "BAU_714_REMY", "BAU_717_FINJA"}) {
+          auto* npc=w.findNpcByInstance(symbol(name)->index());
+          auto* wp=npc ? w.findPoint(npc->handle().wp,false) : nullptr;
+          const float distance=wp ? (npc->position()-wp->position()).length() : -1;
+          const auto* routine=npc ? npc->currentTaPoint() : nullptr;
+          const bool survivor=(std::string_view(name)!="NONE_6_TIMO" || symbol("Q101_TIMOSURVIVE")->get_int()!=0) &&
+                              (std::string_view(name)!="NONE_100009_LEA" || symbol("Q101_LEASURVIVE")->get_int()!=0) &&
+                              (std::string_view(name)!="NONE_3_EZEKIEL" || symbol("Q102_EZEKIELSURVIVED")->get_int()==1);
+          if(!survivor || (std::string_view(name)=="NONE_100007_RUPERT" && symbol("SQ103_GOWITHRUPERT")->get_int()!=0)) continue;
+          const bool inPlace=npc && !npc->isDead() && wp && routine &&
+                             routine->name==npc->handle().wp && routine->name.starts_with("VILLAGE_") && distance<600;
+          placed=placed && inPlace;
+          Log::i("[SILBACH_SLEEP] phase=",phase," npc=",name," wp=",npc ? npc->handle().wp : "none",
+                 " distance=",distance," in_place=",inPlace," routine=",routine ? routine->name : "none");
+          }
+        return placed;
+        };
       const bool free=!dialogs.isActive() && w.currentCs()==nullptr && !Gothic::inst().camera()->isCutscene() &&
                       symbol("TRIA_RUNNING")->get_int()==0 && pl.isAiQueueEmpty();
       if(profileFrames%300==0) {
@@ -2943,10 +2967,39 @@ void MainWindow::render(){
                " dialogue=",dialogs.isActive()," nav=",pl.isAiNavigationActive(),
                " martha_known=",marthaKnown," jorn_known=",jornKnown," sleep=",sleep," keys=",keys);
         }
+      if(stage==0 && mode=="routines") {
+        const auto exchange=[&](Npc& actor, const char* routine, bool relocates) {
+          auto pos=actor.position();
+          actor.aiPush(AiQueue::aiWait(1000));
+          const auto ticket=actor.aiWaitTicket();
+          actor.excRoutine(symbol(routine)->index());
+          const auto* target=actor.currentTaPoint();
+          if(!target || actor.handle().wp!=target->name || !actor.isAiActionPending(ticket) ||
+             (relocates ? (actor.position()-target->position()).length()>100 : actor.position()!=pos))
+            throw std::runtime_error("Routine exchange semantics failed");
+          Log::i("[ROUTINE_EXCHANGE] npc=",actor.handle().name[0]," routine=",routine," relocates=",relocates," queue_preserved=1");
+          };
+        exchange(*martha,"RTN_START_703",false);
+        exchange(*w.findNpcByInstance(symbol("NONE_5_FABIO")->index()),"RTN_PUB01_5",false);
+        auto& osvald=*w.findNpcByInstance(symbol("BAU_713_OSVALD")->index());
+        exchange(osvald,"RTN_TOT_713",false);
+        exchange(osvald,"RTN_START_713",true);
+        exchange(osvald,"RTN_TOT_713",false);
+        osvald.startState(uint32_t(symbol("ZS_DEAD")->index()),"TOT");
+        if(!osvald.isDead()) throw std::runtime_error("Dead routine probe setup failed");
+        exchange(osvald,"RTN_START_713",false);
+        Log::i("[ROUTINE_EXCHANGE] complete nearby=1 distant=1 hidden=1 dead=1");
+        advance(99);
+        Tempest::SystemApi::exit();
+        }
       if(stage==0) {
-        if(reload) {
+        if(sleepReload || sleepAgain) {
+          if(sleep!=2) throw std::runtime_error("Expected post-sleep checkpoint");
+          placement("loaded");
+          advance(sleepAgain ? 8 : 10);
+          } else if(reload || sleepStory) {
           if(!marthaKnown || !jornKnown || sleep!=1 || keys!=1) throw std::runtime_error("Silbach restart lost progression");
-          advance(4);
+          advance(sleepStory ? 8 : 4);
           } else {
           if(marthaKnown || jornKnown || sleep!=0) throw std::runtime_error("Silbach source already progressed");
           shot("silbach-start.png");
@@ -2990,6 +3043,47 @@ void MainWindow::render(){
         Log::i("[SILBACH_STORY] complete reload=",reload);
         Tempest::SystemApi::exit();
         }
+      if(stage==8 && free) {
+        placement("before");
+        walk("VILLAGE_PUB_ROOM02_BED01");
+        advance(9);
+        }
+      if(stage==9 && profileFrames>stageFrame+30 && !dialogs.isActive() &&
+         (pl.position()-w.findPoint("VILLAGE_PUB_ROOM02_BED01",false)->position()).length()<1000) {
+        if(profileFrames==600) shot("silbach-bed-stalled.png");
+        if(auto* door=w.findInteractive(pl); door && door->isDoor() && door->stateId()<=0 && pl.interactive()==nullptr && profileFrames%60==0) {
+          Log::i("[SILBACH_SLEEP] door=",door->tag()," reach=",(pl.centerPosition()-door->nearestPoint(pl)).length());
+          pl.clearAiQueue();
+          pl.clearGoTo();
+          if(player.interact(*door) && pl.interactive()==door) advance(12);
+          }
+
+        auto* bed=w.availableMob(pl,"BEDHIGH");
+        if(bed==nullptr) throw std::runtime_error("Silbach sleep bed is not interactable");
+        const float reach=(pl.centerPosition()-bed->nearestPoint(pl)).length();
+        if(profileFrames%60==0) Log::i("[SILBACH_SLEEP] bed_reach=",reach," wp_reach=",(pl.position()-w.findPoint("VILLAGE_PUB_ROOM02_BED01",false)->position()).length());
+        if(reach<160) {
+          Log::i("[SILBACH_SLEEP] bed=",bed->tag()," scheme=",bed->schemeName());
+          pl.clearAiQueue();
+          shot("silbach-bed.png");
+          if(!player.interact(*bed) || pl.interactive()!=bed)
+            throw std::runtime_error("Silbach sleep bed interaction was rejected");
+          advance(10);
+          }
+        }
+      if(stage==12 && profileFrames>stageFrame+60 && pl.interactive()==nullptr && !pl.isAiBusy()) {
+        walk("VILLAGE_PUB_ROOM02_BED01");
+        advance(9);
+        }
+      if(stage==10 && sleep==2 && free && pl.interactive()==nullptr && profileFrames-stageFrame>=600) {
+        const bool placed=placement("after");
+        Log::i("[SILBACH_SLEEP] complete placed=",placed);
+        Log::i("[SILBACH_SLEEP] rescue ready=",symbol("SQ103_RUPERTREADY")->get_int()," escort=",symbol("SQ103_GOWITHRUPERT")->get_int());
+        saveGame("save_slot_2.sav","Silbach sleep verification");
+        advance(11);
+        }
+      if(stage==11 && profileFrames-stageFrame>=30)
+        Tempest::SystemApi::exit();
       if(profileFrames-stageFrame>18000) {
         shot("silbach-failure.png");
         Log::e("[SILBACH_STORY] timeout stage=",stage);

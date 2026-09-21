@@ -178,7 +178,8 @@ void DialogMenu::tick(uint64_t dt) {
       const auto& name=vm.find_symbol_by_index(choice[i].scriptFn)->name();
       if(name=="DIA_MARTHA_Q103_TRIALOG_FABIOWAY_SPLITUP" ||
          name=="DIA_JORN_Q103_ALLRIGHT_SPLITUP" || name=="DIA_JORN_Q103_ALLRIGHT_KURT" ||
-         name=="DIA_MARTHA_EXIT_INFO" || name=="DIA_JORN_EXIT_INFO") {
+         name=="DIA_MARTHA_EXIT_INFO" || name=="DIA_JORN_EXIT_INFO" ||
+         name=="PC_SLEEPTIME_NOON_INFO" || name=="DIA_VIKTOR_WAKEUP_WHERE" || name=="DIA_VIKTOR_WAKEUP_KURT" || name=="DIA_VIKTOR_EXIT_INFO") {
         Log::i("[SILBACH_STORY] select=",name);
         dlgSel=i;
         onSelect();
