@@ -14,14 +14,21 @@ The current target is an Apple M2 Mac, using Metal and Archolos 1.2.11 game data
 
 ## Campaign progress
 
-**Furthest player-reported progress: early Chapter 1, the morning after the first
-night in Silbach, accompanying Rupert to rescue the remaining villagers
-(21 September 2026).** The player confirmed the repaired tavern/Jorn sequence and
-sleep completed. Refugees then arrived late and expected village residents were
-missing. The shared routine fix now passes native first-sleep placement (including
-all 52 activated residents), Viktor's morning conversation and save/restart checks.
-Private copies of existing saves recover through another normal sleep; campaign
-confirmation remains in [#29](https://github.com/Lu2cz/OpenGothic/issues/29).
+**Furthest player-reported progress: early Chapter 1, returning with Kurt to
+Silbach's tavern and completing the Kurt/Jorn conversation, advancing the quest
+(22 September 2026).** The scene started only after the player spoke to seated
+Jorn; some voiced sections lacked subtitles and skip controls until Marvin's
+answer choice. These new symptoms are tracked in
+[#32](https://github.com/Lu2cz/OpenGothic/issues/32); they have not yet been replayed.
+
+Previously, the player completed the tavern/Jorn arrival and first sleep, then
+accompanied Rupert to rescue villagers. The shared routine fix passes native
+first-sleep placement (including all 52 activated residents), Viktor's morning
+conversation and save/restart checks. Private copies of existing saves recover
+through another normal sleep. Explicit confirmation of the full Rupert rescue
+and corrected village population remains in
+[#29](https://github.com/Lu2cz/OpenGothic/issues/29); reaching Kurt is not by itself
+verification of every earlier acceptance criterion.
 
 The earlier arrival recovery also passed a private automated replay through
 Martha/Viktor, the room-key reward and Jorn's upstairs conversation, including
@@ -38,7 +45,7 @@ establish that Chapter 1 can be completed or that Chapter 2 quests work.
 
 These are results from individual playtests and targeted scenarios across development
 builds. **A continuous clean playthrough and campaign completion remain unverified.**
-Progress updated 21 September 2026; new chapter evidence belongs in
+Progress updated 22 September 2026; new chapter evidence belongs in
 [the campaign tracker](https://github.com/Lu2cz/OpenGothic/issues/14).
 
 ## What works in tested scenarios
@@ -60,9 +67,12 @@ Progress updated 21 September 2026; new chapter evidence belongs in
   partial-lock continuity, with callback/reference restart checks. See
   [world-transition coverage and synthetic setup](docs/archolos/world-transitions.md).
 
+Representative boss-bar and timed-buff scenarios have passed their acceptance
+checks ([#7](https://github.com/Lu2cz/OpenGothic/issues/7),
+[#8](https://github.com/Lu2cz/OpenGothic/issues/8)); this does not establish all UI parity.
 The remaining work includes broader NPC/item focus access, additional world/campaign
-coverage, cutscene camera framing, essential boss/buff UI and campaign
-validation. See [the roadmap](https://github.com/Lu2cz/OpenGothic/issues/1) for priorities
+coverage, cutscene camera framing, the Kurt/Jorn trigger and dialogue presentation,
+and campaign validation. See [the roadmap](https://github.com/Lu2cz/OpenGothic/issues/1) for priorities
 and acceptance criteria. Full LeGo/Ikarus or Windows DLL compatibility is not claimed.
 
 ## Build and play
