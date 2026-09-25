@@ -14,19 +14,16 @@ The current target is an Apple M2 Mac, using Metal and Archolos 1.2.11 game data
 
 ## Campaign progress
 
-**Furthest player-reported progress: early Chapter 1, visiting Lokvar for the cure,
-accompanying Riordian to the shrine and returning to Lokvar, then completing the
-fishing scene with Kurt and returning to Riordian for his scroll-transcription
-sidequest (25 September 2026).** The player cannot use Lokvar's scroll-writing
-table ([#36](https://github.com/Lu2cz/OpenGothic/issues/36)); Marvin also retains a
-fishing pose after the scene ([#37](https://github.com/Lu2cz/OpenGothic/issues/37)).
-On 25 September, a private replay of that save traced the table refusal to a
-missing feather while the quest's accelerated world clock was stalled. With the
-clock fix, the replay reached 2 a.m., used the original Sleep scroll, received
-Riordian's supplies, completed five transcription attempts, and reopened the
-table after a save and process restart
-([#36](https://github.com/Lu2cz/OpenGothic/issues/36)). Player verification
-remains pending; the fishing pose is tracked separately. The earlier Kurt/Jorn
+**Furthest player-reported progress: early Chapter 1, through Riordian's
+scroll-transcription sidequest after the shrine visit and fishing with Kurt
+(25 September 2026).** The player confirmed completing that quest after the
+clock fix ([#36](https://github.com/Lu2cz/OpenGothic/issues/36)). A private
+replay reached 2 a.m., used the original Sleep scroll, received Riordian's
+supplies, completed five transcription attempts, and reopened the table after
+a save and process restart. Missing-item feedback at crafting stations is
+tracked in [#39](https://github.com/Lu2cz/OpenGothic/issues/39); the fishing
+pose remains tracked in [#37](https://github.com/Lu2cz/OpenGothic/issues/37).
+The earlier Kurt/Jorn
 meeting completed with a manual-talk workaround and intermittent missing
 dialogue UI
 ([#32](https://github.com/Lu2cz/OpenGothic/issues/32)).

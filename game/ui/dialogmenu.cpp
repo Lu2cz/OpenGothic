@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
+#include <set>
 
 #include "utils/gthfont.h"
 #include "utils/string_frm.h"
@@ -406,6 +407,13 @@ void DialogMenu::drawMsg(Tempest::Painter& p, int offsetY) {
     auto& sc  = printMsg[i];
     if(sc.font==nullptr)
       continue;
+
+    if(std::getenv("OPENGOTHIC_MOB_FEEDBACK_PROBE")!=nullptr) {
+      static std::set<std::string> drawn;
+      if(drawn.insert(sc.txt).second) {
+        Log::i("[MOB_FEEDBACK] drawn=",sc.txt);
+        }
+      }
 
     auto& fnt = *sc.font;
     auto  sz  = fnt.textSize(sc.txt);

@@ -141,7 +141,7 @@ class GameScript final {
     void  printCannotUseError         (Npc &npc, int32_t atr, int32_t nValue);
     void  printCannotCastError        (Npc &npc, int32_t plM, int32_t itM);
     void  printCannotBuyError         (Npc &npc);
-    void  printMobMissingItem         (Npc &npc);
+    void  printMobMissingItem         (Npc &npc, size_t itemId);
     void  printMobAnotherIsUsing      (Npc &npc);
     void  printMobMissingKey          (Npc &npc);
     void  printMobMissingKeyOrLockpick(Npc &npc);
