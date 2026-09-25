@@ -14,12 +14,15 @@ The current target is an Apple M2 Mac, using Metal and Archolos 1.2.11 game data
 
 ## Campaign progress
 
-**Furthest player-reported progress: early Chapter 1, returning with Kurt to
-Silbach's tavern and completing the Kurt/Jorn conversation, advancing the quest
-(22 September 2026).** The scene started only after the player spoke to seated
-Jorn; some voiced sections lacked subtitles and skip controls until Marvin's
-answer choice. These new symptoms are tracked in
-[#32](https://github.com/Lu2cz/OpenGothic/issues/32); they have not yet been replayed.
+**Furthest player-reported progress: early Chapter 1, visiting Lokvar for the cure,
+accompanying Riordian to the shrine and returning to Lokvar, then completing the
+fishing scene with Kurt and returning to Riordian for his scroll-transcription
+sidequest (25 September 2026).** The player cannot use Lokvar's scroll-writing
+table ([#36](https://github.com/Lu2cz/OpenGothic/issues/36)); Marvin also retains a
+fishing pose after the scene ([#37](https://github.com/Lu2cz/OpenGothic/issues/37)).
+Both reports await reproduction. The earlier Kurt/Jorn meeting completed with a
+manual-talk workaround and intermittent missing dialogue UI
+([#32](https://github.com/Lu2cz/OpenGothic/issues/32)).
 
 Previously, the player completed the tavern/Jorn arrival and first sleep, then
 accompanied Rupert to rescue villagers. The shared routine fix passes native
@@ -45,7 +48,7 @@ establish that Chapter 1 can be completed or that Chapter 2 quests work.
 
 These are results from individual playtests and targeted scenarios across development
 builds. **A continuous clean playthrough and campaign completion remain unverified.**
-Progress updated 22 September 2026; new chapter evidence belongs in
+Progress updated 25 September 2026; new chapter evidence belongs in
 [the campaign tracker](https://github.com/Lu2cz/OpenGothic/issues/14).
 
 ## What works in tested scenarios
