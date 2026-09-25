@@ -337,6 +337,12 @@ void MainWindow::resizeEvent(SizeEvent&) {
   }
 
 void MainWindow::mouseDownEvent(MouseEvent &event) {
+  if(event.button==Event::ButtonRight)
+    if(auto* world=Gothic::inst().world(); world!=nullptr && world->script().closeSpriteMap()) {
+      spriteMapCloseMouse=true;
+      event.accept();
+      return;
+      }
   if(event.button<sizeof(mouseP))
     mouseP[event.button]=true;
   auto act     = keycodec.tr(event);
@@ -345,6 +351,11 @@ void MainWindow::mouseDownEvent(MouseEvent &event) {
   }
 
 void MainWindow::mouseUpEvent(MouseEvent &event) {
+  if(event.button==Event::ButtonRight && spriteMapCloseMouse) {
+    spriteMapCloseMouse=false;
+    event.accept();
+    return;
+    }
   auto act     = keycodec.tr(event);
   auto mapping = keycodec.mapping(event);
   player.onKeyReleased(act,mapping);
@@ -431,6 +442,15 @@ void MainWindow::mouseWheelEvent(MouseEvent &event) {
   }
 
 void MainWindow::keyDownEvent(KeyEvent &event) {
+  if(auto* world=Gothic::inst().world(); world!=nullptr) {
+    const auto action=keycodec.tr(event);
+    if((event.key==Event::K_ESCAPE || event.key==Event::K_Return ||
+        action==KeyCodec::Inventory || action==KeyCodec::Map) && world->script().closeSpriteMap()) {
+      spriteMapCloseKey=event.key;
+      event.accept();
+      return;
+      }
+    }
   if(video.isActive()){
     event.accept();
     video.keyDownEvent(event);
@@ -528,6 +548,11 @@ void MainWindow::keyRepeatEvent(KeyEvent& event) {
   }
 
 void MainWindow::keyUpEvent(KeyEvent &event) {
+  if(event.key==spriteMapCloseKey && spriteMapCloseKey!=Event::K_NoKey) {
+    spriteMapCloseKey=Event::K_NoKey;
+    event.accept();
+    return;
+    }
   if(uiKeyUp==&video){
     video.keyUpEvent(event);
     if(event.isAccepted())
@@ -1367,11 +1392,15 @@ void MainWindow::render(){
     const auto buffMode = std::getenv("OPENGOTHIC_BUFF_PROBE");
     const bool profileReady = profileEnabled && Gothic::inst().world()!=nullptr &&
                               Gothic::inst().checkLoading()==Gothic::LoadState::Idle;
+    static const char* mapCapture = nullptr;
+    static unsigned mapCaptureDone = 0;
     const auto aiWaitMode = std::getenv("OPENGOTHIC_AI_WAIT_PROBE");
     const bool legacyNavProbe = aiWaitMode!=nullptr && std::string_view(aiWaitMode).starts_with("legacy-nav");
     if(profileReady && loadedAt==0) {
       if(bossGeometry)
         setFullscreen(false); // Native window restoration can reopen the previous fullscreen state.
+      if(auto mode=std::getenv("OPENGOTHIC_MAP_PROBE"); mode && std::string_view(mode)=="fullscreen")
+        setFullscreen(true);
 #if defined(__OSX__)
       if(bossMode && std::getenv("OPENGOTHIC_BOSS_UI_1024")) {
         // Resize the real Cocoa content surface, in backing pixels, not the widget alone.
@@ -2404,6 +2433,11 @@ void MainWindow::render(){
       }
     else if(needToUpdate() || Gothic::inst().checkLoading()!=Gothic::LoadState::Idle) {
       dispatchPaintEvent(uiLayer,atlas);
+      if(auto* world=Gothic::inst().world(); world!=nullptr && world->script().isSpriteMapOpen()) {
+        PaintEvent overlay(uiLayer,atlas,this->w(),this->h());
+        Painter painter(overlay);
+        world->script().drawSpriteMap(painter);
+        }
 
       numOverlay.clear();
       PaintEvent p(numOverlay,atlas,this->w(),this->h());
@@ -2421,6 +2455,15 @@ void MainWindow::render(){
     }
     profileStamp(4);
     sync = device.submit(cmd);
+    if(sampling && mapCapture!=nullptr) {
+      sync.wait();
+      auto capture = renderer.capture(cmdId,uiMesh[cmdId],numMesh[cmdId],inventory,video);
+      device.readPixels(capture).save(mapCapture);
+      Log::i("[SPRITEMAP] capture=",mapCapture);
+      if(std::string_view(mapCapture)=="map-open.png") mapCaptureDone=1;
+      if(std::string_view(mapCapture)=="map-reopen.png") mapCaptureDone=2;
+      mapCapture=nullptr;
+      }
     const char* bossCapture = nullptr;
     const char* buffCapture = nullptr;
     if(bossGeometry) {
@@ -2898,6 +2941,84 @@ void MainWindow::render(){
           }
         }
       }
+    if(sampling && std::getenv("OPENGOTHIC_MAP_PROBE")!=nullptr) {
+      static unsigned stage=0, opened=0;
+      static Vec3 controlStart;
+      auto& w=*Gothic::inst().world();
+      auto& pl=*w.player();
+      auto& sc=w.script();
+      auto& vm=sc.getVm();
+      const bool reopen=std::string_view(std::getenv("OPENGOTHIC_MAP_PROBE"))=="reopen";
+      if(stage==0 && profileFrames==1) {
+        Log::i("[SPRITEMAP] source hero=",pl.position().x,",",pl.position().z,
+               " dialogue=",dialogs.isActive());
+        stage=1;
+        }
+      if(stage==1 && profileFrames%120==30 && !dialogs.isActive() && pl.interactive()==nullptr) {
+        Interactive* board=w.findInteractive(pl);
+        float nearest=300.f;
+        if(board!=nullptr)
+          nearest=(board->position()-pl.position()).length();
+        if(board!=nullptr)
+          Log::i("[SPRITEMAP] interact board=",board->tag()," distance=",nearest,
+                 " accepted=",player.interact(*board));
+        else
+          Log::i("[SPRITEMAP] no focused interactive");
+        }
+      if(stage==1 && sc.isSpriteMapOpen()) {
+        opened=profileFrames;
+        stage=2;
+        }
+      if(stage==20 || stage==40) {
+        const unsigned visibleStage=stage==20 ? 2 : 4;
+        if(mapCaptureDone<(visibleStage==2 ? 1u : 2u))
+          mapCapture=visibleStage==2 ? "map-open.png" : "map-reopen.png";
+        else {
+          KeyEvent close(visibleStage==2 ? Event::K_ESCAPE : Event::K_M);
+          keyDownEvent(close);
+          keyUpEvent(close);
+          if(sc.isSpriteMapOpen() || vm.find_symbol_by_name("SPRITEMAP_SPRITECURSORHNDL")->get_int()!=0)
+            throw std::runtime_error("Sprite map did not release its handles");
+          Log::i("[SPRITEMAP] closed stage=",visibleStage);
+          opened=profileFrames;
+          stage=(visibleStage==2 && reopen) ? 3 : 5;
+          }
+        }
+      if((stage==2 || stage==4) && profileFrames>=opened+10) {
+        mapCapture=stage==2 ? "map-open.png" : "map-reopen.png";
+        Log::i("[SPRITEMAP] visible stage=",stage," screen=",this->w(),"x",h(),
+               " map=",vm.find_symbol_by_name("SPRITEMAP_SPRITEHNDL")->get_int(),
+               " cursor=",vm.find_symbol_by_name("SPRITEMAP_SPRITECURSORHNDL")->get_int());
+        stage=stage==2 ? 20 : 40;
+        }
+      if(stage==3 && sc.isSpriteMapOpen()) {
+        opened=profileFrames;
+        stage=4;
+        }
+      if(stage==5 && profileFrames>=opened+60 && !dialogs.isActive() && !sc.isSpriteMapOpen() &&
+         pl.interactive()==nullptr && pl.isAiQueueEmpty() && !pl.isAiBusy() &&
+         w.currentCs()==nullptr && !Gothic::inst().camera()->isCutscene()) {
+        controlStart=pl.position();
+        player.onKeyPressed(KeyCodec::Back,Event::K_S,KeyCodec::Mapping(0));
+        opened=profileFrames;
+        stage=6;
+        }
+      if(stage==6 && profileFrames>=opened+30) {
+        player.clearInput();
+        const float moved=(pl.position()-controlStart).length();
+        if(moved<10) throw std::runtime_error("Sprite map exit did not restore movement");
+        Log::i("[SPRITEMAP] control moved=",moved," dialogue=",dialogs.isActive());
+        saveGame("save_slot_2.sav","Silbach map verification");
+        opened=profileFrames;
+        stage=7;
+        }
+      if(stage==7 && profileFrames>=opened+30 && Gothic::inst().checkLoading()==Gothic::LoadState::Idle) {
+        Log::i("[SPRITEMAP] complete");
+        Tempest::SystemApi::exit();
+        }
+      if(profileFrames>=900 && stage!=7)
+        throw std::runtime_error("Sprite map probe timed out");
+      }
     if(sampling && std::getenv("OPENGOTHIC_SILBACH_STORY")!=nullptr) {
       static unsigned stage=0, stageFrame=0;
       static Vec3 controlStart, routeSample;
@@ -3134,7 +3255,7 @@ void MainWindow::render(){
         Tempest::SystemApi::exit();
         }
       }
-    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_SILBACH_STORY")!=nullptr ? 60000u : buffMode!=nullptr ? 20000u : bossGeometry ? (std::getenv("OPENGOTHIC_BOSS_UI_CONSUMERS") ? 330u : 280u) : std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
+    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_MAP_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_SILBACH_STORY")!=nullptr ? 60000u : buffMode!=nullptr ? 20000u : bossGeometry ? (std::getenv("OPENGOTHIC_BOSS_UI_CONSUMERS") ? 330u : 280u) : std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,

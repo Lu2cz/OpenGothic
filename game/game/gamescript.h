@@ -91,6 +91,9 @@ class GameScript final {
     uint64_t     tickCount() const;
     void         tick(uint64_t dt);
     void         drawUi(Tempest::Painter& p, int width, int height, float barScale);
+    bool         isSpriteMapOpen();
+    bool         closeSpriteMap();
+    void         drawSpriteMap(Tempest::Painter& p);
     void         setNpcFocus(Npc& npc, Npc* focus);
     void         invalidateNpcFocus(Npc& npc);
     void         probeNpcFocus(Npc& npc, bool restored);

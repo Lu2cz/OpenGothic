@@ -30,6 +30,9 @@ class DirectMemory {
     // hooks
     void        tick(uint64_t dt);
     void        drawUi(Tempest::Painter& p, int width, int height, float barScale);
+    bool        isSpriteMapOpen();
+    bool        closeSpriteMap();
+    void        drawSpriteMap(Tempest::Painter& p);
     int         focusBarY(int height);
     void        eventPlayAni(std::string_view ani);
     Npc&        dialogSpeaker(Npc& npc);

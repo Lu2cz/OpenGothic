@@ -157,6 +157,8 @@ class MainWindow : public Tempest::Window {
     RuntimeMode               runtimeMode = R_Normal;
 
     Tempest::Widget*          uiKeyUp=nullptr;
+    Tempest::Event::KeyType   spriteMapCloseKey=Tempest::Event::K_NoKey;
+    bool                      spriteMapCloseMouse=false;
     Tempest::Point            dMouse;
     PlayerControl             player;
     uint64_t                  lastTick=0;

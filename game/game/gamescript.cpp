@@ -1550,6 +1550,19 @@ void GameScript::drawUi(Tempest::Painter& p, int width, int height, float barSca
     dma->drawUi(p,width,height,barScale);
   }
 
+bool GameScript::isSpriteMapOpen() {
+  return dma!=nullptr && dma->isSpriteMapOpen();
+  }
+
+bool GameScript::closeSpriteMap() {
+  return dma!=nullptr && dma->closeSpriteMap();
+  }
+
+void GameScript::drawSpriteMap(Tempest::Painter& p) {
+  if(dma!=nullptr)
+    dma->drawSpriteMap(p);
+  }
+
 void GameScript::setNpcFocus(Npc& npc, Npc* focus) {
   if(dma!=nullptr)
     dma->setNpcFocus(npc,focus);
