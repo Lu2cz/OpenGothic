@@ -162,7 +162,7 @@ Historical Fast installation (21 September 2026, issue #27 / PR #28; superseded 
 - Exact evidence/protected-file hashes and installation provenance:
   `outputs/issue27-installation-20260921.json`.
 
-Current Fast installation (21 September 2026, issue #29 / PR #30):
+Historical Fast installation (21 September 2026, issue #29 / PR #30; superseded by #33):
 - Runtime source: `6c11aa80849e9fe259090fb0e2c8c86de98115aa`.
 - Merge: `2839f4bf8209b911b02f8e87726aabe97b7c9ffa`.
 - Release/Metal executable before signing:
@@ -184,6 +184,25 @@ Current Fast installation (21 September 2026, issue #29 / PR #30):
 - Exact provenance/protected-file/evidence hashes:
   `outputs/issue29-installation-20260921.json`.
   See [sleep placement coverage](silbach-sleep.md).
+
+Current Fast installation (25 September 2026, issue #33 / PR #34):
+- Runtime source: `10558700e9f643962ba43e07e530cd798f278898`;
+  merge: `224d7fa38e70d80e3cd3ed1dc7f14f4f14c8191f`. Their source trees match.
+- Release/Metal executable before signing:
+  `7e5e07aa45f93bb79fd72c9ef69998d12e5036188c19b287a632a1972ed3c99a`.
+- Signed candidate and installed Fast are byte-identical:
+  `a9120ba05556d5cd870155d5ebd50b3e2d7fd519db637636339e10cf14d7ffae`.
+  Deep/strict ad-hoc signature verification passes; dependency pins unchanged.
+- Private title-9 noticeboard replay verifies visible map/marker at 1280x720 and
+  3420x2146, Escape/map-key close, reopen, dialogue exit, movement, save and
+  process restart. Existing boss UI consumer regression passes. Signed candidate
+  and installed executable passed private repeat checks.
+- Player saves/config, launcher, Profile and assets were unchanged. Paired prior
+  app/Profile/saves/config/launcher rollback:
+  `work/issue33-deployment-20260925-v1/rollback`.
+- Exact provenance and protected-file hash comparison:
+  `outputs/issue33-installation-20260925.json`. Issue #33 remains open for a
+  baseline post-selection screenshot and player verification.
 
 Baseline installed hashes (11 September 2026; later installations belong in issues):
 - Fast: `a65b95d1ed0221d53632f94da1d97c55ba4e008d2947a5304f0efe48d0932ad5`
