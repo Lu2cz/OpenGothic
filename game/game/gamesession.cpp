@@ -304,6 +304,11 @@ void GameSession::setTime(gtime t) {
   wrldTime = t;
   }
 
+void GameSession::scaleWorldTime(uint64_t dt, int percent) {
+  // SCALETIME requests the extra percentage beyond the native 100% tick.
+  wrldTime.addMilis(int64_t(dt)*int64_t(multTime)*(int64_t(percent)-100)/(int64_t(divTime)*100));
+  }
+
 void GameSession::tick(uint64_t dt) {
   wrld->scaleTime(dt);
 
@@ -314,9 +319,11 @@ void GameSession::tick(uint64_t dt) {
 
   ticks+=dt;
 
-  uint64_t add = dt*multTime + wrldTimePart;
-  wrldTimePart = add%divTime;
-  wrldTime.addMilis(add/divTime);
+  if(auto hold=vm->getVm().find_symbol_by_name("HOLDTIME_ACTIVATED"); hold==nullptr || hold->get_int()==0) {
+    uint64_t add = dt*multTime + wrldTimePart;
+    wrldTimePart = add%divTime;
+    wrldTime.addMilis(int64_t(add/divTime));
+    }
 
   vm->tick(dt);
   wrld->tick(dt);

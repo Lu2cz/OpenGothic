@@ -84,6 +84,7 @@ class DirectMemory {
     Mem32               mem32;
     Cpu32               cpu;
     uint64_t            scriptFingerprint = 0;
+    uint64_t            frameDt = 0;
 
     bool        restoreQuestCallbacks = false;
     ptr32_t     persistenceProbeRoot = 0;
