@@ -185,7 +185,7 @@ Historical Fast installation (21 September 2026, issue #29 / PR #30; superseded 
   `outputs/issue29-installation-20260921.json`.
   See [sleep placement coverage](silbach-sleep.md).
 
-Current Fast installation (25 September 2026, issue #33 / PR #34):
+Historical Fast installation (25 September 2026, issue #33 / PR #34; superseded by #38):
 - Runtime source: `10558700e9f643962ba43e07e530cd798f278898`;
   merge: `224d7fa38e70d80e3cd3ed1dc7f14f4f14c8191f`. Their source trees match.
 - Release/Metal executable before signing:
@@ -203,6 +203,26 @@ Current Fast installation (25 September 2026, issue #33 / PR #34):
 - Exact provenance and protected-file hash comparison:
   `outputs/issue33-installation-20260925.json`. Issue #33 remains open for a
   baseline post-selection screenshot and player verification.
+
+Current Fast installation (25 September 2026, issue #36 / PR #38):
+- Runtime source: `ff8273b40396b07b85ad4c62f03a6c2b52a2b17f`;
+  merge: `ac5fbb248a139fd8c7b99622e97e67d43e3a6ad5`. Their source trees match.
+- Release/Metal executable before signing:
+  `1fc34a27d634b71ba9b8afbcb9a6199cfbe9a8298109299638255ebeac32bbe3`.
+- Signed candidate and installed Fast are byte-identical:
+  `57a4a10102dc405ea7032fb631925e08e20a747a10fdfaa38d6e09bf333ba1dc`.
+  Deep/strict ad-hoc signature verification passes; dependency pins unchanged.
+- Private post-fishing replay reaches the SQ121 2 a.m. clock hold, casts the
+  supplied Sleep scroll, receives Riordian's materials, completes five
+  transcription attempts, and reopens the table after a process restart.
+  Clean, signed, and installed builds pass native UI clock/save checks. Recipe,
+  timed potion, and ordinary second-sleep regressions pass.
+- Player saves/config, launcher, Profile and assets are unchanged. Paired prior
+  app/Profile/saves/config/launcher rollback:
+  `work/issue36-deployment-20260925-v1/rollback`.
+- Exact evidence and protected-file hashes:
+  `outputs/issue36-installation-20260925.json`. Issue #36 stays open for player
+  confirmation and continued quest progression.
 
 Baseline installed hashes (11 September 2026; later installations belong in issues):
 - Fast: `a65b95d1ed0221d53632f94da1d97c55ba4e008d2947a5304f0efe48d0932ad5`
