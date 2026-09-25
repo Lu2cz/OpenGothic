@@ -204,7 +204,7 @@ Historical Fast installation (25 September 2026, issue #33 / PR #34; superseded 
   `outputs/issue33-installation-20260925.json`. Issue #33 remains open for a
   baseline post-selection screenshot and player verification.
 
-Current Fast installation (25 September 2026, issue #36 / PR #38):
+Historical Fast installation (25 September 2026, issue #36 / PR #38; superseded by #40):
 - Runtime source: `ff8273b40396b07b85ad4c62f03a6c2b52a2b17f`;
   merge: `ac5fbb248a139fd8c7b99622e97e67d43e3a6ad5`. Their source trees match.
 - Release/Metal executable before signing:
@@ -221,8 +221,27 @@ Current Fast installation (25 September 2026, issue #36 / PR #38):
   app/Profile/saves/config/launcher rollback:
   `work/issue36-deployment-20260925-v1/rollback`.
 - Exact evidence and protected-file hashes:
-  `outputs/issue36-installation-20260925.json`. Issue #36 stays open for player
-  confirmation and continued quest progression.
+  `outputs/issue36-installation-20260925.json`. The player confirmed finishing
+  Riordian's scroll quest on 25 September; issue #36 is closed.
+
+Current Fast installation (25 September 2026, issue #39 / PR #40):
+- Runtime source: `9987e0dc1e4e955380aa8afceb5e0403a1b5cf09`;
+  merge: `8024e9badb56560574116270839a9f0f1d704b26`. Their source trees match.
+- Release/Metal executable before signing:
+  `cf28707783b707e675740a8e9ecbbea931c265103c5d861e84fc90c711eb10ff`.
+- Signed candidate and installed Fast are byte-identical:
+  `c504f77f0eb6e72726c562ecb3171e93bb63ceed5ccc186c9270e609284dc426`.
+  Deep/strict ad-hoc signature verification passes; dependency pins unchanged.
+- A private copy of current player slot 12 displays the missing flask and
+  feather messages through the native UI draw path. Supplying a flask permits
+  alchemy-table attachment; save/restart passes. Unsigned, signed and installed
+  builds pass the same replay. Journal topic ordering remains issue #9.
+- Player saves/config, launcher, Profile and assets are unchanged. Paired prior
+  app/Profile/saves/config/launcher rollback:
+  `work/issue39-deployment-20260925-v1/rollback`.
+- Exact evidence and protected-file hashes:
+  `outputs/issue39-installation-20260925.json`. Issue #39 remains open for
+  player confirmation of the installed feedback.
 
 Baseline installed hashes (11 September 2026; later installations belong in issues):
 - Fast: `a65b95d1ed0221d53632f94da1d97c55ba4e008d2947a5304f0efe48d0932ad5`
