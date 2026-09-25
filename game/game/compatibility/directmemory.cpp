@@ -2412,6 +2412,10 @@ void DirectMemory::directCall(zenkit::DaedalusVm& vm, zenkit::DaedalusSymbol& fu
     Log::e("Bad unsafe function call");
     return;
     }
+  // Sprite maps use native rendering and input; the original callback reads
+  // unbound Win32 input memory and zCVob's engine-only transform array.
+  if(func.name()=="SPRITEMAP_LOOP")
+    return;
   if(std::getenv("OPENGOTHIC_BUFF_PROBE")!=nullptr &&
      (func.name()=="BUFF_SPEED_APPLY" || func.name()=="BUFF_SPEED_REMOVE"))
     Log::i("[BUFF_UI] callback=",func.name());
@@ -3076,6 +3080,79 @@ void DirectMemory::setUiSize(int width, int height) {
     // LeGo's authored status-bar width is 180, versus our 200-pixel outer art.
     // Expose their shared responsive layout scale, not the native fill width.
     hpBar->VSIZEX = int32_t(std::lround(180.f*uiBarScale*8192.f/float(uiWidth)));
+    }
+  }
+
+bool DirectMemory::isSpriteMapOpen() {
+  auto* handle = vm.find_symbol_by_name("SPRITEMAP_SPRITEHNDL");
+  return handle!=nullptr && handle->get_int()!=0;
+  }
+
+bool DirectMemory::closeSpriteMap() {
+  if(!isSpriteMapOpen())
+    return false;
+  vm.call_function("SPRITEMAP_DESTROY");
+  return true;
+  }
+
+void DirectMemory::drawSpriteMap(Tempest::Painter& p) {
+  if(!isSpriteMapOpen())
+    return;
+  auto textureName = [this](int handle) -> std::string {
+    if(handle==0)
+      return {};
+    auto sprite = vm.call_function<std::shared_ptr<zenkit::DaedalusTransientInstance>>("GET",handle);
+    auto* name = vm.find_symbol_by_name("GCSPRITE.TEXTURENAME");
+    return sprite && name ? name->get_string(0,sprite.get()) : std::string();
+    };
+  const auto* map = Resources::loadTexture(textureName(vm.find_symbol_by_name("SPRITEMAP_SPRITEHNDL")->get_int()));
+  if(map==nullptr)
+    return;
+  const float size = float(std::min(uiWidth,uiHeight));
+  const float left = (float(uiWidth)-size)*0.5f, top = (float(uiHeight)-size)*0.5f;
+  p.setBrush(Tempest::Brush(*map,Tempest::Color(1),Tempest::Painter::Alpha));
+  p.drawRect(left,top,size,size,0.f,0.f,float(map->w()),float(map->h()));
+
+  auto* cursorHandle = vm.find_symbol_by_name("SPRITEMAP_SPRITECURSORHNDL");
+  auto* hero = gameScript.world().player();
+  if(cursorHandle==nullptr || cursorHandle->get_int()==0 || hero==nullptr)
+    return;
+  const auto* arrow = Resources::loadTexture(textureName(cursorHandle->get_int()));
+  if(arrow==nullptr)
+    return;
+  auto value = [this](const char* name) {
+    auto* sym = vm.find_symbol_by_name(name);
+    return sym ? intBitsToFloat(sym->get_int()) : 0.f;
+    };
+  const float minX = value("SPRITEMAP_MINXF"), minZ = value("SPRITEMAP_MINYF");
+  const float rangeX = value("SPRITEMAP_DISTXF"), rangeZ = value("SPRITEMAP_DISTYF");
+  if(!std::isfinite(rangeX) || !std::isfinite(rangeZ) || rangeX<=0 || rangeZ<=0)
+    return;
+  const auto pos = hero->position();
+  const float u = std::clamp((pos.x-minX)/rangeX,0.f,1.f);
+  const float v = std::clamp(1.f-(pos.z-minZ)/rangeZ,0.f,1.f);
+  const bool rotate = vm.find_symbol_by_name("SPRITEMAP_ROTATE90")->get_int()!=0;
+  const float x = left+(rotate ? 1.f-v : u)*size;
+  const float y = top +(rotate ? u : v)*size;
+  const auto transform = hero->transform();
+  const float angle = std::atan2(transform.at(0,0),transform.at(0,2))+(rotate ? float(M_PI)*0.5f : 0.f);
+  const float sine = std::sin(angle), cosine = std::cos(angle);
+  const float half = 8.f*size/float(uiHeight);
+  const auto vertex = [&](float dx, float dy) {
+    return Tempest::PointF(x+cosine*dx-sine*dy,y+sine*dx+cosine*dy);
+    };
+  const auto a=vertex(-half,-half), b=vertex(half,-half), c=vertex(half,half), d=vertex(-half,half);
+  p.setBrush(Tempest::Brush(*arrow,Tempest::Color(1),Tempest::Painter::Alpha));
+  p.drawTriangle(a.x,a.y,0,0,b.x,b.y,float(arrow->w()),0,c.x,c.y,float(arrow->w()),float(arrow->h()));
+  p.drawTriangle(a.x,a.y,0,0,c.x,c.y,float(arrow->w()),float(arrow->h()),d.x,d.y,0,float(arrow->h()));
+  if(std::getenv("OPENGOTHIC_MAP_PROBE")!=nullptr) {
+    static int last = 0;
+    const int handle = vm.find_symbol_by_name("SPRITEMAP_SPRITEHNDL")->get_int();
+    if(last!=handle) {
+      last=handle;
+      Log::i("[SPRITEMAP] draw texture=",textureName(handle)," rect=",left,",",top,",",size,
+             " marker=",x,",",y," heading=",angle," rotated=",rotate);
+      }
     }
   }
 

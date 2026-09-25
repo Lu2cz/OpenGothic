@@ -187,6 +187,26 @@ void DialogMenu::tick(uint64_t dt) {
         }
       }
     }
+  if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_MAP_PROBE")!=nullptr && isChoiceMenuActive()) {
+    static int selected=0;
+    static bool exited=false;
+    auto& vm=Gothic::inst().world()->script().getVm();
+    const bool reopen=std::string_view(std::getenv("OPENGOTHIC_MAP_PROBE"))=="reopen";
+    for(size_t i=0;i<choice.size();++i) {
+      const auto& name=vm.find_symbol_by_index(choice[i].scriptFn)->name();
+      if((selected<(reopen ? 2 : 1) && name=="PC_NEWSBOARD_SILBACH_SHOWMAP_INFO" &&
+          !Gothic::inst().world()->script().isSpriteMapOpen()) ||
+         (!exited && selected>=(reopen ? 2 : 1) && name=="PC_NEWSBOARD_SILBACH_INFO" &&
+          !Gothic::inst().world()->script().isSpriteMapOpen())) {
+        if(name=="PC_NEWSBOARD_SILBACH_SHOWMAP_INFO") ++selected;
+        else exited=true;
+        Log::i("[SPRITEMAP] dialogue_select=",name);
+        dlgSel=i;
+        onSelect();
+        break;
+        }
+      }
+    }
   if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_CAPTAIN_SKIP")!=nullptr &&
      current.time>0 && current.time+500<current.msgTime)
     skipPhrase();
