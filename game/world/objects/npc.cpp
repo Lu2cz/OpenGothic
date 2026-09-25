@@ -3022,7 +3022,7 @@ void Npc::tickRoutine() {
       }
     else if(hnpc->start_aistate!=0) {
       auto endTime = owner.time();
-      endTime.addMilis(uint64_t(gtime(4, 0).toInt()));
+      endTime.addMilis(gtime(4, 0).toInt());
       startState(uint32_t(hnpc->start_aistate), "", endTime, false);
       }
     }

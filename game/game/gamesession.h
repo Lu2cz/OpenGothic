@@ -55,6 +55,7 @@ class GameSession final {
 
     gtime        time() const { return  wrldTime; }
     void         setTime(gtime t);
+    void         scaleWorldTime(uint64_t dt, int percent);
     void         tick(uint64_t dt);
     uint64_t     tickCount() const { return ticks; }
 

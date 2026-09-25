@@ -20,8 +20,15 @@ fishing scene with Kurt and returning to Riordian for his scroll-transcription
 sidequest (25 September 2026).** The player cannot use Lokvar's scroll-writing
 table ([#36](https://github.com/Lu2cz/OpenGothic/issues/36)); Marvin also retains a
 fishing pose after the scene ([#37](https://github.com/Lu2cz/OpenGothic/issues/37)).
-Both reports await reproduction. The earlier Kurt/Jorn meeting completed with a
-manual-talk workaround and intermittent missing dialogue UI
+On 25 September, a private replay of that save traced the table refusal to a
+missing feather while the quest's accelerated world clock was stalled. With the
+clock fix, the replay reached 2 a.m., used the original Sleep scroll, received
+Riordian's supplies, completed five transcription attempts, and reopened the
+table after a save and process restart
+([#36](https://github.com/Lu2cz/OpenGothic/issues/36)). Player verification
+remains pending; the fishing pose is tracked separately. The earlier Kurt/Jorn
+meeting completed with a manual-talk workaround and intermittent missing
+dialogue UI
 ([#32](https://github.com/Lu2cz/OpenGothic/issues/32)).
 
 Previously, the player completed the tavern/Jorn arrival and first sleep, then

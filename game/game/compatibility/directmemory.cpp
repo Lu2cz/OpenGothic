@@ -1118,6 +1118,7 @@ void DirectMemory::probePersistence(bool finish) {
   }
 
 void DirectMemory::tick(uint64_t dt) {
+  frameDt = dt;
   memGame.TIMESTEP = floatBitsToInt(float(dt));
   if(restoreQuestCallbacks) {
     restoreQuestCallbacks = false;
@@ -1140,6 +1141,7 @@ void DirectMemory::tick(uint64_t dt) {
   if(auto* sym = vm.find_symbol_by_name("_FF_Hook")) {
     vm.call_function(sym);
     }
+  frameDt = 0;
 
   tickUi(dt);
   updateMusic();
@@ -3292,6 +3294,14 @@ Npc& DirectMemory::dialogSpeaker(Npc& npc) {
   }
 
 void DirectMemory::setupWorldFunctions() {
+  // The script adds extra time through an unsupported 32-bit world timer.
+  if(vm.find_symbol_by_name("SCALETIME"))
+    vm.override_function("SCALETIME", [this](int percent) {
+      if(auto hold=vm.find_symbol_by_name("HOLDTIME_ACTIVATED"); hold && hold->get_int()!=0)
+        return;
+      if(auto* session=Gothic::inst().gameSession())
+        session->scaleWorldTime(frameDt,percent);
+      });
   if(vm.find_symbol_by_name("SPELL_LOGIC_PICKLOCK")!=nullptr &&
      vm.find_symbol_by_name("SPL_PICKLOCK")!=nullptr) {
     // The script implements this using oCNpc/oCMobLockable memory and x86 hooks.
