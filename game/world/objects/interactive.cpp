@@ -722,7 +722,7 @@ bool Interactive::checkUseConditions(Npc& npc) {
     if(!useWithItem.empty()) {
       size_t it = sc.findSymbolIndex(useWithItem);
       if(it!=size_t(-1) && npc.itemCount(it)==0) {
-        sc.printMobMissingItem(npc);
+        sc.printMobMissingItem(npc,it);
         return false;
         }
       }

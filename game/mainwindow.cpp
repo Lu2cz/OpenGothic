@@ -3255,6 +3255,53 @@ void MainWindow::render(){
         Tempest::SystemApi::exit();
         }
       }
+    if(sampling && std::getenv("OPENGOTHIC_MOB_FEEDBACK_PROBE")!=nullptr) {
+      auto& w = *Gothic::inst().world();
+      auto& pl = *w.player();
+      auto& vm = w.script().getVm();
+      const auto check = [&](std::string_view name, std::string_view itemName, bool supply) {
+        Interactive* mob = nullptr;
+        for(uint32_t i=0;auto* candidate=w.mobsiById(i);++i)
+          if(candidate->focusName()==name && candidate->isAvailable()) {
+            mob = candidate;
+            break;
+            }
+        auto* item = vm.find_symbol_by_name(itemName);
+        if(mob==nullptr || item==nullptr)
+          throw std::runtime_error("Missing feedback probe fixture");
+        pl.setInteraction(nullptr,true);
+        pl.clearAiQueue();
+        pl.clearState(true);
+        pl.clearGoTo();
+        pl.closeWeapon(true);
+        if(!supply && pl.inventory().itemCount(item->index())>0)
+          pl.delItem(item->index(),uint32_t(pl.inventory().itemCount(item->index())));
+        if(supply && pl.inventory().itemCount(item->index())==0)
+          pl.addItem(item->index(),1);
+        pl.setPosition(mob->nearestPoint(pl));
+        pl.updateTransform();
+        Gothic::inst().camera()->reset(&pl);
+        const bool attached = pl.setInteraction(mob,false);
+        Log::i("[MOB_FEEDBACK] station=",name," item=",itemName," supplied=",supply,
+               " attached=",attached," count=",pl.inventory().itemCount(item->index()));
+        if(attached!=supply)
+          throw std::runtime_error("Wrong crafting-station interaction outcome");
+        };
+      if(profileFrames==30) check("MOBNAME_LAB","ITMI_FLASK",false);
+      if(profileFrames==60) check("MOBNAME_SCROLLWRITING","ITFS_FEATHER",false);
+      if(profileFrames==90) check("MOBNAME_LAB","ITMI_FLASK",true);
+      if(profileFrames==45 || profileFrames==75 || profileFrames==150) {
+        auto shot = renderer.screenshoot(cmdId);
+        device.readPixels(textureCast<const Texture2d&>(shot)).save(profileFrames==45 ? "missing-flask.png" : profileFrames==75 ? "missing-quill.png" : "usable-lab.png");
+        }
+      if(profileFrames==150)
+        Log::i("[MOB_FEEDBACK] usable interaction=",pl.interactive()!=nullptr," dialogue=",dialogs.isActive());
+      if(profileFrames==160) {
+        pl.setInteraction(nullptr,true);
+        saveGame("save_slot_2.sav","Crafting feedback verification");
+        }
+      if(profileFrames==179) Tempest::SystemApi::exit();
+      }
     if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_MAP_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_SILBACH_STORY")!=nullptr ? 60000u : buffMode!=nullptr ? 20000u : bossGeometry ? (std::getenv("OPENGOTHIC_BOSS_UI_CONSUMERS") ? 330u : 280u) : std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,

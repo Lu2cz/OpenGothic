@@ -1055,7 +1055,20 @@ void GameScript::printCannotBuyError(Npc &npc) {
   vm.call_function<void>(id);
   }
 
-void GameScript::printMobMissingItem(Npc &npc) {
+void GameScript::printMobMissingItem(Npc &npc, size_t itemId) {
+  // Archolos's script reads an unmapped Gothic executable address to recover
+  // the focused mob's required item. The native interaction already knows it.
+  auto* missing = vm.find_symbol_by_name("PRINT_MISSINGITEM");
+  auto* itemSym = vm.find_symbol_by_index(uint32_t(itemId));
+  if(dma && missing && missing->type()==zenkit::DaedalusDataType::STRING &&
+     itemSym && itemSym->type()==zenkit::DaedalusDataType::INSTANCE) {
+    auto item = vm.init_instance<zenkit::IItem>(itemSym);
+    const auto message = missing->get_string()+item->name;
+    if(std::getenv("OPENGOTHIC_MOB_FEEDBACK_PROBE")!=nullptr)
+      Tempest::Log::i("[MOB_FEEDBACK] text=",message);
+    Gothic::inst().onPrint(message);
+    return;
+    }
   auto id = vm.find_symbol_by_name("player_mob_missing_item");
   if(id==nullptr) {
     if(owner.version().game==1)
