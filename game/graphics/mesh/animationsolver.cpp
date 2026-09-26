@@ -60,6 +60,8 @@ void AnimationSolver::addOverlay(const Skeleton* sk, uint64_t time) {
   // incompatible overlay
   if(baseSk==nullptr || sk->nodes.size()!=baseSk->nodes.size())
     return;
+  // Reapplying refreshes priority and expiry; overlays are not reference-counted.
+  delOverlay(sk);
   Overlay ov;
   ov.skeleton = sk;
   ov.time     = time;
@@ -75,12 +77,9 @@ void AnimationSolver::delOverlay(std::string_view sk) {
   }
 
 void AnimationSolver::delOverlay(const Skeleton *sk) {
-  for(size_t i=0;i<overlay.size();++i)
-    if(overlay[i].skeleton==sk){
-      overlay.erase(overlay.begin()+int(i));
-      invalidateCache();
-      return;
-      }
+  // Older saves can contain duplicates from repeated Mdl_ApplyOverlayMds calls.
+  if(std::erase_if(overlay,[sk](const Overlay& o) { return o.skeleton==sk; })>0)
+    invalidateCache();
   }
 
 void AnimationSolver::clearOverlays() {
