@@ -3255,6 +3255,95 @@ void MainWindow::render(){
         Tempest::SystemApi::exit();
         }
       }
+    if(sampling && std::getenv("OPENGOTHIC_FISHING_PROBE")) {
+      auto& w=*Gothic::inst().world(); auto& pl=*Gothic::inst().player(); auto& vm=w.script().getVm();
+      const auto mode=std::string_view(std::getenv("OPENGOTHIC_FISHING_PROBE"));
+      const bool scene=mode=="scene" || mode=="scene-broken";
+      const bool broken=mode=="scene-broken" || mode=="reload-broken";
+      constexpr auto overlay="HumanS_Fishing_Dialogue.MDS";
+      static unsigned stage=0, at=0;
+      static bool sawFishing=false, torch=false;
+      static int strength=0, dexterity=0, experience=0;
+      static size_t fish=0;
+      static Vec3 start;
+      const auto symbol=[&](const char* name) {
+        auto* s=vm.find_symbol_by_name(name);
+        if(!s) throw std::runtime_error("Fishing probe symbol missing");
+        return s;
+        };
+      auto* kurt=w.findNpcByInstance(symbol("BAU_701_KURT")->index());
+      if(!kurt) throw std::runtime_error("Fishing probe Kurt missing");
+      const auto count=[&](const char* name) { return pl.itemCount(symbol(name)->index()); };
+      const auto shot=[&](const char* name) {
+        auto tex=renderer.screenshoot(cmdId);
+        device.readPixels(textureCast<const Texture2d&>(tex)).save(name);
+        };
+      const bool free=!dialogs.isActive() && !w.currentCs() && !Gothic::inst().camera()->isCutscene() && pl.isAiQueueEmpty();
+      if(stage==0) {
+        if(mode=="overlays") {
+          AnimationSolver solver;
+          auto* base=Resources::loadSkeleton("Humans.mds");
+          auto* fishing=Resources::loadSkeleton(overlay);
+          if(!base || !fishing) throw std::runtime_error("Overlay test assets missing");
+          solver.setSkeleton(base);
+          auto* idle=solver.solveFrm("S_RUN");
+          solver.addOverlay(fishing,0); solver.addOverlay(fishing,0); solver.delOverlay(fishing);
+          if(solver.hasOverlay(fishing) || solver.solveFrm("S_RUN")!=idle)
+            throw std::runtime_error("Duplicate overlay survived removal");
+          solver.addOverlay(fishing,100); solver.addOverlay(fishing,200); solver.update(150);
+          if(!solver.hasOverlay(fishing)) throw std::runtime_error("Reapplied timed overlay expired early");
+          solver.update(201);
+          if(solver.hasOverlay(fishing)) throw std::runtime_error("Reapplied timed overlay survived expiry");
+          solver.addOverlay(fishing,100); solver.addOverlay(fishing,0); solver.update(201);
+          if(!solver.hasOverlay(fishing)) throw std::runtime_error("Permanent overlay retained old timeout");
+          solver.delOverlay(fishing);
+          Log::i("[FISHING] overlay ownership and timed renewal passed");
+          Tempest::SystemApi::exit();
+          }
+        strength=pl.handle().attribute[ATR_STRENGTH]; dexterity=pl.handle().attribute[ATR_DEXTERITY];
+        experience=pl.handle().exp; fish=count("ITFO_FISH"); torch=pl.isUsingTorch();
+        if(scene && (symbol("MIS_Q108")->get_int()!=1 || pl.hasOverlay(overlay)))
+          throw std::runtime_error("Expected a checkpoint before fishing");
+        Log::i("[FISHING] initial strength=",strength," dexterity=",dexterity," xp=",experience," fish=",fish," torch=",torch);
+        stage=1;
+        }
+      if(stage==1 && scene && profileFrames%120==30 && !dialogs.isActive() && !sawFishing) {
+        // Only shorten travel before the scene. Dialogue and quest logic are native.
+        pl.setPosition(kurt->position()+Vec3(120,0,0));
+        if(!w.script().doesNpcKnowInfo(pl.handle(),symbol("DIA_KURT_Q108_AFTERPLANTS")->index()))
+          player.interact(*kurt);
+        }
+      if(stage==1 && scene && pl.hasOverlay(overlay) && !sawFishing) {
+        sawFishing=true; shot("fishing-active.png");
+        Log::i("[FISHING] active hero=1 kurt=",kurt->hasOverlay(overlay)," rod=",count("ITAR_ROD"));
+        }
+      if(stage==1 && free && symbol("MIS_Q108")->get_int()==2 &&
+         symbol("Q108_FISHINGWITHKURT_END_APPLY.Q108_FISHINGWITHKURT_END_COUNT")->get_int()==4) {
+        if(pl.hasOverlay(overlay)!=broken || kurt->hasOverlay(overlay)!=broken || count("ITAR_ROD")!=0 || pl.interactive())
+          throw std::runtime_error("Fishing cleanup or affected-save recovery failed");
+        if(scene && (!sawFishing || count("ITFO_FISH")!=fish+5 ||
+                     pl.handle().attribute[ATR_STRENGTH]!=strength+5 || pl.handle().attribute[ATR_DEXTERITY]!=dexterity+5 ||
+                     pl.handle().exp<experience+symbol("XP_Q108_FINISH")->get_int() || pl.isUsingTorch()!=torch))
+          throw std::runtime_error("Fishing rewards/equipment changed");
+        Log::i("[FISHING] ended hero_overlay=",pl.hasOverlay(overlay)," kurt_overlay=",kurt->hasOverlay(overlay),
+               " rod=",count("ITAR_ROD")," fish=",count("ITFO_FISH")," strength=",pl.handle().attribute[ATR_STRENGTH],
+               " dexterity=",pl.handle().attribute[ATR_DEXTERITY]," xp=",pl.handle().exp," weapon=",int(pl.weaponState())," torch=",pl.isUsingTorch());
+        shot("fishing-ended.png"); start=pl.position();
+        player.onKeyPressed(KeyCodec::Back,Event::K_S,KeyCodec::Mapping(0)); stage=2; at=profileFrames;
+        }
+      if(stage==2 && profileFrames>=at+30) {
+        player.clearInput();
+        const auto distance=(pl.position()-start).length();
+        if(distance<10) throw std::runtime_error("Fishing player control failed");
+        Log::i("[FISHING] control moved=",distance);
+        shot("fishing-control.png"); saveGame("save_slot_2.sav","Fishing verification"); stage=3; at=profileFrames;
+        }
+      if(stage==3 && profileFrames>=at+30 && Gothic::inst().checkLoading()==Gothic::LoadState::Idle) {
+        Log::i("[FISHING] complete mode=",mode); Tempest::SystemApi::exit();
+        }
+      if(profileFrames%600==0) Log::i("[FISHING] frame=",profileFrames," stage=",stage," dialogue=",dialogs.isActive()," camera=",w.currentCs()!=nullptr," q108=",symbol("MIS_Q108")->get_int());
+      if(profileFrames>12000) throw std::runtime_error("Fishing replay timed out");
+      }
     if(sampling && std::getenv("OPENGOTHIC_MOB_FEEDBACK_PROBE")!=nullptr) {
       auto& w = *Gothic::inst().world();
       auto& pl = *w.player();
@@ -3302,7 +3391,7 @@ void MainWindow::render(){
         }
       if(profileFrames==179) Tempest::SystemApi::exit();
       }
-    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_MAP_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_SILBACH_STORY")!=nullptr ? 60000u : buffMode!=nullptr ? 20000u : bossGeometry ? (std::getenv("OPENGOTHIC_BOSS_UI_CONSUMERS") ? 330u : 280u) : std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
+    if(sampling && ++profileFrames==(std::getenv("OPENGOTHIC_FISHING_PROBE") ? 13000u : std::getenv("OPENGOTHIC_MAP_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_SILBACH_STORY")!=nullptr ? 60000u : buffMode!=nullptr ? 20000u : bossGeometry ? (std::getenv("OPENGOTHIC_BOSS_UI_CONSUMERS") ? 330u : 280u) : std::getenv("OPENGOTHIC_MUSIC_PROBE")!=nullptr ? 12000u : std::getenv("OPENGOTHIC_CITY_PROBE")!=nullptr ? 1200u : std::getenv("OPENGOTHIC_RECIPE_PROBE")!=nullptr ? (recipeRereadFrame==0 ? 9000u : recipeRereadFrame+60) : std::getenv("OPENGOTHIC_FOREST_PROBE")!=nullptr ? 12000u : (std::getenv("OPENGOTHIC_AI_WAIT_PROBE")!=nullptr ? 900u : (std::getenv("OPENGOTHIC_BEACH_PROBE")!=nullptr ? 1800u : (std::getenv("OPENGOTHIC_CAPTAIN_PROBE")!=nullptr ? 36000u : ((std::getenv("OPENGOTHIC_UI_PROBE")!=nullptr || std::getenv("OPENGOTHIC_LOCK_PROBE")!=nullptr || std::getenv("OPENGOTHIC_STASH_PROBE")!=nullptr || std::getenv("OPENGOTHIC_WORLD_PROBE")!=nullptr) ? 900u : (dialogProbeNpc!=nullptr ? 2400u : (std::getenv("OPENGOTHIC_GATE_PROBE")!=nullptr ? 600u : 180u)))))))) {
       const double ms = (profileNow()-profileAt)/double(profileFrames);
       Log::i("[ARCHOLOS_PROFILE] frames=",profileFrames," skipped=",profileSkipped,
              " frame_ms=",ms," fps=",1000.0/ms,

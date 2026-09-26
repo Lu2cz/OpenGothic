@@ -22,7 +22,11 @@ replay reached 2 a.m., used the original Sleep scroll, received Riordian's
 supplies, completed five transcription attempts, and reopened the table after
 a save and process restart. Missing-item feedback at crafting stations is
 tracked in [#39](https://github.com/Lu2cz/OpenGothic/issues/39); the fishing
-pose remains tracked in [#37](https://github.com/Lu2cz/OpenGothic/issues/37).
+pose fix now passes a native scene replay, rewards, control return and save/restart
+(26 September, [#37](https://github.com/Lu2cz/OpenGothic/issues/37)). The protected
+affected save recovers its normal pose without inventory or journal changes.
+The replay used native dialogue choices and shortened travel through diagnostic
+repositioning; see [verification details](docs/archolos/fishing-pose.md).
 The earlier Kurt/Jorn
 meeting completed with a manual-talk workaround and intermittent missing
 dialogue UI
@@ -52,7 +56,7 @@ establish that Chapter 1 can be completed or that Chapter 2 quests work.
 
 These are results from individual playtests and targeted scenarios across development
 builds. **A continuous clean playthrough and campaign completion remain unverified.**
-Progress updated 25 September 2026; new chapter evidence belongs in
+Progress updated 26 September 2026; new chapter evidence belongs in
 [the campaign tracker](https://github.com/Lu2cz/OpenGothic/issues/14).
 
 ## What works in tested scenarios

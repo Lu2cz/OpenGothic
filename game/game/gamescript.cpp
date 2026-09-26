@@ -715,6 +715,22 @@ void GameScript::loadVar(Serialize &fin) {
     }
   if(dma!=nullptr)
     dma->load(fin);
+
+  // Old Archolos saves retained a duplicate overlay after Kurt's fishing cleanup.
+  // Recover only the completed, settled scene; preserve active scenes and all
+  // other overlays, animations, inventory and quest state.
+  auto* fishingQuest=vm.find_symbol_by_name("MIS_Q108");
+  auto* fishingEnd=vm.find_symbol_by_name("Q108_FISHINGWITHKURT_END_APPLY.Q108_FISHINGWITHKURT_END_COUNT");
+  auto* fishingRod=vm.find_symbol_by_name("ITAR_ROD");
+  auto* kurt=vm.find_symbol_by_name("BAU_701_KURT");
+  auto* hero=world().player();
+  if(fishingQuest && fishingEnd && fishingRod && kurt && hero &&
+     fishingQuest->get_int()==2 && fishingEnd->get_int()==4 &&
+     hero->isAiQueueEmpty() && hero->itemCount(fishingRod->index())==0) {
+    hero->delOverlay("HumanS_Fishing_Dialogue.MDS");
+    if(auto* npc=world().findNpcByInstance(kurt->index()))
+      npc->delOverlay("HumanS_Fishing_Dialogue.MDS");
+    }
   }
 
 void GameScript::savePerc(Serialize& fout) {

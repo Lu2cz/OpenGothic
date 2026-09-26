@@ -208,6 +208,20 @@ void DialogMenu::tick(uint64_t dt) {
         }
       }
     }
+  if(std::getenv("OPENGOTHIC_PROFILE") && std::getenv("OPENGOTHIC_FISHING_PROBE") && isChoiceMenuActive()) {
+    auto& vm=Gothic::inst().world()->script().getVm();
+    bool selected=false;
+    for(auto wanted : {"DIA_KURT_Q108_AFTERPLANTS_WOUND", "DIA_KURT_Q108_AFTERPLANTS_LATER",
+                       "DIA_KURT_Q108_AFTERPLANTS_LATER_CHANCE", "DIA_KURT_Q108_FISHINGTIME_DONTTALK",
+                       "DIA_KURT_Q108_FISHINGTIME_STR", "DIA_KURT_Q108_FISHINGTIME_DEX", "DIA_KURT_Q108_FISHINGTIME_JORN"}) {
+      for(size_t i=0;i<choice.size();++i) {
+        if(vm.find_symbol_by_index(choice[i].scriptFn)->name()==wanted) {
+          Log::i("[FISHING] select=",wanted); dlgSel=i; onSelect(); selected=true; break;
+          }
+        }
+      if(selected) break;
+      }
+    }
   if(std::getenv("OPENGOTHIC_PROFILE")!=nullptr && std::getenv("OPENGOTHIC_CAPTAIN_SKIP")!=nullptr &&
      current.time>0 && current.time+500<current.msgTime)
     skipPhrase();
