@@ -224,7 +224,7 @@ Historical Fast installation (25 September 2026, issue #36 / PR #38; superseded 
   `outputs/issue36-installation-20260925.json`. The player confirmed finishing
   Riordian's scroll quest on 25 September; issue #36 is closed.
 
-Current Fast installation (25 September 2026, issue #39 / PR #40):
+Historical Fast installation (25 September 2026, issue #39 / PR #40; superseded by #41):
 - Runtime source: `9987e0dc1e4e955380aa8afceb5e0403a1b5cf09`;
   merge: `8024e9badb56560574116270839a9f0f1d704b26`. Their source trees match.
 - Release/Metal executable before signing:
@@ -242,6 +242,27 @@ Current Fast installation (25 September 2026, issue #39 / PR #40):
 - Exact evidence and protected-file hashes:
   `outputs/issue39-installation-20260925.json`. Issue #39 remains open for
   player confirmation of the installed feedback.
+
+Current Fast installation (26 September 2026, issue #37 / PR #41):
+- Runtime source: `f395d778ac91e40991b5f62f322920ec0544c781`;
+  merge: `bab501a881952de87d39695185e0e11e56c9a4b6`. Their source trees match.
+- Release/Metal executable before signing:
+  `d002a206eb04d6d9d90bb0b03f51d57b15474d9ed75eb595f3e8618c89df6b63`.
+- Signed candidate and installed Fast are byte-identical:
+  `e7a1752aec3984a4168ae72e864a0c9b9963057e1f001455ade10e0cdd566731`.
+  Deep/strict ad-hoc signature verification passes; dependency pins unchanged.
+- Native Kurt fishing replay verifies overlay removal on both actors, five fish,
+  chosen strength/dexterity rewards, rod removal, preserved torch, camera/control
+  return and save/restart. The original affected save and current player slot 12
+  recover with byte-identical inventory and journal data. Signed candidate repeats
+  scene/recovery; installed private recovery/movement/resave passes.
+- Fresh-game repeated speed-potion use and natural expiry pass. Crafting feedback,
+  usable alchemy and restart pass. A saved-fixture BUFFLIST_VIEWS bounds error
+  reproduces on the prior installed build; that run is not claimed as passing.
+- Player saves/config, launcher, Profile and assets are preserved. Paired rollback:
+  `work/issue37-deployment-20260926-v1/rollback`.
+- Exact provenance/protected-file and evidence hashes:
+  `outputs/issue37-installation-20260926.json`. See [fishing coverage](fishing-pose.md).
 
 Baseline installed hashes (11 September 2026; later installations belong in issues):
 - Fast: `a65b95d1ed0221d53632f94da1d97c55ba4e008d2947a5304f0efe48d0932ad5`
