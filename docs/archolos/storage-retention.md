@@ -18,7 +18,25 @@ Use `tests/archolos_test_data.py::copy_save` in runners. On macOS this uses
 Never hard-link writable saves. A test must be able to overwrite or edit its copy
 without changing its source. Source-hash assertions remain required.
 
-## At issue completion
+## After implementation and testing finish
+
+The owner reaffirmed automatic worktree retirement on 26 September 2026. Treat
+retirement as part of finishing the task, not an optional later cleanup. An issue
+waiting only for player confirmation does not need its full checkout/build retained:
+keep its protected inputs, final/baseline evidence and paired rollback outside the
+worktree, then remove it. Keep the issue open if acceptance remains pending.
+
+Retain a worktree only for active implementation/testing or a concrete dependency
+that cannot yet be preserved elsewhere; record that reason and the release condition
+in the issue. No new permission is needed for cleanup within this policy.
+
+Source belongs in published commits; build caches and object files are reproducible.
+Preserve exact binaries needed to interpret evidence or rerun an unresolved check,
+build settings and dependency pins, using an existing verified retained copy when
+available. A small executable may be worth retaining; the whole build directory is
+not. Check cross-worktree symlinks/path dependencies before retirement.
+
+Follow this checklist:
 
 1. Identify the final passing run and baseline failure; record their exact paths
    and hashes in the issue. Do not infer success from directory names.
@@ -86,3 +104,14 @@ rollback is `work/issue27-deployment-20260921-ocx5n_8b/rollback`; installation a
 evidence hashes are in `outputs/issue27-installation-20260921.json`. A redundant
 superseded-app copy was removed only after matching every file to that rollback.
 No player data or regression checkpoint was deleted.
+
+26 September 2026 maintenance retired the published implementation worktrees for
+#29, #33 and #39 while leaving their pending player-verification statuses unchanged.
+Their protected checkpoints, final/baseline evidence and paired rollbacks remain
+outside the worktrees. Exact unsigned executables, CMake settings, dependency pins,
+file inventories and verified retirement/protected-file hashes are in
+`outputs/storage-maintenance-20260926/retirement.json` and its per-issue directories.
+Recreate source at the manifest commit with `git worktree add --detach NEW_PATH SHA`,
+initialize the pinned submodules, and configure a fresh build when needed. Old
+CMake caches document the build but must not be reused at a different source path.
+The original repository and main working checkout remain; no issue worktree remains.

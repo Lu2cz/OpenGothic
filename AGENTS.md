@@ -74,8 +74,9 @@ Do not duplicate the backlog or completed-work history here.
   targeting our working branch; do not replace the playable app before validation.
 - Leave a concise issue handoff if unfinished. Keep raw evidence local and link
   reproducible instructions plus a public-safe summary.
-- Apply storage-retention.md at closure: keep final/baseline evidence and required
-  checkpoints; verify archives before retiring intermediates and clean worktrees.
+- After implementation/testing finish, apply storage-retention.md and remove the
+  clean published issue worktree/build, even while player verification is pending.
+  Retain compact evidence/rollback outside it; record recovery and any retention reason.
 
 ## Maintaining this file
 Update only durable goals, constraints, workflow or authoritative reference links.
