@@ -14,6 +14,9 @@ the scene's final callback counter is 4, the hero queue is empty and `ITAR_ROD`
 is absent. No quest values, inventory, other overlays or animation layers are
 reset. The native save and compatibility snapshot formats are unchanged.
 
+Historical output-run paths in this guide were consolidated on 1 October 2026.
+Use [retained-checkpoints.md](retained-checkpoints.md) for active inputs.
+
 ## Private inputs and reproduction
 
 Paths below are relative to the coordination workspace in [environment.md](environment.md).
@@ -26,10 +29,9 @@ Paths below are relative to the coordination workspace in [environment.md](envir
   Derived from the earlier map checkpoint through native Lokvar/Riordian
   dialogues, the script-awarded special herb and two existing world violets.
   Diagnostic repositioning shortened travel; no quest flags or items were granted.
-- Native failing scene: `work/issue37-prefishing-explore-b/after-fishing-broken.sav`,
-  SHA-256 `8734f1561350405da97c6eeb4ec36d71291f5b7b3d9dea1bd2872ba251fe5879`.
-  Adjacent traces show two applications per actor and removal with two entries.
-  Removing the final copy restores the pose while preserving the torch.
+- Historical native failing-scene output was retired. Its diagnosis and hashes are
+  recorded in #37; replay the native scene from the retained pre-fishing input.
+  The affected player checkpoint remains the input for load recovery.
 
 `tests/run_archolos_fishing.py --help` describes the runner. Supply explicit
 `--executable`, `--game`, `--save` and a fresh `--output` directory. Modes:

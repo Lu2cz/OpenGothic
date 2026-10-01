@@ -1,5 +1,9 @@
 # Timed buff regression
 
+Storage update (1 October 2026): use [retained-checkpoints.md](retained-checkpoints.md)
+for active input paths. Historical output-run/evidence paths below were consolidated;
+they describe past verification and are not all retained on disk.
+
 Issue #8 verifies Archolos's installed `ITPO_SPEED` potion through the normal
 inventory path. Its `BUFF_SPEED` script adds the native sprint overlay, shows
 `ITPO_SPEED2.TGA`, and owns removal through the existing buff callback.

@@ -76,9 +76,9 @@ They take explicit executable, game, output and (where needed) source-save paths
 Use a new output directory and private settings every run. Profile probes are opt-in;
 never leave OPENGOTHIC_* test variables in a normal player launch.
 Runners clone input saves with copy-on-write on APFS, retaining independent writes.
-For checkpoint retention, retired worktrees and archived evidence recovery, follow
-[the storage policy](storage-retention.md). Check its archive index when an old
-evidence path is no longer present; do not assume the checkpoint was lost.
+For checkpoint retention and retired worktrees, follow
+[the storage policy](storage-retention.md). Use its selected-checkpoint inventory
+when an old evidence path is absent; historical runs and archives are retired.
 
 Use the private input inventory and procedures in
 [opening-checkpoints.md](opening-checkpoints.md) for gate, lock, stash, captain,
@@ -111,137 +111,11 @@ commands/results and rollback path in the issue. Bundle signing changes executab
 bytes: compare code before its signature or use appropriate build provenance.
 Do not install merely because compilation succeeded.
 
-Historical Fast installation (14 September 2026, superseded by issue #8 below):
-- Runtime source: `d5e85407b424f2e72f57cb62540d202f844ab75b`.
-- Merge: `c1b35645cd05463a24de2db185399eb841e09279`; main checkout fast-forwarded.
-- Pre-sign executable: `5ba4a86ae645dffa63a1c5560cc03f7090a7c3ab4963445ec2793abe35594d7d`.
-- Installed Fast: `45f98622183d06deb28ae91431671630b448ec9194c8c6ca24bd7ad4f9bfadec`.
-- Ad-hoc deep/strict signature verification passes. Profile is unchanged.
-- Paired prior Fast/Profile executables, three saves, Gothic.ini and launcher:
-  `work/issue7-install-rollback-20260914.FI5mKf`. Save CRCs pass; slot 1 is v2,
-  slots 2/3 lack the compatibility entry. Do not pair rollback binaries with v4 saves.
-- Private actual pause-menu save and bounded menu/load/resave/exit checks pass;
-  see [boss UI verification boundaries](boss-ui-regression.md) for runner qualifications.
-- Local provenance: `outputs/issue7-installation-20260914.json`. Player saves/config,
-  launcher, Profile, assets and dependency pins were preserved.
-
-Historical Fast installation (15 September 2026, issue #8 / PR #24; superseded by #27):
-- Runtime merge: `33fd4acde6b582e71162e323c686c9f840348125`.
-- The issue-worktree development build was
-  `d8150f240a1426e22a9653c11d08d83193ddea4c3600d0d167bdc369fd838ee5`;
-  the fresh Release deployment build was
-  `758684ea8493c0ea9d6450647b56605eb19b1bb119661a466fde9a153bedb742`.
-- Ad-hoc signing changed the executable to
-  `4a7193bcec3e96ed85de4d0b5a5e21c93a97713a1743d5467ae9a9a5d5b31a76`.
-  The signed staged and installed Fast binaries are byte-identical.
-- Ad-hoc deep/strict signature verification passes. Profile, launcher, assets,
-  Gothic.ini and all persistent saves are unchanged.
-- Paired rollback executable, Profile, launcher, config and saves:
-  `work/issue8-install-rollback-20260915.UNKrjB`.
-- Signed-stage seed/reload verifies exact active-buff snapshot restoration, opaque
-  and fading UI, and expiry cleanup; the installed private repeat smoke passes.
-  See [timed buff regression](timed-buff-regression.md) and
-  `outputs/issue8-installation-20260915.json`.
-
-Historical Fast installation (21 September 2026, issue #27 / PR #28; superseded by #29):
-- Runtime source: `ea81887fad935f2c02aa858beb5398760e02a302`.
-- Merge: `760067166a20750a21975ecb0bf1ca5ea6ad2d0b`.
-- Release/Metal executable before signing:
-  `3ce98c7106d8cf3635a68a29c86da0df2571ee3b7816e7dd3295da43d3ca195a`.
-- Signed candidate and installed Fast are byte-identical:
-  `b374c6ed15a18c3bcaef53ebe3b62c0a891b9655ce743abb86a87b6a0c260c65`.
-- Deep/strict ad-hoc signature verification passes. Dependency pins unchanged.
-- Signed candidate passes native Silbach arrival/Jorn dialogue, key award,
-  control return, save and process restart; installed private reload/movement/resave
-  passes. Recipe close/reopen and forest dialogue regressions also pass.
-  See [test setup and boundaries](silbach-arrival.md).
-- Player saves/config, launcher, Profile and assets preserved. Existing source save
-  recovers without a new game; tests never overwrite the player's progress.
-- Paired rollback app, Profile executable, saves/config and launcher:
-  `work/issue27-deployment-20260921-ocx5n_8b/rollback`.
-- Exact evidence/protected-file hashes and installation provenance:
-  `outputs/issue27-installation-20260921.json`.
-
-Historical Fast installation (21 September 2026, issue #29 / PR #30; superseded by #33):
-- Runtime source: `6c11aa80849e9fe259090fb0e2c8c86de98115aa`.
-- Merge: `2839f4bf8209b911b02f8e87726aabe97b7c9ffa`.
-- Release/Metal executable before signing:
-  `a89704c194f85bdecac73bf31070886b9a9c8f30c3d66545c07a2f256589d660`.
-- Signed candidate and installed Fast are byte-identical:
-  `ff69682749652624b7582df290da4ca014c61dc28b9e29c3413d0fbbc40ca585`.
-- Deep/strict signature verification passes; dependency pins unchanged.
-- Signed first-sleep replay verifies all 52 activated residents, living refugees,
-  Viktor dialogue and save; signed routine-boundary and arrival checks pass.
-  Installed private reload/resave passes. One intermittent pre-probe renderer
-  stall is tracked separately in #31; the identical arrival retry passed.
-- Existing player saves titled 2/3 recover through ordinary second sleep on private
-  copies, preserving inventory/journal and compared rescue flags. Sleep advances
-  time and resets routine positions normally; no automatic on-load repair is added.
-  Complete rescue/campaign verification remains open in #29.
-- Player saves/config, launcher, Profile and assets preserved. Paired prior app,
-  Profile executable, saves/config and launcher:
-  `work/issue29-deployment-20260921-fehfnm2d/rollback`.
-- Exact provenance/protected-file/evidence hashes:
-  `outputs/issue29-installation-20260921.json`.
-  See [sleep placement coverage](silbach-sleep.md).
-
-Historical Fast installation (25 September 2026, issue #33 / PR #34; superseded by #38):
-- Runtime source: `10558700e9f643962ba43e07e530cd798f278898`;
-  merge: `224d7fa38e70d80e3cd3ed1dc7f14f4f14c8191f`. Their source trees match.
-- Release/Metal executable before signing:
-  `7e5e07aa45f93bb79fd72c9ef69998d12e5036188c19b287a632a1972ed3c99a`.
-- Signed candidate and installed Fast are byte-identical:
-  `a9120ba05556d5cd870155d5ebd50b3e2d7fd519db637636339e10cf14d7ffae`.
-  Deep/strict ad-hoc signature verification passes; dependency pins unchanged.
-- Private title-9 noticeboard replay verifies visible map/marker at 1280x720 and
-  3420x2146, Escape/map-key close, reopen, dialogue exit, movement, save and
-  process restart. Existing boss UI consumer regression passes. Signed candidate
-  and installed executable passed private repeat checks.
-- Player saves/config, launcher, Profile and assets were unchanged. Paired prior
-  app/Profile/saves/config/launcher rollback:
-  `work/issue33-deployment-20260925-v1/rollback`.
-- Exact provenance and protected-file hash comparison:
-  `outputs/issue33-installation-20260925.json`. Issue #33 remains open for a
-  baseline post-selection screenshot and player verification.
-
-Historical Fast installation (25 September 2026, issue #36 / PR #38; superseded by #40):
-- Runtime source: `ff8273b40396b07b85ad4c62f03a6c2b52a2b17f`;
-  merge: `ac5fbb248a139fd8c7b99622e97e67d43e3a6ad5`. Their source trees match.
-- Release/Metal executable before signing:
-  `1fc34a27d634b71ba9b8afbcb9a6199cfbe9a8298109299638255ebeac32bbe3`.
-- Signed candidate and installed Fast are byte-identical:
-  `57a4a10102dc405ea7032fb631925e08e20a747a10fdfaa38d6e09bf333ba1dc`.
-  Deep/strict ad-hoc signature verification passes; dependency pins unchanged.
-- Private post-fishing replay reaches the SQ121 2 a.m. clock hold, casts the
-  supplied Sleep scroll, receives Riordian's materials, completes five
-  transcription attempts, and reopens the table after a process restart.
-  Clean, signed, and installed builds pass native UI clock/save checks. Recipe,
-  timed potion, and ordinary second-sleep regressions pass.
-- Player saves/config, launcher, Profile and assets are unchanged. Paired prior
-  app/Profile/saves/config/launcher rollback:
-  `work/issue36-deployment-20260925-v1/rollback`.
-- Exact evidence and protected-file hashes:
-  `outputs/issue36-installation-20260925.json`. The player confirmed finishing
-  Riordian's scroll quest on 25 September; issue #36 is closed.
-
-Historical Fast installation (25 September 2026, issue #39 / PR #40; superseded by #41):
-- Runtime source: `9987e0dc1e4e955380aa8afceb5e0403a1b5cf09`;
-  merge: `8024e9badb56560574116270839a9f0f1d704b26`. Their source trees match.
-- Release/Metal executable before signing:
-  `cf28707783b707e675740a8e9ecbbea931c265103c5d861e84fc90c711eb10ff`.
-- Signed candidate and installed Fast are byte-identical:
-  `c504f77f0eb6e72726c562ecb3171e93bb63ceed5ccc186c9270e609284dc426`.
-  Deep/strict ad-hoc signature verification passes; dependency pins unchanged.
-- A private copy of current player slot 12 displays the missing flask and
-  feather messages through the native UI draw path. Supplying a flask permits
-  alchemy-table attachment; save/restart passes. Unsigned, signed and installed
-  builds pass the same replay. Journal topic ordering remains issue #9.
-- Player saves/config, launcher, Profile and assets are unchanged. Paired prior
-  app/Profile/saves/config/launcher rollback:
-  `work/issue39-deployment-20260925-v1/rollback`.
-- Exact evidence and protected-file hashes:
-  `outputs/issue39-installation-20260925.json`. Issue #39 remains open for
-  player confirmation of the installed feedback.
+Historical installation/verification records are in the assigned GitHub issues and
+`outputs/issue*-installation-*.json`. Superseded apps, rollback generations and raw
+runs were retired under [storage-retention.md](storage-retention.md); those records
+do not guarantee their old evidence paths still exist. Use
+[retained-checkpoints.md](retained-checkpoints.md) for active inputs and exceptions.
 
 Current Fast installation (26 September 2026, issue #37 / PR #41):
 - Runtime source: `f395d778ac91e40991b5f62f322920ec0544c781`;
@@ -263,11 +137,6 @@ Current Fast installation (26 September 2026, issue #37 / PR #41):
   `work/issue37-deployment-20260926-v1/rollback`.
 - Exact provenance/protected-file and evidence hashes:
   `outputs/issue37-installation-20260926.json`. See [fishing coverage](fishing-pose.md).
-
-Baseline installed hashes (11 September 2026; later installations belong in issues):
-- Fast: `a65b95d1ed0221d53632f94da1d97c55ba4e008d2947a5304f0efe48d0932ad5`
-- Profile: `6ab21c0e1e13a0c84c567db5ba14bc16ae854fc846bea2af0172cb479752ce13`
-- Rollback executable: `work/Gothic2Notr-Fast-before-persistence`.
 
 ## New tasks
 

@@ -1,5 +1,9 @@
 # Silbach first-sleep placement
 
+Storage update (1 October 2026): use [retained-checkpoints.md](retained-checkpoints.md)
+for active input paths. Historical output-run/evidence paths below were consolidated;
+they describe past verification and are not all retained on disk.
+
 Issue [#29](https://github.com/Lu2cz/OpenGothic/issues/29).
 
 ## Cause and scope

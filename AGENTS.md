@@ -76,7 +76,8 @@ Do not duplicate the backlog or completed-work history here.
   reproducible instructions plus a public-safe summary.
 - After implementation/testing finish, apply storage-retention.md and remove the
   clean published issue worktree/build, even while player verification is pending.
-  Retain compact evidence/rollback outside it; record recovery and any retention reason.
+  Retain one useful input per scenario, compact GitHub verification and one paired
+  rollback; keep extra evidence only for a documented unresolved investigation.
 
 ## Maintaining this file
 Update only durable goals, constraints, workflow or authoritative reference links.

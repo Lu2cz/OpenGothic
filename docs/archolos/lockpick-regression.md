@@ -1,5 +1,9 @@
 # Lockpick compatibility and regression checks
 
+Storage update (1 October 2026): use [retained-checkpoints.md](retained-checkpoints.md)
+for active input paths. Historical output-run/evidence paths below were consolidated;
+they describe past verification and are not all retained on disk.
+
 Issue: [#3](https://github.com/Lu2cz/OpenGothic/issues/3).
 PR: [#17](https://github.com/Lu2cz/OpenGothic/pull/17).
 Scope extension: [#18](https://github.com/Lu2cz/OpenGothic/issues/18).

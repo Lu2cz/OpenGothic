@@ -1,5 +1,9 @@
 # Boss UI verification boundaries
 
+Storage update (1 October 2026): use [retained-checkpoints.md](retained-checkpoints.md)
+for active input paths. Historical output-run/evidence paths below were consolidated;
+they describe past verification and are not all retained on disk.
+
 PR #22 merged as c1b35645cd05463a24de2db185399eb841e09279. The reviewed
 candidate is installed in Fast only; deployment details follow below.
 

@@ -1,5 +1,9 @@
 # Private opening regression checkpoints
 
+Storage update (1 October 2026): use [retained-checkpoints.md](retained-checkpoints.md)
+for active input paths. Historical output-run/evidence paths below were consolidated;
+they describe past verification and are not all retained on disk.
+
 Issue [#5](https://github.com/Lu2cz/OpenGothic/issues/5), 16 September 2026.
 Paths below are relative to the environment guide's workspace `work` directory.
 No saves, assets or raw private logs belong in Git.

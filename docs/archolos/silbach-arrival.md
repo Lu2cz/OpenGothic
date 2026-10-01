@@ -1,5 +1,9 @@
 # Silbach arrival recovery
 
+Storage update (1 October 2026): use [retained-checkpoints.md](retained-checkpoints.md)
+for active input paths. Historical output-run/evidence paths below were consolidated;
+they describe past verification and are not all retained on disk.
+
 Issue [#27](https://github.com/Lu2cz/OpenGothic/issues/27),
 PR [#28](https://github.com/Lu2cz/OpenGothic/pull/28), 21 September 2026.
 
