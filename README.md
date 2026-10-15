@@ -9,6 +9,7 @@ The current target is an Apple M2 Mac, using Metal and Archolos 1.2.11 game data
 - [Issues and verification](https://github.com/Lu2cz/OpenGothic/issues)
 - [Persistent project instructions](AGENTS.md)
 - [Build, local test setup and launch](docs/archolos/environment.md)
+- [Recreate the workspace and back up before removing local files](docs/archolos/recreate-workspace.md)
 - [Initial LeGo/Ikarus coverage audit](docs/archolos/lego-ikarus-audit.md)
 - [Historical fixes and evidence](ARCHOLOS_DEVELOPMENT.md)
 
@@ -87,6 +88,10 @@ and campaign validation. See [the roadmap](https://github.com/Lu2cz/OpenGothic/i
 and acceptance criteria. Full LeGo/Ikarus or Windows DLL compatibility is not claimed.
 
 ## Build and play
+
+Before removing local files, follow the [workspace recreation and backup guide](docs/archolos/recreate-workspace.md).
+GitHub preserves the code and planning; personal saves, regression checkpoints and
+exact app binaries require a separate private backup.
 
 Use the [build, test and launch guide](docs/archolos/environment.md). The original
 Archolos game files and voice pack must be supplied separately; this repository

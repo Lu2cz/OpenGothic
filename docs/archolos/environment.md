@@ -1,5 +1,8 @@
 # Archolos development environment
 
+For a fresh reconstruction after local removal, start with
+[the recreation and pre-removal backup guide](recreate-workspace.md).
+
 This is the local setup reference, not the backlog. Read AGENTS.md and the assigned
 issue first. Commands assume `rtk` is installed. Roadmap: https://github.com/Lu2cz/OpenGothic/issues/1.
 
@@ -28,7 +31,7 @@ Build with Xcode command-line tools, CMake and glslang available. This Mac alrea
 has these dependencies. Use a separate build directory per worktree:
 
 ```sh
-rtk proxy cmake -S /Users/lu2/projects/OpenGothic-fresh -B /Users/lu2/projects/OpenGothic-fresh/build -DCMAKE_BUILD_TYPE=Release -DTEMPEST_BUILD_METAL=ON -DTEMPEST_BUILD_VULKAN=OFF
+rtk proxy cmake -S /Users/lu2/projects/OpenGothic-fresh -B /Users/lu2/projects/OpenGothic-fresh/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DTEMPEST_BUILD_METAL=ON -DTEMPEST_BUILD_VULKAN=OFF
 rtk proxy cmake --build /Users/lu2/projects/OpenGothic-fresh/build --target Gothic2Notr --parallel 4
 ```
 
